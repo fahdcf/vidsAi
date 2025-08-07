@@ -1,0 +1,727 @@
+@import "tailwindcss";
+
+/* Custom styles can be added here */
+
+/* Scene card styles */
+.scene-card {
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.scene-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.scene-card .video-preview video {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.scene-card .duration-badge {
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+}
+
+.scene-card .video-preview {
+    position: relative;
+}
+
+/* Progress step styles */
+.progress-step {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+    border: 2px solid #dee2e6;
+    background: white;
+    color: #6c757d;
+}
+
+.progress-step.active {
+    background: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.progress-step.completed {
+    background: #198754;
+    color: white;
+    border-color: #198754;
+}
+
+/* Keywords styling */
+.keywords-container {
+    max-height: 60px;
+    overflow-y: auto;
+}
+
+.keywords-container .badge {
+    font-size: 0.7rem;
+    font-weight: normal;
+}
+
+/* Scene details styling */
+.scene-details {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 12px;
+    border-left: 4px solid #0d6efd;
+}
+
+.scene-details small {
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Scene Editor Container */
+.scene-editor-container {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+    border: 1px solid #e9ecef;
+    overflow: hidden;
+}
+
+/* Scene Header */
+.scene-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 24px;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid #dee2e6;
+}
+
+.scene-info {
+    flex: 1;
+}
+
+.scene-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: #212529;
+    margin-bottom: 8px;
+}
+
+.scene-script {
+    color: #6c757d;
+    font-size: 1rem;
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+
+.scene-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.keyword-tag {
+    background: #e3f2fd;
+    color: #1976d2;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.scene-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 12px;
+}
+
+.scene-approval {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.scene-approval label {
+    color: #28a745;
+    font-weight: 500;
+    cursor: pointer;
+    margin: 0;
+}
+
+.scene-duration-badge {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: #0d6efd;
+    color: white;
+    padding: 8px 12px;
+    border-radius: 20px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+/* Video Editor */
+.video-editor {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Video Player Section */
+.video-player-section {
+    background: #000;
+    position: relative;
+}
+
+.video-container {
+    position: relative;
+    max-width: 100%;
+    margin: 0 auto;
+}
+
+.main-video {
+    width: 100%;
+    height: 400px;
+    object-fit: contain;
+    display: block;
+    background: #000;
+}
+
+.video-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    padding: 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.video-container:hover .video-controls {
+    opacity: 1;
+}
+
+.play-pause-btn {
+    background: rgba(255, 255, 255, 0.9);
+    border: none;
+    border-radius: 50%;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    color: #000;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.play-pause-btn:hover {
+    background: rgba(255, 255, 255, 1);
+    transform: scale(1.1);
+}
+
+.time-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    font-family: 'Courier New', monospace;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.separator {
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.volume-control {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.volume-control i {
+    color: white;
+    font-size: 16px;
+}
+
+.volume-slider {
+    width: 80px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.3);
+    border-radius: 2px;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Timeline Editor */
+.timeline-editor {
+    background: #f8f9fa;
+    padding: 24px;
+    border-top: 1px solid #dee2e6;
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.timeline-header h4 {
+    color: #495057;
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0;
+}
+
+.timeline-info {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.selected-duration strong {
+    color: #0d6efd;
+}
+
+/* Frame Timeline Container */
+.frame-timeline-container {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid #dee2e6;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.frame-strip-wrapper {
+    position: relative;
+    height: 80px;
+    overflow: hidden;
+}
+
+.frame-strip {
+    display: flex;
+    height: 100%;
+    position: relative;
+}
+
+.frame-item {
+    flex-shrink: 0;
+    width: 60px;
+    height: 80px;
+    background: #f8f9fa;
+    border-right: 1px solid #e9ecef;
+    position: relative;
+    overflow: hidden;
+}
+
+.frame-item:last-child {
+    border-right: none;
+}
+
+.frame-item img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.frame-placeholder {
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #adb5bd;
+    font-size: 12px;
+}
+
+/* WhatsApp-Style Range Selector */
+.range-selector-container {
+    position: relative;
+    height: 80px;
+}
+
+.range-selector {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+}
+
+/* Unselected overlays (dark areas) */
+.unselected-overlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 5;
+}
+
+.left-overlay {
+    left: 0;
+}
+
+.right-overlay {
+    right: 0;
+}
+
+/* Selection area */
+.selection-area {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    min-width: 80px;
+    z-index: 10;
+    cursor: move;
+}
+
+.selection-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+.selection-border-top,
+.selection-border-bottom {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: #ffd700;
+    box-shadow: 0 0 4px rgba(255, 215, 0, 0.5);
+}
+
+.selection-border-top {
+    top: 0;
+}
+
+.selection-border-bottom {
+    bottom: 0;
+}
+
+/* Selection handles */
+.selection-handle {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 20px;
+    background: #ffd700;
+    cursor: ew-resize;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    transition: all 0.2s ease;
+}
+
+.selection-handle:hover {
+    background: #ffed4e;
+    transform: scaleX(1.1);
+}
+
+.left-handle {
+    left: -10px;
+    border-radius: 8px 4px 4px 8px;
+}
+
+.right-handle {
+    right: -10px;
+    border-radius: 4px 8px 8px 4px;
+}
+
+.handle-grip {
+    width: 3px;
+    height: 20px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 2px;
+}
+
+/* Playhead */
+.playhead {
+    position: absolute;
+    top: -5px;
+    bottom: -5px;
+    width: 2px;
+    z-index: 20;
+    pointer-events: none;
+}
+
+.playhead-line {
+    width: 100%;
+    height: 100%;
+    background: #dc3545;
+    border-radius: 1px;
+    box-shadow: 0 0 6px rgba(220, 53, 69, 0.6);
+}
+
+.playhead-handle {
+    position: absolute;
+    top: -3px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 12px;
+    height: 12px;
+    background: #dc3545;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+}
+
+/* Timeline Controls */
+.timeline-controls {
+    padding: 16px;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    justify-content: center;
+    gap: 12px;
+}
+
+.timeline-controls .btn {
+    border-radius: 8px;
+    font-weight: 500;
+    padding: 8px 16px;
+    transition: all 0.2s ease;
+}
+
+/* Scene Bottom Actions */
+.scene-bottom-actions {
+    padding: 20px 24px;
+    background: #fff;
+    border-top: 1px solid #dee2e6;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.scene-bottom-actions .btn {
+    border-radius: 8px;
+    font-weight: 500;
+    padding: 10px 20px;
+}
+
+/* No Video Placeholder */
+.no-video-placeholder {
+    padding: 80px 40px;
+    text-align: center;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    color: #6c757d;
+}
+
+.no-video-placeholder i {
+    font-size: 4rem;
+    color: #adb5bd;
+    margin-bottom: 20px;
+}
+
+.no-video-placeholder h4 {
+    color: #495057;
+    margin-bottom: 12px;
+}
+
+.no-video-placeholder p {
+    margin-bottom: 24px;
+    font-size: 1rem;
+}
+
+/* Loading State */
+.frame-strip.loading {
+    position: relative;
+    background: #f8f9fa;
+}
+
+.frame-strip.loading::before {
+    content: "Generating video frames...";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: #6c757d;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 10;
+}
+
+.frame-strip.loading::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 20px;
+    height: 20px;
+    border: 2px solid #e9ecef;
+    border-top: 2px solid #0d6efd;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-top: 25px;
+}
+
+@keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* Responsive Design */
+@media (max-width: 992px) {
+    .scene-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 16px;
+    }
+
+    .scene-actions {
+        flex-direction: row;
+        align-items: center;
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .main-video {
+        height: 300px;
+    }
+}
+
+@media (max-width: 768px) {
+    .scene-editor-container {
+        margin-bottom: 32px;
+        border-radius: 12px;
+    }
+
+    .scene-header {
+        padding: 20px;
+    }
+
+    .scene-title {
+        font-size: 1.25rem;
+    }
+
+    .main-video {
+        height: 250px;
+    }
+
+    .timeline-editor {
+        padding: 16px;
+    }
+
+    .frame-item {
+        width: 50px;
+        height: 70px;
+    }
+
+    .frame-strip-wrapper {
+        height: 70px;
+    }
+
+    .range-selector-container {
+        height: 70px;
+    }
+
+    .selection-handle {
+        width: 16px;
+    }
+
+    .left-handle {
+        left: -8px;
+    }
+
+    .right-handle {
+        right: -8px;
+    }
+
+    .timeline-controls {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .scene-bottom-actions {
+        padding: 16px 20px;
+        flex-direction: column;
+    }
+}
+
+@media (max-width: 576px) {
+    .scene-header {
+        padding: 16px;
+    }
+
+    .scene-title {
+        font-size: 1.125rem;
+    }
+
+    .scene-script {
+        font-size: 0.875rem;
+    }
+
+    .main-video {
+        height: 200px;
+    }
+
+    .timeline-editor {
+        padding: 12px;
+    }
+
+    .frame-item {
+        width: 40px;
+        height: 60px;
+    }
+
+    .frame-strip-wrapper {
+        height: 60px;
+    }
+
+    .range-selector-container {
+        height: 60px;
+    }
+
+    .selection-handle {
+        width: 14px;
+    }
+
+    .left-handle {
+        left: -7px;
+    }
+
+    .right-handle {
+        right: -7px;
+    }
+
+    .handle-grip {
+        width: 2px;
+        height: 16px;
+    }
+
+    .video-controls {
+        padding: 12px;
+        gap: 12px;
+    }
+
+    .play-pause-btn {
+        width: 40px;
+        height: 40px;
+        font-size: 16px;
+    }
+
+    .time-info {
+        font-size: 12px;
+    }
+
+    .volume-slider {
+        width: 60px;
+    }
+}

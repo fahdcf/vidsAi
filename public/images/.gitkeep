@@ -1,0 +1,4 @@
+# This file ensures the images directory is tracked by git
+# Place your overlay images here:
+# - logo-transparent.png (for logo overlay)
+# - cta-button.png (for call-to-action overlay)
