@@ -168,8 +168,8 @@
             </div>
 
             <h1 class="processing-title">Processing Your Video</h1>
-            <p class="processing-subtitle">
-                We're trimming your scenes and preparing your video. This process can take up to 10 minutes depending on the complexity.
+            <p class="processing-subtitle" id="status-message">
+                We're generating scenes from your voiceover. This process can take up to 5 minutes.
             </p>
 
             <div class="progress-container">
@@ -186,6 +186,10 @@
                     </span>
                 </div>
                 <div class="status-item">
+                    <span class="status-label">Progress:</span>
+                    <span class="status-value" id="progress-text">0%</span>
+                </div>
+                <div class="status-item">
                     <span class="status-label">Started:</span>
                     <span class="status-value" id="start-time">{{ $project->processing_started_at?->format('H:i:s') ?? 'Just now' }}</span>
                 </div>
@@ -195,9 +199,9 @@
                 </div>
             </div>
 
-            <div class="estimated-time">
+            <div class="estimated-time" id="estimated-time">
                 <i class="bi bi-clock me-1"></i>
-                Estimated completion time: 5-10 minutes
+                Estimated completion time: 3-5 minutes
             </div>
         </div>
     </div>
@@ -207,6 +211,7 @@
 let statusCheckInterval;
 let startTime = new Date('{{ $project->processing_started_at?->toISOString() ?? now()->toISOString() }}');
 let progressValue = 0;
+let currentStatus = 'processing';
 
 function updateDuration() {
     const now = new Date();
@@ -218,14 +223,10 @@ function updateDuration() {
         minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`;
 }
 
-function updateProgress() {
-    // Simulate progress based on time (not real progress)
-    const now = new Date();
-    const elapsed = (now - startTime) / 1000; // seconds
-    const maxTime = 600; // 10 minutes
-
-    progressValue = Math.min(95, (elapsed / maxTime) * 100);
-    document.getElementById('progress-bar').style.width = progressValue + '%';
+function updateProgress(progress) {
+    progressValue = progress;
+    document.getElementById('progress-bar').style.width = progress + '%';
+    document.getElementById('progress-text').textContent = progress + '%';
 }
 
 function checkStatus() {
@@ -240,70 +241,93 @@ function checkStatus() {
         console.log('📊 Status check:', data);
 
         updateDuration();
-        updateProgress();
-
-        if (data.is_completed) {
-            clearInterval(statusCheckInterval);
-
-            if (data.status === 'reviewing') {
+        
+        // Update progress with real data
+        if (data.progress !== undefined) {
+            updateProgress(data.progress);
+        }
+        
+        // Update status message
+        if (data.status_message) {
+            document.getElementById('status-message').textContent = data.status_message;
+        }
+        
+        // Update current status
+        if (data.status !== currentStatus) {
+            currentStatus = data.status;
+            
+            if (data.status === 'processing') {
+                document.getElementById('current-status').innerHTML =
+                    '<span class="spinner"></span> Processing...';
+            } else if (data.status === 'reviewing') {
                 document.getElementById('current-status').innerHTML =
                     '<i class="bi bi-check-circle text-success"></i> Scenes Generated!';
                 document.getElementById('status-info').className = 'status-info success-state';
-                document.getElementById('progress-bar').style.width = '100%';
-
-                setTimeout(() => {
-                    window.location.href = data.redirect_url;
-                }, 2000);
-
+                document.getElementById('estimated-time').innerHTML = 
+                    '<i class="bi bi-check-circle text-success me-1"></i>Ready for review!';
             } else if (data.status === 'subtitle_selection') {
                 document.getElementById('current-status').innerHTML =
-                    '<i class="bi bi-check-circle text-success"></i> Processing Complete!';
+                    '<i class="bi bi-check-circle text-success"></i> Scenes Trimmed!';
                 document.getElementById('status-info').className = 'status-info success-state';
-                document.getElementById('progress-bar').style.width = '100%';
-
-                setTimeout(() => {
-                    window.location.href = data.redirect_url;
-                }, 2000);
-
+                document.getElementById('estimated-time').innerHTML = 
+                    '<i class="bi bi-check-circle text-success me-1"></i>Ready for subtitles!';
             } else if (data.status === 'completed') {
                 document.getElementById('current-status').innerHTML =
                     '<i class="bi bi-check-circle text-success"></i> Video Ready!';
                 document.getElementById('status-info').className = 'status-info success-state';
-                document.getElementById('progress-bar').style.width = '100%';
-
-                setTimeout(() => {
-                    window.location.href = data.redirect_url;
-                }, 2000);
-
-            } else if (data.status === 'failed' || data.status === 'trim_failed') {
+                document.getElementById('estimated-time').innerHTML = 
+                    '<i class="bi bi-check-circle text-success me-1"></i>Video completed!';
+            } else if (data.status === 'failed') {
                 document.getElementById('current-status').innerHTML =
                     '<i class="bi bi-x-circle text-danger"></i> Processing Failed';
                 document.getElementById('status-info').className = 'status-info error-state';
+                document.getElementById('estimated-time').innerHTML = 
+                    '<i class="bi bi-x-circle text-danger me-1"></i>Processing failed';
+            }
+        }
 
-                // Show error message
+        if (data.is_completed) {
+            clearInterval(statusCheckInterval);
+
+            // Redirect after showing completion state
+            setTimeout(() => {
+                if (data.redirect_url) {
+                    window.location.href = data.redirect_url;
+                }
+            }, 2000);
+        }
+        
+        // Handle failed state with retry option
+        if (data.status === 'failed' && data.can_retry) {
+            // Show error message
+            const existingError = document.querySelector('.error-message');
+            if (!existingError) {
                 const errorDiv = document.createElement('div');
-                errorDiv.className = 'status-item';
+                errorDiv.className = 'status-item error-message';
                 errorDiv.innerHTML = `
                     <span class="status-label">Error:</span>
                     <span class="status-value text-danger">${data.error_message || 'Processing failed. Please try again.'}</span>
                 `;
                 document.getElementById('status-info').appendChild(errorDiv);
+            }
 
-                // Add retry button after 3 seconds
-                setTimeout(() => {
+            // Add retry button after 3 seconds
+            setTimeout(() => {
+                const existingRetry = document.querySelector('.retry-button');
+                if (!existingRetry) {
                     const retryDiv = document.createElement('div');
-                    retryDiv.className = 'status-item';
+                    retryDiv.className = 'status-item retry-button';
                     retryDiv.innerHTML = `
                         <span class="status-label">Action:</span>
                         <span class="status-value">
-                            <a href="${data.redirect_url || '{{ route("projects.create") }}'}" class="btn btn-sm btn-primary">
-                                <i class="bi bi-arrow-clockwise me-1"></i>Try Again
-                            </a>
+                            <button onclick="retryProject()" class="btn btn-sm btn-primary">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Retry Project
+                            </button>
                         </span>
                     `;
                     document.getElementById('status-info').appendChild(retryDiv);
-                }, 3000);
-            }
+                }
+            }, 3000);
         }
     })
     .catch(error => {
@@ -319,6 +343,56 @@ checkStatus();
 
 // Update duration every second
 setInterval(updateDuration, 1000);
+
+function retryProject() {
+    const button = event.target;
+    const originalText = button.innerHTML;
+    
+    // Disable button and show loading
+    button.disabled = true;
+    button.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Retrying...';
+    
+    fetch('{{ route("projects.retry", $project) }}', {
+        method: 'POST',
+        headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reset UI to processing state
+            document.getElementById('current-status').innerHTML = '<span class="spinner"></span> Processing...';
+            document.getElementById('status-info').className = 'status-info';
+            document.getElementById('status-message').textContent = 'We\'re generating scenes from your voiceover. This process can take up to 5 minutes.';
+            document.getElementById('estimated-time').innerHTML = '<i class="bi bi-clock me-1"></i>Estimated completion time: 3-5 minutes';
+            
+            // Remove error and retry elements
+            const errorMessage = document.querySelector('.error-message');
+            const retryButton = document.querySelector('.retry-button');
+            if (errorMessage) errorMessage.remove();
+            if (retryButton) retryButton.remove();
+            
+            // Redirect to processing page
+            setTimeout(() => {
+                window.location.href = data.redirect_url;
+            }, 1000);
+        } else {
+            // Show error and re-enable button
+            alert('Retry failed: ' + data.message);
+            button.disabled = false;
+            button.innerHTML = originalText;
+        }
+    })
+    .catch(error => {
+        console.error('❌ Retry failed:', error);
+        alert('Retry failed. Please try again.');
+        button.disabled = false;
+        button.innerHTML = originalText;
+    });
+}
 </script>
 
 @push('scripts')

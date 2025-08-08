@@ -3,9 +3,9 @@
 namespace App\Jobs;
 
 use App\Models\Project;
+use App\Services\SceneTrimmingService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
 class ProcessTrimScenesJob implements ShouldQueue
@@ -27,6 +27,14 @@ class ProcessTrimScenesJob implements ShouldQueue
     }
 
     /**
+     * Get the unique ID for the job.
+     */
+    public function uniqueId(): string
+    {
+        return 'trim_scenes_' . $this->project->id;
+    }
+
+    /**
      * Execute the job.
      */
     public function handle(): void
@@ -34,74 +42,64 @@ class ProcessTrimScenesJob implements ShouldQueue
         try {
             Log::info('🚀 ProcessTrimScenesJob started', [
                 'project_id' => $this->project->id,
+                'job_id' => $this->uniqueId(),
                 'scenes_count' => count($this->webhookData['scenes'])
             ]);
 
-            // Make request to n8n webhook with extended timeout
-            $response = Http::timeout(600) // 10 minutes timeout
-                ->withoutVerifying()
-                ->post(
-                    config('services.n8n.trim_scenes_url'),
-                    $this->webhookData
-                );
+            // Use the new SceneTrimmingService instead of n8n webhook
+            $sceneTrimmingService = new SceneTrimmingService();
+            $responseData = $sceneTrimmingService->trimScenes($this->project, $this->webhookData['scenes']);
 
-            Log::info('📡 n8n trim response received', [
+            Log::info('✅ Trim scenes successful', [
                 'project_id' => $this->project->id,
-                'status' => $response->status(),
-                'body_length' => strlen($response->body())
+                'job_id' => $this->uniqueId(),
+                'response_keys' => is_array($responseData) ? array_keys($responseData) : 'not_array'
             ]);
 
-            if ($response->successful()) {
-                $responseData = $response->json();
+            // Parse the response to find trimmed videos
+            $trimmedVideos = $this->parseTrimmedVideos($responseData);
 
-                Log::info('✅ Trim scenes successful', [
-                    'project_id' => $this->project->id,
-                    'response_keys' => is_array($responseData) ? array_keys($responseData) : 'not_array'
+            Log::info('🔍 Parsed trimmed videos', [
+                'project_id' => $this->project->id,
+                'job_id' => $this->uniqueId(),
+                'raw_response' => $responseData,
+                'parsed_videos' => $trimmedVideos,
+                'videos_count' => count($trimmedVideos)
+            ]);
+
+            if (!empty($trimmedVideos)) {
+                // Update project status to subtitle selection
+                $this->project->update([
+                    'status' => 'subtitle_selection',
+                    'processing_completed_at' => now(),
+                    'trim_response' => $responseData // Store as array, not JSON string
                 ]);
 
-                // Parse the response to find trimmed videos
-                $trimmedVideos = $this->parseTrimmedVideos($responseData);
-
-                Log::info('🔍 Parsed trimmed videos', [
+                Log::info('🎯 Project updated to subtitle_selection', [
                     'project_id' => $this->project->id,
-                    'raw_response' => $responseData,
-                    'parsed_videos' => $trimmedVideos,
-                    'videos_count' => count($trimmedVideos)
+                    'job_id' => $this->uniqueId(),
+                    'trimmed_videos_count' => count($trimmedVideos),
+                    'stored_response' => $responseData
                 ]);
-
-                if (!empty($trimmedVideos)) {
-                    // Update project status to subtitle selection
-                    $this->project->update([
-                        'status' => 'subtitle_selection',
-                        'processing_completed_at' => now(),
-                        'trim_response' => $responseData // Store as array, not JSON string
-                    ]);
-
-                    Log::info('🎯 Project updated to subtitle_selection', [
-                        'project_id' => $this->project->id,
-                        'trimmed_videos_count' => count($trimmedVideos),
-                        'stored_response' => $responseData
-                    ]);
-                } else {
-                    // No trimmed videos found, go to completed
-                    $this->project->update([
-                        'status' => 'completed',
-                        'processing_completed_at' => now(),
-                        'trim_response' => $responseData // Store as array, not JSON string
-                    ]);
-
-                    Log::info('🏁 Project completed (no trimmed videos)', [
-                        'project_id' => $this->project->id,
-                        'response_data' => $responseData
-                    ]);
-                }
             } else {
-                throw new \Exception('n8n webhook failed: ' . $response->body());
+                // No trimmed videos found, go to completed
+                $this->project->update([
+                    'status' => 'completed',
+                    'processing_completed_at' => now(),
+                    'trim_response' => $responseData // Store as array, not JSON string
+                ]);
+
+                Log::info('🏁 Project completed (no trimmed videos)', [
+                    'project_id' => $this->project->id,
+                    'job_id' => $this->uniqueId(),
+                    'response_data' => $responseData
+                ]);
             }
 
         } catch (\Exception $e) {
             Log::error('❌ ProcessTrimScenesJob failed', [
                 'project_id' => $this->project->id,
+                'job_id' => $this->uniqueId(),
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
                 'attempt' => $this->attempts(),
@@ -118,11 +116,13 @@ class ProcessTrimScenesJob implements ShouldQueue
 
                 Log::error('❌ ProcessTrimScenesJob permanently failed after all attempts', [
                     'project_id' => $this->project->id,
+                    'job_id' => $this->uniqueId(),
                     'final_error' => $e->getMessage()
                 ]);
             } else {
                 Log::info('🔄 ProcessTrimScenesJob will retry', [
                     'project_id' => $this->project->id,
+                    'job_id' => $this->uniqueId(),
                     'attempt' => $this->attempts(),
                     'remaining_tries' => $this->tries - $this->attempts()
                 ]);
@@ -132,6 +132,9 @@ class ProcessTrimScenesJob implements ShouldQueue
         }
     }
 
+    /**
+     * Parse trimmed videos from response data
+     */
     private function parseTrimmedVideos(array $responseData): array
     {
         $trimmedVideos = [];
@@ -172,6 +175,9 @@ class ProcessTrimScenesJob implements ShouldQueue
         return $trimmedVideos;
     }
 
+    /**
+     * Get response structure for debugging
+     */
     private function getResponseStructure(array $data, int $depth = 0): array
     {
         if ($depth > 3) return ['...too_deep'];

@@ -3633,6 +3633,10 @@
                         // Project already processed, redirect to subtitles
                         console.log('✅ Project already processed, redirecting to subtitles...');
                         window.location.href = `{{ route('projects.subtitle-styles', $project) }}`;
+                    } else if (data.redirect_to_final) {
+                        // Project already completed, redirect to final page
+                        console.log('✅ Project already completed, redirecting to final page...');
+                        window.location.href = `{{ route('projects.final', $project) }}`;
                     } else if (data.trimmed_videos && data.trimmed_videos.length > 0) {
                         // Direct success (shouldn't happen with async processing)
                         console.log('🎬 Trimmed videos received:', data.trimmed_videos);

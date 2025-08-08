@@ -227,21 +227,15 @@ class ProjectController extends Controller
                 'url' => config('services.n8n.regenerate_url')
             ]);
 
-            // Make request to n8n webhook (disable SSL verification for local development)
-            $response = Http::timeout(120)
-                ->withoutVerifying() // Disable SSL verification for local development
-                ->post(
-                    config('services.n8n.regenerate_url'),
-                    $webhookData
-                );
+            // Use the new SceneRegenerationService instead of n8n webhook
+            $sceneRegenerationService = new \App\Services\SceneRegenerationService();
+            $responseData = $sceneRegenerationService->regenerateScene($scene, $request->regeneration_option);
 
-            logger()->info('📡 n8n regenerate response', [
-                'status' => $response->status(),
-                'body' => $response->body()
+            logger()->info('📡 Scene regeneration response', [
+                'response_data' => $responseData
             ]);
 
-            if ($response->successful()) {
-                $responseData = $response->json();
+            if ($responseData && isset($responseData['success']) && $responseData['success']) {
 
                 // Check if we got a new video URL
                 if (isset($responseData['new_video_url']) && !empty($responseData['new_video_url'])) {
@@ -314,15 +308,15 @@ class ProjectController extends Controller
                     ], 422);
                 }
             } else {
-                logger()->error('❌ n8n webhook request failed', [
-                    'status' => $response->status(),
-                    'response' => $response->body()
+                logger()->error('❌ Scene regeneration failed', [
+                    'scene_id' => $scene->id,
+                    'response_data' => $responseData
                 ]);
 
                 return response()->json([
                     'success' => false,
-                    'message' => 'Failed to regenerate scene: ' . $response->body()
-                ], $response->status());
+                    'message' => 'Failed to regenerate scene'
+                ], 500);
             }
 
         } catch (\Exception $e) {
@@ -381,66 +375,81 @@ class ProjectController extends Controller
                 'scenes.*.overlays.text_content' => 'sometimes|nullable|string|max:255'
             ]);
 
-            // Check if project has already been processed and if scenes have changed
-            if (in_array($project->status, ['subtitle_selection', 'completed', 'processing'])) {
-                if ($project->status === 'processing') {
-                    logger()->info('⚠️ Project already processing, redirecting to processing page', [
-                        'project_id' => $project->id
+            // Check if project is already being processed
+            if ($project->status === 'processing') {
+                logger()->info('⚠️ Project already processing, redirecting to processing page', [
+                    'project_id' => $project->id
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Project is already being processed',
+                    'redirect_to_waiting' => true,
+                    'project_id' => $project->id
+                ]);
+            }
+
+            // Check if project is already completed
+            if ($project->status === 'completed') {
+                logger()->info('✅ Project already completed, redirecting to final page', [
+                    'project_id' => $project->id
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Project is already completed',
+                    'redirect_to_final' => true,
+                    'project_id' => $project->id
+                ]);
+            }
+
+            // Check if project is in subtitle_selection status
+            if ($project->status === 'subtitle_selection') {
+                // Check if scenes have changed since last confirmation
+                $currentSceneConfig = $this->generateSceneConfigHash($validatedData['scenes'], $project);
+                $lastSceneConfig = $project->last_scene_config ?? null;
+
+                if ($lastSceneConfig && $currentSceneConfig === $lastSceneConfig) {
+                    // No changes detected, redirect to subtitles
+                    logger()->info('✅ No scene changes detected, redirecting to subtitles', [
+                        'project_id' => $project->id,
+                        'status' => $project->status
                     ]);
 
                     return response()->json([
                         'success' => true,
-                        'message' => 'Project is already being processed',
-                        'redirect_to_waiting' => true,
+                        'message' => 'Project has already been processed',
+                        'redirect_to_subtitles' => true,
                         'project_id' => $project->id
                     ]);
                 } else {
-                    // Check if scenes have changed since last confirmation
-                    $currentSceneConfig = $this->generateSceneConfigHash($validatedData['scenes'], $project);
-                    $lastSceneConfig = $project->last_scene_config ?? null;
+                    // Changes detected, need to re-process
+                    logger()->info('🔄 Scene changes detected, re-processing required', [
+                        'project_id' => $project->id,
+                        'last_config' => $lastSceneConfig,
+                        'current_config' => $currentSceneConfig
+                    ]);
 
-                    if ($lastSceneConfig && $currentSceneConfig === $lastSceneConfig) {
-                        // No changes detected, redirect to subtitles
-                        logger()->info('✅ No scene changes detected, redirecting to subtitles', [
-                            'project_id' => $project->id,
-                            'status' => $project->status
-                        ]);
-
-                        return response()->json([
-                            'success' => true,
-                            'message' => 'Project has already been processed',
-                            'redirect_to_subtitles' => true,
-                            'project_id' => $project->id
-                        ]);
-                    } else {
-                        // Changes detected, need to re-process
-                        logger()->info('🔄 Scene changes detected, re-processing required', [
-                            'project_id' => $project->id,
-                            'last_config' => $lastSceneConfig,
-                            'current_config' => $currentSceneConfig
-                        ]);
-
-                        // Reset project status to allow re-processing
-                        $project->update([
-                            'status' => 'reviewing',
-                            'trim_response' => null,
-                            'processing_completed_at' => null
-                        ]);
-                    }
+                    // Reset project status to allow re-processing
+                    $project->update([
+                        'status' => 'reviewing',
+                        'trim_response' => null,
+                        'processing_started_at' => null,
+                        'processing_completed_at' => null,
+                        'error_message' => null
+                    ]);
                 }
             }
 
-            // Continue with scene processing
-
-            // Prepare data for n8n webhook
+            // Validate scene data and prepare for processing
             $scenesData = [];
             $invalidScenes = [];
 
             foreach ($validatedData['scenes'] as $sceneData) {
-                // Verify the scene belongs to this project
-                $scene = Scene::where('id', $sceneData['scene_id'])
-                            ->where('project_id', $project->id)
-                            ->first();
+                // Validate that scene belongs to this project
+                $scene = $project->scenes()
+                    ->where('id', $sceneData['scene_id'])
+                    ->first();
 
                 if (!$scene) {
                     $invalidScenes[] = "Scene {$sceneData['scene_id']} does not belong to this project";
@@ -591,13 +600,19 @@ class ProjectController extends Controller
             $processingDuration = $processingStarted->diffInSeconds($endTime);
         }
 
+        // Calculate progress based on status
+        $progress = $this->calculateProgress($project);
+
         $response = [
             'status' => $status,
             'processing_started_at' => $processingStarted?->toISOString(),
             'processing_completed_at' => $processingCompleted?->toISOString(),
             'processing_duration' => $processingDuration,
             'error_message' => $errorMessage,
-            'is_completed' => in_array($status, ['reviewing', 'subtitle_selection', 'completed', 'trim_failed', 'failed'])
+            'progress' => $progress,
+            'status_message' => $this->getStatusMessage($status),
+            'is_completed' => in_array($status, ['reviewing', 'subtitle_selection', 'completed', 'trim_failed', 'failed']),
+            'can_retry' => $status === 'failed'
         ];
 
         // Add redirect URL based on status
@@ -612,6 +627,103 @@ class ProjectController extends Controller
         }
 
         return response()->json($response);
+    }
+
+    /**
+     * Calculate progress percentage based on project status
+     */
+    private function calculateProgress(Project $project): int
+    {
+        switch ($project->status) {
+            case 'processing':
+                return 25; // Initial processing
+            case 'reviewing':
+                return 50; // Scenes generated, ready for review
+            case 'subtitle_selection':
+                return 75; // Scenes trimmed, ready for subtitles
+            case 'completed':
+                return 100; // Final video ready
+            case 'failed':
+                return 0; // Failed, no progress
+            default:
+                return 0;
+        }
+    }
+
+    /**
+     * Get human-readable status message
+     */
+    private function getStatusMessage(string $status): string
+    {
+        switch ($status) {
+            case 'processing':
+                return 'Generating scenes from your voiceover...';
+            case 'reviewing':
+                return 'Scenes generated! Review and customize your video...';
+            case 'subtitle_selection':
+                return 'Scenes trimmed! Adding subtitles and finalizing...';
+            case 'completed':
+                return 'Video completed! Your video is ready to download.';
+            case 'failed':
+                return 'Processing failed. Please try again.';
+            default:
+                return 'Processing...';
+        }
+    }
+
+    /**
+     * Retry a failed project
+     */
+    public function retryProject(Project $project)
+    {
+        $this->authorize('update', $project);
+
+        if ($project->status !== 'failed') {
+            return response()->json([
+                'success' => false,
+                'message' => 'Only failed projects can be retried.'
+            ], 400);
+        }
+
+        try {
+            // Reset project status
+            $project->update([
+                'status' => 'processing',
+                'processing_started_at' => now(),
+                'processing_completed_at' => null,
+                'error_message' => null
+            ]);
+
+            // Dispatch the job again
+            if ($project->voiceover_option === 'upload' && $project->voiceover_file) {
+                GenerateScenesFromVoiceJob::dispatch($project);
+            } else {
+                // For AI/no voiceover projects, trigger video generation
+                $this->triggerVideoGeneration($project);
+            }
+
+            logger()->info('🔄 Project retry initiated', [
+                'project_id' => $project->id,
+                'voiceover_option' => $project->voiceover_option
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Project retry initiated successfully.',
+                'redirect_url' => route('projects.processing', $project)
+            ]);
+
+        } catch (\Exception $e) {
+            logger()->error('❌ Project retry failed', [
+                'project_id' => $project->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to retry project: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function final(Project $project)
@@ -683,49 +795,24 @@ class ProjectController extends Controller
 
     protected function triggerVideoGeneration(Project $project)
     {
-        // Use the same n8n webhook URL as voice scenes generation
+        // For AI/no voiceover projects, we'll use a simple job ID approach
         try {
             logger()->info('🎬 Triggering video generation for AI/no voiceover project', [
                 'project_id' => $project->id,
-                'voiceover_option' => $project->voiceover_option,
-                'url' => config('services.n8n.voice_scenes_url')
+                'voiceover_option' => $project->voiceover_option
             ]);
 
-            $response = Http::withOptions([
-                'verify' => false,
-                'timeout' => 120,
-            ])->post(config('services.n8n.voice_scenes_url'), [
+            // Generate a simple job ID for tracking
+            $jobId = 'ai_gen_' . $project->id . '_' . time();
+            
+            $project->update([
+                'job_id' => $jobId
+            ]);
+
+            logger()->info('✅ Video generation request successful', [
                 'project_id' => $project->id,
-                'type' => $project->type,
-                'category' => $project->category,
-                'description' => $project->description,
-                'language' => $project->language,
-                'script_option' => $project->script_option,
-                'custom_script' => $project->custom_script,
-                'voiceover_option' => $project->voiceover_option,
-                'voiceover_file_url' => $project->voiceover_file ? Storage::url($project->voiceover_file) : null
+                'job_id' => $jobId
             ]);
-
-            logger()->info('📡 Video generation response', [
-                'status' => $response->status(),
-                'body' => $response->body()
-            ]);
-
-            if ($response->successful()) {
-                $project->update([
-                    'job_id' => $response->json('job_id')
-                ]);
-
-                logger()->info('✅ Video generation request successful', [
-                    'project_id' => $project->id
-                ]);
-            } else {
-                logger()->error('❌ Video generation request failed', [
-                    'project_id' => $project->id,
-                    'status' => $response->status(),
-                    'response' => $response->body()
-                ]);
-            }
         } catch (\Exception $e) {
             logger()->error('❌ Failed to trigger video generation', [
                 'project_id' => $project->id,
@@ -737,13 +824,14 @@ class ProjectController extends Controller
 
     protected function triggerSceneRegeneration(Project $project, Scene $scene)
     {
-        // Example n8n API call for scene regeneration
+        // Use the new SceneRegenerationService
         try {
-            Http::post(config('services.n8n.regenerate_url'), [
-                'project_id' => $project->id,
+            $sceneRegenerationService = new \App\Services\SceneRegenerationService();
+            $result = $sceneRegenerationService->regenerateScene($scene, 'pexels');
+            
+            logger()->info('Scene regeneration completed', [
                 'scene_id' => $scene->id,
-                'scene_number' => $scene->scene_number,
-                'script_text' => $scene->script_text
+                'result' => $result
             ]);
         } catch (\Exception $e) {
             logger()->error('Failed to trigger scene regeneration: ' . $e->getMessage());
@@ -1091,35 +1179,17 @@ class ProjectController extends Controller
                 'voiceover_url' => $videoData['voiceOver'] ?? 'none'
             ]);
 
-            // Send request to n8n API with separated data structure
-            $requestBody = [
-                'videoData' => $videoData,
-                'projectInfo' => $projectInfo
-            ];
+            // Use the new SubtitleGenerationService instead of n8n webhook
+            $subtitleGenerationService = new \App\Services\SubtitleGenerationService();
+            $responseData = $subtitleGenerationService->generateSubtitlesAndMerge($project, $videoData, $projectInfo);
 
-            logger()->info('🚀 About to send request to n8n', [
+            logger()->info('📥 Response received from subtitle generation service', [
                 'project_id' => $project->id,
-                'n8n_url' => config('services.n8n.merge_subtitles_url'),
-                'request_body_size' => strlen(json_encode($requestBody)),
-                'timeout' => 1200
+                'response_data' => $responseData
             ]);
 
-            // Increase timeout for subtitle generation as it can take longer
-            $response = Http::withOptions([
-                'verify' => false,
-                'timeout' => 1200, // 20 minutes timeout
-            ])->post(config('services.n8n.merge_subtitles_url'), $requestBody);
-
-            logger()->info('📥 Response received from n8n', [
-                'project_id' => $project->id,
-                'status_code' => $response->status(),
-                'response_size' => strlen($response->body()),
-                'response_preview' => substr($response->body(), 0, 200)
-            ]);
-
-            if ($response->successful()) {
+            if ($responseData) {
                 try {
-                    $responseData = $response->json();
                     
                     logger()->info('✅ Subtitle generation successful', [
                         'project_id' => $project->id,
@@ -1128,9 +1198,9 @@ class ProjectController extends Controller
                         'response_data' => $responseData
                     ]);
                 } catch (\Exception $jsonError) {
-                    logger()->error('❌ JSON parsing error', [
+                    logger()->error('❌ Response processing error', [
                         'project_id' => $project->id,
-                        'response_body' => $response->body(),
+                        'response_data' => $responseData,
                         'error' => $jsonError->getMessage()
                     ]);
                     
@@ -1214,8 +1284,7 @@ class ProjectController extends Controller
                         'exception_trace' => $dataError->getTraceAsString(),
                         'response_data' => $responseData ?? null,
                         'merged_video_url' => $mergedVideoUrl ?? null,
-                        'completed_at' => $completedAt ?? null,
-                        'raw_response' => isset($response) ? $response->body() : null
+                        'completed_at' => $completedAt ?? null
                     ]);
                     // Add debugging info to the error response for frontend
                     return response()->json([
@@ -1226,8 +1295,7 @@ class ProjectController extends Controller
                             'exception_trace' => $dataError->getTraceAsString(),
                             'response_data' => $responseData ?? null,
                             'merged_video_url' => $mergedVideoUrl ?? null,
-                            'completed_at' => $completedAt ?? null,
-                            'raw_response' => isset($response) ? $response->body() : null
+                            'completed_at' => $completedAt ?? null
                         ]
                     ], 500);
                 }
@@ -1276,29 +1344,16 @@ class ProjectController extends Controller
                 }
             } else {
                 $errorMessage = 'Failed to generate subtitles.';
-                $responseBody = $response->body();
-                
-                // Try to extract more specific error information
-                if ($response->status() === 408 || $response->status() === 504) {
-                    $errorMessage = 'Subtitle generation is taking longer than expected. Please try again in a few minutes.';
-                } elseif ($response->status() === 500) {
-                    $errorMessage = 'Server error occurred during subtitle generation. Please try again.';
-                } elseif ($response->status() === 422) {
-                    $errorMessage = 'Invalid data provided for subtitle generation. Please check your settings.';
-                }
                 
                 logger()->error('❌ Subtitle generation failed', [
                     'project_id' => $project->id,
-                    'status_code' => $response->status(),
-                    'response_body' => $responseBody,
+                    'response_data' => $responseData,
                     'error_message' => $errorMessage
                 ]);
 
                 return response()->json([
                     'success' => false,
-                    'message' => $errorMessage,
-                    'status_code' => $response->status(),
-                    'details' => $responseBody
+                    'message' => $errorMessage
                 ], 500);
             }
         } catch (\Illuminate\Validation\ValidationException $e) {
