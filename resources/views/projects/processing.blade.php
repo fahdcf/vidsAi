@@ -203,6 +203,13 @@
                 <i class="bi bi-clock me-1"></i>
                 Estimated completion time: 3-5 minutes
             </div>
+
+            <!-- Manual refresh button for debugging -->
+            <div class="mt-3">
+                <button onclick="location.reload()" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh Page
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -234,10 +241,21 @@ function checkStatus() {
         headers: {
             'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-        }
+        },
+        credentials: 'same-origin' // Include cookies for session
     })
-    .then(response => response.json())
+    .then(response => {
+        if (response.status === 401) {
+            // Session expired, redirect to login
+            console.log('❌ Session expired, redirecting to login...');
+            window.location.href = '{{ route("login") }}';
+            return null;
+        }
+        return response.json();
+    })
     .then(data => {
+        if (!data) return; // Session expired, already redirected
+        
         console.log('📊 Status check:', data);
 
         updateDuration();
@@ -271,6 +289,11 @@ function checkStatus() {
                 document.getElementById('status-info').className = 'status-info success-state';
                 document.getElementById('estimated-time').innerHTML = 
                     '<i class="bi bi-check-circle text-success me-1"></i>Ready for subtitles!';
+            } else if (data.status === 'subtitle_generating') {
+                document.getElementById('current-status').innerHTML =
+                    '<span class="spinner"></span> Generating Subtitles...';
+                document.getElementById('estimated-time').innerHTML = 
+                    '<i class="bi bi-clock me-1"></i>Generating subtitles and merging videos...';
             } else if (data.status === 'completed') {
                 document.getElementById('current-status').innerHTML =
                     '<i class="bi bi-check-circle text-success"></i> Video Ready!';
@@ -297,6 +320,15 @@ function checkStatus() {
             }, 2000);
         }
         
+        // Additional check for completed status
+        if (data.status === 'completed') {
+            console.log('✅ Project completed, redirecting to final page...');
+            clearInterval(statusCheckInterval);
+            setTimeout(() => {
+                window.location.href = '{{ route("projects.final", $project) }}';
+            }, 1000);
+        }
+
         // Handle failed state with retry option
         if (data.status === 'failed' && data.can_retry) {
             // Show error message
@@ -332,6 +364,7 @@ function checkStatus() {
     })
     .catch(error => {
         console.error('❌ Status check failed:', error);
+        // Don't redirect on network errors, just log them
     });
 }
 
@@ -340,6 +373,14 @@ statusCheckInterval = setInterval(checkStatus, 3000);
 
 // Initial check
 checkStatus();
+
+// Check if project is already completed on page load
+if ('{{ $project->status }}' === 'completed') {
+    console.log('✅ Project already completed, redirecting...');
+    setTimeout(() => {
+        window.location.href = '{{ route("projects.final", $project) }}';
+    }, 1000);
+}
 
 // Update duration every second
 setInterval(updateDuration, 1000);

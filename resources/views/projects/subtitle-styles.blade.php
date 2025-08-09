@@ -3251,6 +3251,17 @@ document.addEventListener('DOMContentLoaded', function() {
             generateBtn.innerHTML = '<i class="bi bi-magic me-2"></i>Generate Subtitles';
 
             if (data.success) {
+                console.log('✅ Subtitle generation response received:', data);
+
+                // Check if we need to redirect to processing page
+                if (data.redirect_to_processing) {
+                    console.log('🔄 Redirecting to processing page...');
+                    // Redirect to processing page
+                    window.location.href = `{{ route('projects.processing', $project) }}`;
+                    return;
+                }
+
+                // If not redirecting to processing, show success message (for immediate completion)
                 console.log('✅ Video with subtitles generated successfully:', data);
 
                 // Show success message with merged video info

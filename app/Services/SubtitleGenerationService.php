@@ -75,7 +75,7 @@ class SubtitleGenerationService
             ]);
 
             $response = Http::withOptions([
-                'timeout' => 600, // 10 minutes timeout
+                'timeout' => 1200, // 20 minutes timeout
                 'verify' => false
             ])->post($renderUrl, $videoData);
 
@@ -112,7 +112,7 @@ class SubtitleGenerationService
      */
     private function waitForRenderCompletion(string $renderId, int $projectId): ?array
     {
-        $maxAttempts = 60; // 60 attempts with 7-second wait = 7 minutes max
+        $maxAttempts = 300; // 300 attempts with 7-second wait = 35 minutes max
         $attempt = 0;
 
         while ($attempt < $maxAttempts) {

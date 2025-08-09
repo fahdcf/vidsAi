@@ -42,7 +42,7 @@
             <div class="card text-center">
                 <div class="card-body">
                     <i class="bi bi-clock text-warning" style="font-size: 2rem;"></i>
-                    <h3 class="mt-2">{{ $projects->where('status', 'processing')->count() }}</h3>
+                    <h3 class="mt-2">{{ $projects->whereIn('status', ['processing', 'subtitle_generating'])->count() }}</h3>
                     <p class="text-muted mb-0">Processing</p>
                 </div>
             </div>
@@ -135,6 +135,10 @@
                                                         </a>
                                                         <a href="{{ route('projects.review', $project) }}" class="btn btn-outline-secondary btn-sm">
                                                             <i class="bi bi-arrow-left"></i> Back to Review
+                                                        </a>
+                                                    @elseif($project->status == 'subtitle_generating')
+                                                        <a href="{{ route('projects.processing', $project) }}" class="btn btn-outline-info">
+                                                            <i class="bi bi-clock"></i> View Progress
                                                         </a>
                                                     @elseif($project->status == 'completed')
                                                         <a href="{{ route('projects.final', $project) }}" class="btn btn-outline-success">

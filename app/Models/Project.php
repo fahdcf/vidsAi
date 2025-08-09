@@ -144,6 +144,7 @@ class Project extends Model
             'processing' => '<span class="badge bg-info">Processing</span>',
             'reviewing' => '<span class="badge bg-primary">Reviewing</span>',
             'subtitle_selection' => '<span class="badge bg-purple">Subtitle Selection</span>',
+            'subtitle_generating' => '<span class="badge bg-info">Generating Subtitles</span>',
             'completed' => '<span class="badge bg-success">Completed</span>',
             'failed' => '<span class="badge bg-danger">Failed</span>',
             default => '<span class="badge bg-secondary">Unknown</span>'

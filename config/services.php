@@ -64,13 +64,13 @@ return [
     ],
 
     'video_trim' => [
-        'base_url' => env('VIDEO_TRIM_BASE_URL', 'https://a812acd7984b.ngrok-free.app'),
+        'base_url' => env('VIDEO_TRIM_BASE_URL', 'https://8d7efae734fa.ngrok-free.app'),
         'trim_endpoint' => env('VIDEO_TRIM_ENDPOINT', '/trim'),
         'status_endpoint' => env('VIDEO_TRIM_STATUS_ENDPOINT', '/status'),
     ],
 
     'video_render' => [
-        'base_url' => env('VIDEO_RENDER_BASE_URL', 'https://a2067b7cde75.ngrok-free.app'),
+        'base_url' => env('VIDEO_RENDER_BASE_URL', 'http://localhost:5001'),
         'render_endpoint' => env('VIDEO_RENDER_ENDPOINT', '/render'),
         'status_endpoint' => env('VIDEO_RENDER_STATUS_ENDPOINT', '/status'),
     ],

@@ -641,6 +641,8 @@ class ProjectController extends Controller
                 return 50; // Scenes generated, ready for review
             case 'subtitle_selection':
                 return 75; // Scenes trimmed, ready for subtitles
+            case 'subtitle_generating':
+                return 85; // Subtitle generation in progress
             case 'completed':
                 return 100; // Final video ready
             case 'failed':
@@ -661,7 +663,9 @@ class ProjectController extends Controller
             case 'reviewing':
                 return 'Scenes generated! Review and customize your video...';
             case 'subtitle_selection':
-                return 'Scenes trimmed! Adding subtitles and finalizing...';
+                return 'Scenes trimmed! Ready to add subtitles...';
+            case 'subtitle_generating':
+                return 'Generating subtitles and merging videos...';
             case 'completed':
                 return 'Video completed! Your video is ready to download.';
             case 'failed':
@@ -1129,7 +1133,6 @@ class ProjectController extends Controller
 
     public function generateSubtitles(Request $request, Project $project)
     {
-        // Add immediate logging to see if route is hit
         logger()->info('🚀 ROUTE HIT: generateSubtitles method called', [
             'project_id' => $project->id,
             'method' => $request->method(),
@@ -1162,12 +1165,12 @@ class ProjectController extends Controller
         ]);
 
         try {
-            // Prepare data for n8n API
+            // Prepare data for subtitle generation
             $preparedData = $this->prepareSubtitleData($project, $validated);
             $videoData = $preparedData['videoData'];
             $projectInfo = $preparedData['projectInfo'];
 
-            logger()->info('📤 Sending subtitle generation request to n8n', [
+            logger()->info('📤 Preparing subtitle generation data', [
                 'project_id' => $project->id,
                 'clips_count' => count($videoData['clips']),
                 'subtitles_count' => count($videoData['subtitles']),
@@ -1179,183 +1182,32 @@ class ProjectController extends Controller
                 'voiceover_url' => $videoData['voiceOver'] ?? 'none'
             ]);
 
-            // Use the new SubtitleGenerationService instead of n8n webhook
-            $subtitleGenerationService = new \App\Services\SubtitleGenerationService();
-            $responseData = $subtitleGenerationService->generateSubtitlesAndMerge($project, $videoData, $projectInfo);
-
-            logger()->info('📥 Response received from subtitle generation service', [
-                'project_id' => $project->id,
-                'response_data' => $responseData
+            // Update project status to subtitle_generating
+            $project->update([
+                'status' => 'subtitle_generating',
+                'processing_started_at' => now()
             ]);
 
-            if ($responseData) {
-                try {
-                    
-                    logger()->info('✅ Subtitle generation successful', [
-                        'project_id' => $project->id,
-                        'response_data_type' => gettype($responseData),
-                        'response_data_count' => is_array($responseData) ? count($responseData) : 'not array',
-                        'response_data' => $responseData
-                    ]);
-                } catch (\Exception $jsonError) {
-                    logger()->error('❌ Response processing error', [
-                        'project_id' => $project->id,
-                        'response_data' => $responseData,
-                        'error' => $jsonError->getMessage()
-                    ]);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Invalid response format from video processing service.'
-                    ], 500);
-                }
+            logger()->info('🚀 Dispatching subtitle generation job', [
+                'project_id' => $project->id,
+                'clips_count' => count($videoData['clips']),
+                'subtitles_count' => count($videoData['subtitles'])
+            ]);
 
-                // Handle the new response format with merged video URL
-                try {
-                    $mergedVideoUrl = null;
-                    $completedAt = null;
+            // Dispatch the job for async processing
+            \App\Jobs\ProcessSubtitleGenerationJob::dispatch($project, $videoData, $projectInfo);
 
-                    logger()->info('🔍 Processing response data', [
-                        'project_id' => $project->id,
-                        'response_data_type' => gettype($responseData),
-                        'response_data_count' => is_array($responseData) ? count($responseData) : 'not array'
-                    ]);
+            logger()->info('✅ Subtitle generation job dispatched successfully', [
+                'project_id' => $project->id
+            ]);
 
-                    // Accept direct object format (not array) for n8n output
-                    if (is_array($responseData)) {
-                        // If array and has numeric keys, treat as list
-                        if (array_keys($responseData) === range(0, count($responseData) - 1) && count($responseData) > 0) {
-                            $firstItem = $responseData[0];
-                            logger()->info('🔍 First item structure', [
-                                'project_id' => $project->id,
-                                'first_item_type' => gettype($firstItem),
-                                'first_item_keys' => is_array($firstItem) ? array_keys($firstItem) : 'not array',
-                                'first_item_full' => $firstItem
-                            ]);
-                            if (is_array($firstItem) && isset($firstItem['merged video url'])) {
-                                $mergedVideoUrl = $firstItem['merged video url'];
-                                $completedAt = $firstItem['completed_at'] ?? null;
-                            } elseif (is_array($firstItem) && isset($firstItem['merged_video_url'])) {
-                                $mergedVideoUrl = $firstItem['merged_video_url'];
-                                $completedAt = $firstItem['completed_at'] ?? null;
-                            } elseif (is_object($firstItem) && property_exists($firstItem, 'merged video url')) {
-                                $mergedVideoUrl = $firstItem->{'merged video url'};
-                                $completedAt = $firstItem->completed_at ?? null;
-                            } elseif (is_object($firstItem) && property_exists($firstItem, 'merged_video_url')) {
-                                $mergedVideoUrl = $firstItem->merged_video_url;
-                                $completedAt = $firstItem->completed_at ?? null;
-                            }
-                        } else {
-                            // Associative array (direct object)
-                            if (isset($responseData['merged video url'])) {
-                                $mergedVideoUrl = $responseData['merged video url'];
-                                $completedAt = $responseData['completed_at'] ?? null;
-                            } elseif (isset($responseData['merged_video_url'])) {
-                                $mergedVideoUrl = $responseData['merged_video_url'];
-                                $completedAt = $responseData['completed_at'] ?? null;
-                            }
-                        }
-                    } elseif (is_object($responseData)) {
-                        if (property_exists($responseData, 'merged video url')) {
-                            $mergedVideoUrl = $responseData->{'merged video url'};
-                            $completedAt = $responseData->completed_at ?? null;
-                        } elseif (property_exists($responseData, 'merged_video_url')) {
-                            $mergedVideoUrl = $responseData->merged_video_url;
-                            $completedAt = $responseData->completed_at ?? null;
-                        }
-                    } else {
-                        // Unexpected format, log everything
-                        logger()->error('❌ Unexpected response format from n8n', [
-                            'project_id' => $project->id,
-                            'response_data_type' => gettype($responseData),
-                            'response_data' => $responseData
-                        ]);
-                    }
+            return response()->json([
+                'success' => true,
+                'message' => 'Subtitle generation started! Please wait while we process your video...',
+                'redirect_to_processing' => true,
+                'project_id' => $project->id
+            ]);
 
-                    logger()->info('🎬 Extracted merged video data', [
-                        'project_id' => $project->id,
-                        'merged_video_url' => $mergedVideoUrl,
-                        'completed_at' => $completedAt
-                    ]);
-                } catch (\Exception $dataError) {
-                    logger()->error('❌ Response data processing error', [
-                        'project_id' => $project->id,
-                        'error' => $dataError->getMessage(),
-                        'exception_trace' => $dataError->getTraceAsString(),
-                        'response_data' => $responseData ?? null,
-                        'merged_video_url' => $mergedVideoUrl ?? null,
-                        'completed_at' => $completedAt ?? null
-                    ]);
-                    // Add debugging info to the error response for frontend
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Error processing video generation response.',
-                        'debug' => [
-                            'error' => $dataError->getMessage(),
-                            'exception_trace' => $dataError->getTraceAsString(),
-                            'response_data' => $responseData ?? null,
-                            'merged_video_url' => $mergedVideoUrl ?? null,
-                            'completed_at' => $completedAt ?? null
-                        ]
-                    ], 500);
-                }
-
-                // Update project status and store the merged video URL
-                try {
-                    $updateData = [
-                        'status' => 'completed',
-                        'processing_completed_at' => now()
-                    ];
-
-                    if ($mergedVideoUrl) {
-                        $updateData['final_video_path'] = $mergedVideoUrl;
-                    }
-
-                    logger()->info('🔄 Updating project with merged video data', [
-                        'project_id' => $project->id,
-                        'update_data' => $updateData
-                    ]);
-
-                    $project->update($updateData);
-
-                    logger()->info('✅ Project updated successfully', [
-                        'project_id' => $project->id,
-                        'final_video_path' => $project->final_video_path
-                    ]);
-
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Video with subtitles generated successfully!',
-                        'merged_video_url' => $mergedVideoUrl,
-                        'completed_at' => $completedAt,
-                        'redirect_url' => route('projects.final', $project)
-                    ]);
-                } catch (\Exception $updateError) {
-                    logger()->error('❌ Project update error', [
-                        'project_id' => $project->id,
-                        'error' => $updateError->getMessage(),
-                        'trace' => $updateError->getTraceAsString()
-                    ]);
-                    
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Video generated but failed to save project data. Please try again.'
-                    ], 500);
-                }
-            } else {
-                $errorMessage = 'Failed to generate subtitles.';
-                
-                logger()->error('❌ Subtitle generation failed', [
-                    'project_id' => $project->id,
-                    'response_data' => $responseData,
-                    'error_message' => $errorMessage
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => $errorMessage
-                ], 500);
-            }
         } catch (\Illuminate\Validation\ValidationException $e) {
             logger()->error('❌ Subtitle generation validation error', [
                 'project_id' => $project->id,
@@ -1367,16 +1219,6 @@ class ProjectController extends Controller
                 'message' => 'Validation error: ' . implode(', ', array_flatten($e->errors())),
                 'errors' => $e->errors()
             ], 422);
-        } catch (\Illuminate\Http\Client\ConnectionException $e) {
-            logger()->error('❌ Subtitle generation connection error', [
-                'project_id' => $project->id,
-                'error' => $e->getMessage()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Connection timeout. The subtitle generation is taking longer than expected. Please try again.'
-            ], 408);
         } catch (\Exception $e) {
             logger()->error('❌ Subtitle generation exception', [
                 'project_id' => $project->id,
@@ -1386,7 +1228,7 @@ class ProjectController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'An error occurred while generating subtitles: ' . $e->getMessage()
+                'message' => 'An error occurred while starting subtitle generation: ' . $e->getMessage()
             ], 500);
         }
     }
