@@ -103,6 +103,43 @@
         font-weight: 600;
     }
 
+    .scene-duration {
+        background: linear-gradient(135deg, #10b981, #059669);
+        color: white;
+        padding: 0.25rem 0.75rem;
+        border-radius: 20px;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .scene-description {
+        color: #6b7280;
+        font-size: 0.875rem;
+        margin: 0.5rem 0;
+        line-height: 1.4;
+    }
+
+    .trim-timeline {
+        margin-top: 0.75rem;
+    }
+
+    .timeline-bar {
+        width: 100%;
+        height: 8px;
+        background: #e5e7eb;
+        border-radius: 4px;
+        position: relative;
+        margin-bottom: 0.5rem;
+    }
+
+    .trim-indicator {
+        position: absolute;
+        height: 100%;
+        background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        border-radius: 4px;
+        transition: all 0.3s ease;
+    }
+
     .scene-url {
         font-size: 0.875rem;
         color: #6b7280;
@@ -782,6 +819,12 @@
         grid-template-columns: repeat(4, 1fr);
         gap: 1.5rem;
         margin-top: 1rem;
+    }
+
+    @media (max-width: 1200px) {
+        .transitions-grid {
+            grid-template-columns: repeat(3, 1fr);
+        }
     }
 
     @media (max-width: 1024px) {
@@ -1855,8 +1898,25 @@
                 </div>
             </div>
 
-            <!-- Slide Transition -->
-            <div class="transition-card" data-transition="slide" onclick="selectTransition('slide')">
+            <!-- Slide Left Transition -->
+            <div class="transition-card" data-transition="slide-left" onclick="selectTransition('slide-left')">
+                <div class="transition-preview">
+                    <div class="transition-demo slide-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-left"></i>
+                        Slide Left
+                    </h3>
+                    <p class="transition-description">Slide from right to left for dynamic motion</p>
+                </div>
+            </div>
+
+            <!-- Slide Right Transition -->
+            <div class="transition-card" data-transition="slide-right" onclick="selectTransition('slide-right')">
                 <div class="transition-preview">
                     <div class="transition-demo slide-demo">
                         <div class="demo-clip clip-1"></div>
@@ -1866,14 +1926,48 @@
                 <div class="transition-info">
                     <h3 class="transition-name">
                         <i class="bi bi-arrow-right"></i>
-                        Slide
+                        Slide Right
                     </h3>
-                    <p class="transition-description">Dynamic sliding motion perfect for modern, engaging content</p>
+                    <p class="transition-description">Slide from left to right for engaging content</p>
                 </div>
             </div>
 
-            <!-- Zoom Transition -->
-            <div class="transition-card" data-transition="zoom" onclick="selectTransition('zoom')">
+            <!-- Slide Up Transition -->
+            <div class="transition-card" data-transition="slide-up" onclick="selectTransition('slide-up')">
+                <div class="transition-preview">
+                    <div class="transition-demo slide-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-up"></i>
+                        Slide Up
+                    </h3>
+                    <p class="transition-description">Slide from bottom to top for upward motion</p>
+                </div>
+            </div>
+
+            <!-- Slide Down Transition -->
+            <div class="transition-card" data-transition="slide-down" onclick="selectTransition('slide-down')">
+                <div class="transition-preview">
+                    <div class="transition-demo slide-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-down"></i>
+                        Slide Down
+                    </h3>
+                    <p class="transition-description">Slide from top to bottom for downward motion</p>
+                </div>
+            </div>
+
+            <!-- Zoom In Transition -->
+            <div class="transition-card" data-transition="zoom-in" onclick="selectTransition('zoom-in')">
                 <div class="transition-preview">
                     <div class="transition-demo zoom-demo">
                         <div class="demo-clip clip-1"></div>
@@ -1883,9 +1977,94 @@
                 <div class="transition-info">
                     <h3 class="transition-name">
                         <i class="bi bi-zoom-in"></i>
-                        Zoom
+                        Zoom In
                     </h3>
-                    <p class="transition-description">Energetic zoom effect that adds excitement and drama to your videos</p>
+                    <p class="transition-description">Zoom in effect that adds excitement and drama</p>
+                </div>
+            </div>
+
+            <!-- Zoom Out Transition -->
+            <div class="transition-card" data-transition="zoom-out" onclick="selectTransition('zoom-out')">
+                <div class="transition-preview">
+                    <div class="transition-demo zoom-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-zoom-out"></i>
+                        Zoom Out
+                    </h3>
+                    <p class="transition-description">Zoom out effect for dramatic reveals</p>
+                </div>
+            </div>
+
+            <!-- Crossfade Transition -->
+            <div class="transition-card" data-transition="crossfade" onclick="selectTransition('crossfade')">
+                <div class="transition-preview">
+                    <div class="transition-demo fade-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-left-right"></i>
+                        Crossfade
+                    </h3>
+                    <p class="transition-description">Crossfade effect (same as fade) for smooth transitions</p>
+                </div>
+            </div>
+
+            <!-- Wipe Left Transition -->
+            <div class="transition-card" data-transition="wipe-left" onclick="selectTransition('wipe-left')">
+                <div class="transition-preview">
+                    <div class="transition-demo slide-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-left"></i>
+                        Wipe Left
+                    </h3>
+                    <p class="transition-description">Wipe from right to left for sharp transitions</p>
+                </div>
+            </div>
+
+            <!-- Wipe Right Transition -->
+            <div class="transition-card" data-transition="wipe-right" onclick="selectTransition('wipe-right')">
+                <div class="transition-preview">
+                    <div class="transition-demo slide-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-right"></i>
+                        Wipe Right
+                    </h3>
+                    <p class="transition-description">Wipe from left to right for sharp transitions</p>
+                </div>
+            </div>
+
+            <!-- Bounce Transition -->
+            <div class="transition-card" data-transition="bounce" onclick="selectTransition('bounce')">
+                <div class="transition-preview">
+                    <div class="transition-demo zoom-demo">
+                        <div class="demo-clip clip-1"></div>
+                        <div class="demo-clip clip-2"></div>
+                    </div>
+                </div>
+                <div class="transition-info">
+                    <h3 class="transition-name">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        Bounce
+                    </h3>
+                    <p class="transition-description">Bounce effect with spring animation for playful content</p>
                 </div>
             </div>
 
@@ -2194,6 +2373,26 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedMusicTrack = null; // Selected music track
     let selectedTransition = 'fade'; // Default transition
 
+    // Project scene videos data
+    const projectSceneVideos = @json($sceneVideos);
+    
+    // Debug: Log the scene videos data immediately
+    console.log('🔍 DEBUG: projectSceneVideos from PHP:', projectSceneVideos);
+    console.log('🔍 DEBUG: projectSceneVideos type:', typeof projectSceneVideos);
+    console.log('🔍 DEBUG: projectSceneVideos length:', projectSceneVideos ? projectSceneVideos.length : 'null');
+    if (projectSceneVideos && projectSceneVideos.length > 0) {
+        console.log('🔍 DEBUG: First scene:', projectSceneVideos[0]);
+    }
+    
+    // Debug: Check if videoGrid element exists
+    document.addEventListener('DOMContentLoaded', function() {
+        const videoGrid = document.getElementById('videoGrid');
+        console.log('🔍 DEBUG: videoGrid element found:', !!videoGrid);
+        if (videoGrid) {
+            console.log('🔍 DEBUG: videoGrid innerHTML:', videoGrid.innerHTML);
+        }
+    });
+
     // Global audio playback variables and functions
     let currentAudio = null;
     let currentButton = null;
@@ -2279,7 +2478,6 @@ document.addEventListener('DOMContentLoaded', function() {
         if (currentButton) {
             currentButton.classList.remove('playing');
             currentButton.querySelector('i').className = 'bi bi-play-fill';
-            currentButton = null;
         }
         if (currentCard) {
             // Remove ring progress and outline
@@ -2326,16 +2524,32 @@ document.addEventListener('DOMContentLoaded', function() {
     function showTransitionFeedback(transitionType) {
         const transitionNames = {
             'fade': 'Fade Transition',
-            'slide': 'Slide Transition',
-            'zoom': 'Zoom Transition',
+            'slide-left': 'Slide Left Transition',
+            'slide-right': 'Slide Right Transition',
+            'slide-up': 'Slide Up Transition',
+            'slide-down': 'Slide Down Transition',
+            'zoom-in': 'Zoom In Transition',
+            'zoom-out': 'Zoom Out Transition',
+            'crossfade': 'Crossfade Transition',
+            'wipe-left': 'Wipe Left Transition',
+            'wipe-right': 'Wipe Right Transition',
+            'bounce': 'Bounce Transition',
             'none': 'No Transition'
         };
 
         const transitionDescriptions = {
-            'fade': 'Smooth fade-out/fade-in effect for professional transitions',
-            'slide': 'Dynamic sliding motion for modern, engaging content',
-            'zoom': 'Energetic zoom effect that adds excitement and drama',
-            'none': 'Instant cuts for fast-paced content and quick montages'
+            'fade': 'Smooth opacity transition from 0 to 100% over 0.5 seconds, creating a gentle crossfade',
+            'slide-left': 'Next clip slides in from the right edge over 0.5 seconds, pushing current clip out to the left',
+            'slide-right': 'Next clip slides in from the left edge over 0.5 seconds, pushing current clip out to the right',
+            'slide-up': 'Next clip slides in from the bottom edge over 0.5 seconds, pushing current clip up and out',
+            'slide-down': 'Next clip slides in from the top edge over 0.5 seconds, pushing current clip down and out',
+            'zoom-in': 'Next clip starts at 80% scale and zooms to 100% over 0.5 seconds with dramatic entrance',
+            'zoom-out': 'Next clip starts at 120% scale and zooms down to 100% over 0.5 seconds with dramatic reveal',
+            'crossfade': 'Identical to fade transition, providing smooth opacity transition over 0.5 seconds',
+            'wipe-left': 'Next clip revealed by wiping motion from right to left over 0.5 seconds like drawing a curtain',
+            'wipe-right': 'Next clip revealed by wiping motion from left to right over 0.5 seconds creating curtain effect',
+            'bounce': 'Next clip bounces in with spring-like oscillation over 0.5 seconds for playful, energetic effect',
+            'none': 'Instant switch between clips with no transition effect for fast-paced content'
         };
 
         console.log(`✅ Selected: ${transitionNames[transitionType]} - ${transitionDescriptions[transitionType]}`);
@@ -2623,27 +2837,57 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     document.addEventListener('DOMContentLoaded', function() {
-        // Initialize currentStyleConfig now that styleConfigs is defined
-        currentStyleConfig = styleConfigs[selectedStyle];
+        try {
+            console.log('🚀 DOM Content Loaded - Starting initialization...');
+            
+            // Initialize currentStyleConfig now that styleConfigs is defined
+            currentStyleConfig = styleConfigs[selectedStyle];
+            console.log('✅ currentStyleConfig initialized');
 
-        // Update preview content with project data
-        updatePreviewContent();
+            // Update preview content with project data
+            console.log('🔄 Updating preview content...');
+            updatePreviewContent();
+            console.log('✅ Preview content updated');
 
-        loadTrimmedVideos();
-        initializeStyleSelection();
-        initializeMusicSelection();
-        initializeTransitionSelection();
+            console.log('🔄 Loading scene videos...');
+            loadSceneVideos();
+            console.log('✅ Scene videos loaded');
 
-        // Load trending corporate music
-        loadTrendingMusic();
+            console.log('🔄 Initializing style selection...');
+            initializeStyleSelection();
+            console.log('✅ Style selection initialized');
 
-        // Check if we need to prepare voiceover for uploaded files
-        @if($project->voiceover_option === 'upload' && !$project->voiceover_url)
-            prepareVoiceover();
-        @endif
+            console.log('🔄 Initializing music selection...');
+            initializeMusicSelection();
+            console.log('✅ Music selection initialized');
 
-        // Start progressive word highlighting animations for preview
-        startProgressiveAnimations();
+            console.log('🔄 Initializing transition selection...');
+            initializeTransitionSelection();
+            console.log('✅ Transition selection initialized');
+
+            // Load trending corporate music
+            console.log('🔄 Loading trending music...');
+            loadTrendingMusic();
+            console.log('✅ Trending music loaded');
+
+            // Check if we need to prepare voiceover for uploaded files
+            @if($project->voiceover_option === 'upload' && !$project->voiceover_url)
+                console.log('🔄 Preparing voiceover...');
+                prepareVoiceover();
+                console.log('✅ Voiceover prepared');
+            @endif
+
+            // Start progressive word highlighting animations for preview
+            console.log('🔄 Starting progressive animations...');
+            startProgressiveAnimations();
+            console.log('✅ Progressive animations started');
+            
+            console.log('🎉 All initialization completed successfully!');
+            
+        } catch (error) {
+            console.error('❌ Error during initialization:', error);
+            console.error('❌ Error stack:', error.stack);
+        }
     });
 
     // Function to update preview content with project data
@@ -2789,163 +3033,71 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    function loadTrimmedVideos() {
-        // First try to get from project's trim_response
-        console.log('📹 Loading trimmed videos from project data...');
 
-        // Get project trim response data
-        let projectTrimResponse = @json($project->trim_response ?? []);
-        console.log('🔍 Raw project trim response:', projectTrimResponse);
-
-        // Handle case where trim_response might be a JSON string (legacy data)
-        if (typeof projectTrimResponse === 'string') {
-            try {
-                projectTrimResponse = JSON.parse(projectTrimResponse);
-                console.log('📝 Parsed JSON string to object:', projectTrimResponse);
-            } catch (e) {
-                console.error('❌ Failed to parse JSON string:', e);
-                showError('Invalid video data format.');
-                return;
-            }
-        }
-
-        if (projectTrimResponse && (Array.isArray(projectTrimResponse) || typeof projectTrimResponse === 'object')) {
-            try {
-                // Parse the trim response to extract videos
-                let responseData;
-
-                if (Array.isArray(projectTrimResponse)) {
-                    responseData = projectTrimResponse.length > 0 ? projectTrimResponse[0] : projectTrimResponse;
-                } else {
-                    responseData = projectTrimResponse;
-                }
-
-                console.log('🔍 Processing response data:', responseData);
-
-                // Check for videos in all_videos key
-                if (responseData.all_videos && Array.isArray(responseData.all_videos)) {
-                    trimmedVideos = responseData.all_videos;
-                    console.log('✅ Found videos in all_videos:', trimmedVideos);
-                    displayVideos();
-                    return;
-                }
-
-                // Check for videos in trimmed_videos key
-                if (responseData.trimmed_videos && Array.isArray(responseData.trimmed_videos)) {
-                    trimmedVideos = responseData.trimmed_videos;
-                    console.log('✅ Found videos in trimmed_videos:', trimmedVideos);
-                    displayVideos();
-                    return;
-                }
-
-                // Check if responseData itself is an array of videos
-                if (Array.isArray(responseData) && responseData.length > 0 && responseData[0].scene_id) {
-                    trimmedVideos = responseData;
-                    console.log('✅ Found videos in direct response array:', trimmedVideos);
-                    displayVideos();
-                    return;
-                }
-
-                // Check if the original projectTrimResponse is an array of videos
-                if (Array.isArray(projectTrimResponse) && projectTrimResponse.length > 0 && projectTrimResponse[0].scene_id) {
-                    trimmedVideos = projectTrimResponse;
-                    console.log('✅ Found videos in original response array:', trimmedVideos);
-                    displayVideos();
-                    return;
-                }
-
-                console.warn('⚠️ No videos found in project trim response');
-                showError('No video data found in project response.');
-
-            } catch (e) {
-                console.error('❌ Error parsing project trim response:', e);
-                showError('Failed to parse video data from project.');
-            }
-        } else {
-            // Fallback to sessionStorage (for backward compatibility)
-            console.log('📦 Trying sessionStorage as fallback...');
-            const videosData = sessionStorage.getItem('trimmedVideos');
-
-            if (videosData) {
-                try {
-                    trimmedVideos = JSON.parse(videosData);
-                    console.log('✅ Loaded from sessionStorage:', trimmedVideos);
-                    displayVideos();
-                } catch (e) {
-                    console.error('❌ Error parsing sessionStorage videos:', e);
-                    showError('Failed to load video data');
-                }
-            } else {
-                console.warn('⚠️ No video data found in project or sessionStorage');
-                showError('No video data found. Please go back and try again.');
-            }
-        }
-    }
 
     function displayVideos() {
+        console.log('🎬 displayVideos() called');
+        console.log('🎬 trimmedVideos:', trimmedVideos);
+        console.log('🎬 trimmedVideos.length:', trimmedVideos.length);
+        
         const videoGrid = document.getElementById('videoGrid');
+        console.log('🎬 videoGrid element:', videoGrid);
+        
+        if (!videoGrid) {
+            console.error('❌ videoGrid element not found!');
+            return;
+        }
+        
         videoGrid.innerHTML = '';
 
         if (trimmedVideos.length === 0) {
+            console.warn('⚠️ No trimmed videos to display');
             videoGrid.innerHTML = `
                 <div class="text-center text-gray-500 p-8">
                     <i class="bi bi-film fs-1 mb-3"></i>
                     <h5>No videos to display</h5>
-                    <p>No trimmed videos were found in the response.</p>
+                    <p>No scene videos were found.</p>
                 </div>
             `;
             return;
         }
 
         trimmedVideos.forEach((videoData, index) => {
+            // Use actual trimmed duration from review page
+            const originalDuration = videoData.duration || 10;
+            const trimStart = videoData.start_time || 0;
+            const trimEnd = videoData.end_time || originalDuration;
+            const trimmedDuration = videoData.trimmed_duration || (trimEnd - trimStart);
+
+            // Update the video data with actual trimming from review page
+            videoData.start_time = trimStart;
+            videoData.end_time = trimEnd;
+            videoData.trimmed_duration = trimmedDuration;
+
             const videoCard = document.createElement('div');
             videoCard.className = 'video-card';
-
-            // Extract filename from URL for display
-            const urlParts = videoData.video_url.split('/');
-            const filename = urlParts[urlParts.length - 1] || 'video.mp4';
-
             videoCard.innerHTML = `
                 <div class="video-wrapper">
-                    <video class="video-element"
-                           controls
-                           preload="metadata"
-                           onloadstart="handleVideoLoadStart(this)"
-                           onloadeddata="handleVideoLoaded(this)"
-                           onerror="handleVideoError(this)">
+                    <video class="video-element" preload="metadata" data-scene-id="${videoData.scene_id}">
                         <source src="${videoData.video_url}" type="video/mp4">
                         Your browser does not support the video tag.
                     </video>
                     <div class="video-overlay"></div>
                     <div class="video-controls">
-                        <i class="bi bi-play-circle me-1"></i>Trimmed Video
-                    </div>
-                    <div class="video-loading">
-                        <i class="bi bi-hourglass-split me-2"></i>Loading...
-                    </div>
-                    <div class="video-error">
-                        <i class="bi bi-exclamation-triangle fs-3 mb-2"></i>
-                        <div>Failed to load video</div>
-                        <small>Check the video URL</small>
+                        <span class="trim-info">Trimmed: ${trimmedDuration.toFixed(1)}s</span>
                     </div>
                 </div>
                 <div class="video-info">
                     <div class="scene-title">
-                        <i class="bi bi-camera-video me-2"></i>
-                        <span class="scene-badge">Scene ${videoData.scene_id}</span>
+                        <span class="scene-badge">Scene ${videoData.scene_number}</span>
+                        <span class="scene-duration">${trimmedDuration.toFixed(1)}s</span>
                     </div>
-                    <div class="scene-url">${filename}</div>
-                    <div class="video-stats">
-                        <div class="video-status">
-                            <div class="status-dot"></div>
-                            <span>Ready</span>
+                    <p class="scene-description">${videoData.script_text || 'Scene description'}</p>
+                    <div class="trim-timeline">
+                        <div class="timeline-bar">
+                            <div class="trim-indicator" style="left: ${(trimStart / originalDuration) * 100}%; width: ${(trimmedDuration / originalDuration) * 100}%;"></div>
                         </div>
-                        <div>
-                            <i class="bi bi-link-45deg me-1"></i>
-                            <a href="${videoData.video_url}" target="_blank" class="text-decoration-none">
-                                View Full URL
-                            </a>
-                        </div>
+                        <small class="text-muted">Trimmed from ${trimStart.toFixed(1)}s to ${trimEnd.toFixed(1)}s</small>
                     </div>
                 </div>
             `;
@@ -2953,7 +3105,7 @@ document.addEventListener('DOMContentLoaded', function() {
             videoGrid.appendChild(videoCard);
         });
 
-        console.log(`✅ Displayed ${trimmedVideos.length} videos with enhanced cards`);
+        console.log(`✅ Displayed ${trimmedVideos.length} scene videos with simulated trimming`);
     }
 
     // Video loading handlers
@@ -4322,6 +4474,29 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+    function loadSceneVideos() {
+        console.log('📹 Loading scene videos from project data...');
+        console.log('📹 projectSceneVideos variable:', projectSceneVideos);
+        
+        // Debug logging
+        console.log('📹 loadSceneVideos() called! projectSceneVideos length: ' + (projectSceneVideos ? projectSceneVideos.length : 'null'));
+
+        // Get scene videos directly from the project
+        const sceneVideos = projectSceneVideos;
+
+        console.log('✅ Loaded scene videos:', sceneVideos);
+        console.log('✅ Scene videos length:', sceneVideos ? sceneVideos.length : 'null');
+
+        if (sceneVideos && sceneVideos.length > 0) {
+            console.log('✅ Setting trimmedVideos and calling displayVideos()');
+            trimmedVideos = sceneVideos; // Use the same variable for compatibility
+            displayVideos();
+        } else {
+            console.warn('⚠️ No scene videos found');
+            console.warn('⚠️ sceneVideos:', sceneVideos);
+            showError('No scene videos found. Please go back and generate scenes first.');
+        }
+    }
 
 </script>
 @endpush

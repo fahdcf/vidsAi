@@ -8,6 +8,7 @@ use App\Services\SceneGenerationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 
 class GenerateScenesFromVoiceJob implements ShouldQueue
 {
@@ -32,6 +33,20 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
     public function handle(): void
     {
         try {
+            $this->logToCustomFile('🚀 Starting scene generation job', [
+                'project_id' => $this->project->id,
+                'project_name' => $this->project->name,
+                'project_language' => $this->project->language,
+                'project_script' => $this->project->script,
+                'script_length' => strlen($this->project->script),
+                'script_first_100_chars' => substr($this->project->script, 0, 100),
+                'script_last_100_chars' => substr($this->project->script, -100),
+                'job_attempt' => $this->attempts(),
+                'max_tries' => $this->tries,
+                'timeout' => $this->timeout,
+                'timestamp' => now()->toISOString()
+            ]);
+
             Log::info('Starting scene generation job', [
                 'project_id' => $this->project->id
             ]);
@@ -42,8 +57,33 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
             }
 
             // Use the new SceneGenerationService instead of n8n webhook
+            $this->logToCustomFile('🔧 Creating SceneGenerationService instance', [
+                'project_id' => $this->project->id,
+                'timestamp' => now()->toISOString()
+            ]);
+
             $sceneGenerationService = new SceneGenerationService();
+            
+            $this->logToCustomFile('🎯 Calling generateScenesFromVoice method', [
+                'project_id' => $this->project->id,
+                'service_class' => get_class($sceneGenerationService),
+                'method_name' => 'generateScenesFromVoice',
+                'timestamp' => now()->toISOString()
+            ]);
+
             $result = $sceneGenerationService->generateScenesFromVoice($this->project);
+
+            $this->logToCustomFile('📊 Scene generation service returned result', [
+                'project_id' => $this->project->id,
+                'result_type' => gettype($result),
+                'result_is_array' => is_array($result),
+                'result_is_null' => is_null($result),
+                'result_keys' => is_array($result) ? array_keys($result) : 'N/A',
+                'result_count' => is_array($result) ? count($result) : 'N/A',
+                'has_all_videos' => is_array($result) && isset($result['all_videos']),
+                'all_videos_count' => is_array($result) && isset($result['all_videos']) ? count($result['all_videos']) : 'N/A',
+                'timestamp' => now()->toISOString()
+            ]);
 
             if ($result && isset($result['all_videos'])) {
                 Log::info('🎯 Processing job result', [
@@ -106,6 +146,20 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 // Update the project
                 $this->project->update($updateData);
 
+                $this->logToCustomFile('✅ Project updated successfully', [
+                    'project_id' => $this->project->id,
+                    'project_name' => $this->project->name,
+                    'project_language' => $this->project->language,
+                    'status' => $this->project->status,
+                    'scenes_count' => $this->project->scenes()->count(),
+                    'processing_completed_at' => $this->project->processing_completed_at,
+                    'has_voiceover_transcript' => !empty($this->project->voiceover_transcript),
+                    'has_subtitles_script' => !empty($this->project->subtitles_script),
+                    'final_memory_usage' => memory_get_usage(true),
+                    'final_memory_peak' => memory_get_peak_usage(true),
+                    'timestamp' => now()->toISOString()
+                ]);
+
                 Log::info('✅ Project updated successfully', [
                     'project_id' => $this->project->id,
                     'status' => $this->project->status,
@@ -113,6 +167,21 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 ]);
 
             } else {
+                $this->logToCustomFile('❌ Invalid result from scene generation service', [
+                    'project_id' => $this->project->id,
+                    'project_name' => $this->project->name,
+                    'project_language' => $this->project->language,
+                    'result_type' => gettype($result),
+                    'result_is_null' => is_null($result),
+                    'result_is_array' => is_array($result),
+                    'result_keys' => is_array($result) ? array_keys($result) : 'N/A',
+                    'result_count' => is_array($result) ? count($result) : 'N/A',
+                    'result_structure' => $this->getResponseStructure($result),
+                    'memory_usage' => memory_get_usage(true),
+                    'memory_peak' => memory_get_peak_usage(true),
+                    'timestamp' => now()->toISOString()
+                ]);
+
                 Log::error('❌ Invalid result from scene generation service', [
                     'project_id' => $this->project->id,
                     'result' => $result
@@ -126,20 +195,73 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
             }
 
         } catch (\Exception $e) {
+            $message = $e->getMessage();
+
+            $this->logToCustomFile('❌ Scene generation job failed with exception', [
+                'project_id' => $this->project->id,
+                'project_name' => $this->project->name,
+                'project_language' => $this->project->language,
+                'error_message' => $message,
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'error_trace' => $e->getTraceAsString(),
+                'attempt' => $this->attempts(),
+                'max_tries' => $this->tries,
+                'memory_usage' => memory_get_usage(true),
+                'memory_peak' => memory_get_peak_usage(true),
+                'timestamp' => now()->toISOString()
+            ]);
+
             Log::error('❌ Scene generation job failed', [
                 'project_id' => $this->project->id,
-                'error' => $e->getMessage(),
+                'error' => $message,
                 'trace' => $e->getTraceAsString(),
                 'attempt' => $this->attempts(),
                 'max_tries' => $this->tries
             ]);
+
+            // Immediate fail on known user-fixable errors
+            $isMismatch = stripos($message, 'Audio does not match script') !== false;
+            $isEmptyTranscript = stripos($message, 'No transcript content') !== false;
+            if ($isMismatch || $isEmptyTranscript) {
+                $friendly = $isMismatch
+                    ? 'Your voiceover audio does not match the script. Please upload a matching voiceover in the correct language, or adjust the script/language and try again.'
+                    : 'We could not detect any spoken words in the voiceover. Please ensure the audio contains clear speech and try again.';
+
+                $this->project->update([
+                    'status' => 'failed',
+                    'processing_completed_at' => now(),
+                    'error_message' => $friendly
+                ]);
+
+                $this->logToCustomFile('🛑 Marked project failed due to audio/script issue', [
+                    'project_id' => $this->project->id,
+                    'error_message' => $friendly
+                ]);
+
+                // Do not retry further for these cases
+                return;
+            }
 
             // Only update project status to failed if this is the final attempt
             if ($this->attempts() >= $this->tries) {
                 $this->project->update([
                     'status' => 'failed',
                     'processing_completed_at' => now(),
-                    'error_message' => $e->getMessage()
+                    'error_message' => $message
+                ]);
+
+                $this->logToCustomFile('💀 Scene generation permanently failed after all attempts', [
+                    'project_id' => $this->project->id,
+                    'project_name' => $this->project->name,
+                    'project_language' => $this->project->language,
+                    'final_error' => $e->getMessage(),
+                    'total_attempts' => $this->attempts(),
+                    'max_tries' => $this->tries,
+                    'final_memory_usage' => memory_get_usage(true),
+                    'final_memory_peak' => memory_get_peak_usage(true),
+                    'timestamp' => now()->toISOString()
                 ]);
 
                 Log::error('❌ Scene generation permanently failed after all attempts', [
@@ -176,12 +298,24 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 'start_time' => $sceneData['start_time'] ?? null,
                 'end_time' => $sceneData['end_time'] ?? null,
                 'duration_seconds' => $sceneData['duration_seconds'] ?? 0,
+                'gemini_duration' => $sceneData['gemini_duration'] ?? null,
                 'keywords' => is_array($sceneData['keywords'] ?? []) ? implode(', ', $sceneData['keywords']) : ($sceneData['keywords'] ?? ''),
                 'prompt' => $sceneData['prompt'] ?? null
             ]);
 
             $sceneNumber++;
         }
+
+        $this->logToCustomFile('✅ Scenes created from response', [
+            'project_id' => $project->id,
+            'project_name' => $project->name,
+            'project_language' => $project->language,
+            'scenes_created' => count($scenesData),
+            'scenes_data_sample' => array_slice($scenesData, 0, 2), // First 2 scenes for debugging
+            'memory_usage' => memory_get_usage(true),
+            'memory_peak' => memory_get_peak_usage(true),
+            'timestamp' => now()->toISOString()
+        ]);
 
         Log::info('✅ Scenes created from response', [
             'project_id' => $project->id,
@@ -228,5 +362,38 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
         ];
 
         return $languageMap[$language] ?? 'en';
+    }
+
+    /**
+     * Log to custom scene generation log file
+     */
+    private function logToCustomFile(string $message, array $context = []): void
+    {
+        try {
+            $logEntry = [
+                'timestamp' => now()->toISOString(),
+                'message' => $message,
+                'context' => $context,
+                'memory_usage' => memory_get_usage(true),
+                'memory_peak' => memory_get_peak_usage(true),
+                'execution_time' => microtime(true) - LARAVEL_START
+            ];
+
+            $logContent = json_encode($logEntry, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n" . str_repeat('-', 80) . "\n";
+
+            // Use the custom logging channel
+            Log::channel('scene_generation')->info($message, $context);
+            
+            // Also write to a custom file for easier debugging
+            $customLogPath = storage_path('logs/scene_generation_detailed.log');
+            file_put_contents($customLogPath, $logContent, FILE_APPEND | LOCK_EX);
+            
+        } catch (\Exception $e) {
+            // Fallback to default logging if custom logging fails
+            Log::error('Failed to write to custom log file', [
+                'error' => $e->getMessage(),
+                'original_message' => $message
+            ]);
+        }
     }
 }

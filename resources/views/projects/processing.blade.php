@@ -304,8 +304,16 @@ function checkStatus() {
                 document.getElementById('current-status').innerHTML =
                     '<i class="bi bi-x-circle text-danger"></i> Processing Failed';
                 document.getElementById('status-info').className = 'status-info error-state';
-                document.getElementById('estimated-time').innerHTML = 
-                    '<i class="bi bi-x-circle text-danger me-1"></i>Processing failed';
+                // Show friendlier error for audio/script mismatch
+                const msg = (data.error_message || '').toLowerCase();
+                if (msg.includes('voiceover audio does not match the script') || msg.includes('could not detect any spoken words')) {
+                    document.getElementById('estimated-time').innerHTML =
+                        '<i class="bi bi-exclamation-triangle-fill text-danger me-1"></i>' +
+                        'We could not align your audio to the script. Please ensure the uploaded voiceover matches the script and language, or adjust the script and try again.';
+                } else {
+                    document.getElementById('estimated-time').innerHTML = 
+                        '<i class="bi bi-x-circle text-danger me-1"></i>Processing failed';
+                }
             }
         }
 

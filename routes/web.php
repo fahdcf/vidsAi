@@ -39,7 +39,7 @@ Route::middleware('auth')->group(function () {
 
 
     Route::post('/review/{project}/approve', [ProjectController::class, 'approveScenes'])->name('projects.approve-scenes');
-    Route::post('/review/{project}/trim', [ProjectController::class, 'trimScenes'])->name('projects.trim-scenes');
+    Route::post('/review/{project}/confirm', [ProjectController::class, 'confirmScenes'])->name('projects.confirm-scenes');
     Route::get('/processing/{project}', [ProjectController::class, 'processing'])->name('projects.processing');
     Route::get('/processing/{project}/status', [ProjectController::class, 'processingStatus'])->name('projects.processing-status');
 Route::post('/projects/{project}/retry', [ProjectController::class, 'retryProject'])->name('projects.retry');

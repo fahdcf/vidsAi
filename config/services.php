@@ -59,7 +59,8 @@ return [
     ],
 
     'deepgram' => [
-        'api_key' => env('DEEPGRAM_API_KEY', 'bbb834ee2c7055e22a947593c4d00540d0490cde'),
+        'api_key' => env('DEEPGRAM_API_KEY', '3d6ded8c284da3b52a2ac189d67157ea0c0f9f3a'),
+        'fallback_api_key' => env('DEEPGRAM_FALLBACK_API_KEY', 'bbb834ee2c7055e22a947593c4d00540d0490cde'),
         'base_url' => env('DEEPGRAM_BASE_URL', 'https://api.deepgram.com/v1/listen'),
     ],
 

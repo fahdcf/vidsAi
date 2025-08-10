@@ -15,6 +15,19 @@ class SceneGenerationService
     public function generateScenesFromVoice(Project $project): array
     {
         try {
+            $this->logToCustomFile('🎬 Starting scene generation from voice', [
+                'project_id' => $project->id,
+                'project_name' => $project->name,
+                'project_language' => $project->language,
+                'voiceover_file' => $project->voiceover_file,
+                'custom_script' => $project->custom_script,
+                'description' => $project->description,
+                'script_length' => strlen($project->custom_script ?? $project->description),
+                'script_first_100_chars' => substr($project->custom_script ?? $project->description, 0, 100),
+                'script_last_100_chars' => substr($project->custom_script ?? $project->description, -100),
+                'timestamp' => now()->toISOString()
+            ]);
+
             Log::info('🎬 Starting scene generation from voice', [
                 'project_id' => $project->id,
                 'voiceover_file' => $project->voiceover_file
@@ -22,9 +35,27 @@ class SceneGenerationService
 
             // Step 1: Get the script text
             $script = $project->custom_script ?? $project->description;
+            
+            $this->logToCustomFile('📝 Step 1: Script preparation', [
+                'project_id' => $project->id,
+                'script_source' => $project->custom_script ? 'custom_script' : 'description',
+                'script_content' => $script,
+                'script_length' => strlen($script),
+                'script_language' => $project->language,
+                'timestamp' => now()->toISOString()
+            ]);
 
             // Step 2: Get the full path to the voiceover file
             $voiceoverFullPath = storage_path('app/public/' . $project->voiceover_file);
+            
+            $this->logToCustomFile('🎵 Step 2: Voiceover file preparation', [
+                'project_id' => $project->id,
+                'voiceover_file' => $project->voiceover_file,
+                'full_path' => $voiceoverFullPath,
+                'file_exists' => file_exists($voiceoverFullPath),
+                'file_size' => file_exists($voiceoverFullPath) ? filesize($voiceoverFullPath) : 'N/A',
+                'timestamp' => now()->toISOString()
+            ]);
 
             if (!file_exists($voiceoverFullPath)) {
                 Log::error('Voiceover file not found', ['path' => $voiceoverFullPath]);
@@ -32,15 +63,111 @@ class SceneGenerationService
             }
 
             // Step 3: Transcribe audio using Deepgram
+            $this->logToCustomFile('🎤 Step 3: Starting audio transcription', [
+                'project_id' => $project->id,
+                'audio_path' => $voiceoverFullPath,
+                'language' => $project->language,
+                'deepgram_url' => config('services.deepgram.base_url'),
+                'deepgram_api_key_length' => strlen(config('services.deepgram.api_key')),
+                'timestamp' => now()->toISOString()
+            ]);
+
             $transcriptData = $this->transcribeAudio($voiceoverFullPath, $project->language);
 
+            // Avoid passing by reference to end() on expression
+            $transcriptWords = $transcriptData['words'] ?? [];
+            $lastTranscriptWord = is_array($transcriptWords) && count($transcriptWords) > 0
+                ? $transcriptWords[count($transcriptWords) - 1]
+                : null;
+
+            $this->logToCustomFile('📊 Step 3 completed: Transcription results', [
+                'project_id' => $project->id,
+                'transcript_data_type' => gettype($transcriptData),
+                'transcript_keys' => array_keys($transcriptData),
+                'words_count' => count($transcriptWords),
+                'first_word' => $transcriptWords[0] ?? null,
+                'last_word' => $lastTranscriptWord,
+                'timestamp' => now()->toISOString()
+            ]);
+
             // Step 4: Generate scene phrases using Gemini
-            $sceneData = $this->generateScenePhrases($script, $transcriptData, $project->language);
+            $this->logToCustomFile('🤖 Step 4: Starting scene generation with Gemini', [
+                'project_id' => $project->id,
+                'script' => $script,
+                'transcript_words_count' => count($transcriptData['words'] ?? []),
+                'language' => $project->language,
+                'gemini_url' => config('services.gemini.base_url'),
+                'gemini_api_key_length' => strlen(config('services.gemini.api_key')),
+                'timestamp' => now()->toISOString()
+            ]);
+            try {
+                $sceneData = $this->generateScenePhrases($script, $transcriptData, $project->language);
+            } catch (\Exception $e) {
+                // If Gemini reports mismatch, retry using transcript text as script (voice-first fallback)
+                if (stripos($e->getMessage(), 'Audio does not match script') !== false) {
+                    $this->logToCustomFile('🔁 Gemini mismatch detected, retrying with transcript as script', [
+                        'project_id' => $project->id,
+                        'original_script_length' => strlen($script),
+                        'transcript_text_length' => strlen($transcriptData['text'] ?? '')
+                    ]);
+
+                    $fallbackScript = $transcriptData['text'] ?? '';
+                    if (!empty($fallbackScript)) {
+                        $sceneData = $this->generateScenePhrases($fallbackScript, $transcriptData, $project->language);
+                    } else {
+                        // As last resort, generate from script only (empty words). Backfill durations.
+                        $this->logToCustomFile('🪄 Script-only fallback: generating scenes without transcript', [
+                            'project_id' => $project->id,
+                            'script_length' => strlen($script)
+                        ]);
+                        $syntheticTiming = $this->estimateTimingWhenNoTranscript($voiceoverFullPath, $script);
+                        $sceneData = $this->generateScenePhrases($script, $syntheticTiming, $project->language);
+                    }
+                } else {
+                    throw $e;
+                }
+            }
+
+            $this->logToCustomFile('📊 Step 4 completed: Scene generation results', [
+                'project_id' => $project->id,
+                'scene_data_type' => gettype($sceneData),
+                'scene_data_keys' => array_keys($sceneData),
+                'phrases_count' => count($sceneData['phrases'] ?? []),
+                'subtitles_count' => count($sceneData['subtitles_script'] ?? []),
+                'first_phrase' => $sceneData['phrases'][0] ?? null,
+                'first_subtitle' => $sceneData['subtitles_script'][0] ?? null,
+                'timestamp' => now()->toISOString()
+            ]);
 
             // Step 5: Search videos for each phrase
+            $this->logToCustomFile('🎬 Step 5: Starting video search with Pexels', [
+                'project_id' => $project->id,
+                'phrases_count' => count($sceneData['phrases'] ?? []),
+                'pexels_url' => config('services.pexels.base_url'),
+                'pexels_api_key_length' => strlen(config('services.pexels.api_key')),
+                'timestamp' => now()->toISOString()
+            ]);
+
             $videos = $this->searchVideosForPhrases($sceneData['phrases']);
 
+            $this->logToCustomFile('📊 Step 5 completed: Video search results', [
+                'project_id' => $project->id,
+                'videos_type' => gettype($videos),
+                'videos_count' => count($videos),
+                'videos_is_array' => is_array($videos),
+                'first_video' => is_array($videos) && count($videos) > 0 ? $videos[0] : null,
+                'timestamp' => now()->toISOString()
+            ]);
+
             // Step 6: Format final response
+            $this->logToCustomFile('🔧 Step 6: Preparing final result', [
+                'project_id' => $project->id,
+                'videos_count' => count($videos),
+                'transcript_words_count' => count($transcriptData['words'] ?? []),
+                'subtitles_count' => count($sceneData['subtitles_script'] ?? []),
+                'timestamp' => now()->toISOString()
+            ]);
+
             $result = [
                 'all_videos' => $videos,
                 'voice_over_transcript' => $transcriptData['words'],
@@ -48,6 +175,19 @@ class SceneGenerationService
                 'total' => count($videos),
                 'collected_at' => now()->toISOString()
             ];
+
+            $this->logToCustomFile('✅ Scene generation completed successfully', [
+                'project_id' => $project->id,
+                'project_name' => $project->name,
+                'project_language' => $project->language,
+                'videos_count' => count($videos),
+                'transcript_words_count' => count($transcriptData['words']),
+                'subtitles_count' => count($sceneData['subtitles_script']),
+                'result_keys' => array_keys($result),
+                'final_memory_usage' => memory_get_usage(true),
+                'final_memory_peak' => memory_get_peak_usage(true),
+                'timestamp' => now()->toISOString()
+            ]);
 
             Log::info('✅ Scene generation completed', [
                 'project_id' => $project->id,
@@ -59,6 +199,20 @@ class SceneGenerationService
             return $result;
 
         } catch (\Exception $e) {
+            $this->logToCustomFile('❌ Scene generation failed with exception', [
+                'project_id' => $project->id,
+                'project_name' => $project->name,
+                'project_language' => $project->language,
+                'error_message' => $e->getMessage(),
+                'error_code' => $e->getCode(),
+                'error_file' => $e->getFile(),
+                'error_line' => $e->getLine(),
+                'error_trace' => $e->getTraceAsString(),
+                'memory_usage' => memory_get_usage(true),
+                'memory_peak' => memory_get_peak_usage(true),
+                'timestamp' => now()->toISOString()
+            ]);
+
             Log::error('❌ Scene generation failed', [
                 'project_id' => $project->id,
                 'error' => $e->getMessage(),
@@ -80,44 +234,164 @@ class SceneGenerationService
             ]);
 
             $audioContent = file_get_contents($audioPath);
-            $mimeType = mime_content_type($audioPath);
+            // Prefer explicit audio/mpeg for .mp3 to match working direct tests
+            $extension = strtolower(pathinfo($audioPath, PATHINFO_EXTENSION));
+            $detectedMime = @mime_content_type($audioPath) ?: 'application/octet-stream';
+            $mimeType = $extension === 'mp3' ? 'audio/mpeg' : $detectedMime;
+            $languageCode = $this->mapLanguageCode($language);
 
-            $response = Http::withHeaders([
-                'Authorization' => 'Token ' . config('services.deepgram.api_key'),
-                'Content-Type' => $mimeType
-            ])->withBody($audioContent, $mimeType)
-            ->timeout(120) // 2 minutes timeout
-            ->retry(3, 1000) // Retry 3 times with 1 second delay
-            ->withoutVerifying() // Disable SSL verification for local development
-            ->post(config('services.deepgram.base_url'));
+            // Extra visibility in custom log
+            $this->logToCustomFile('🎤 Deepgram request prepared', [
+                'audio_path' => $audioPath,
+                'mime_type' => $mimeType,
+                'audio_size_bytes' => strlen($audioContent),
+                'api_key_length' => strlen(config('services.deepgram.api_key'))
+            ]);
 
+            // Try primary API key first
+            $response = $this->attemptTranscription($audioContent, $mimeType, $languageCode, config('services.deepgram.api_key'), 'primary');
+            
             if (!$response->successful()) {
-                throw new \Exception('Deepgram transcription failed: ' . $response->body());
+                Log::warning('❌ Primary API key failed, trying fallback', [
+                    'primary_response' => $response->body(),
+                    'status_code' => $response->status()
+                ]);
+                
+                // Try fallback API key
+                $response = $this->attemptTranscription($audioContent, $mimeType, $languageCode, config('services.deepgram.fallback_api_key'), 'fallback');
+                
+                if (!$response->successful()) {
+                    throw new \Exception('Both primary and fallback Deepgram API keys failed. Last error: ' . $response->body());
+                }
             }
 
             $data = $response->json();
             $transcript = $data['results']['channels'][0]['alternatives'][0] ?? null;
 
-            if (!$transcript) {
-                throw new \Exception('No transcript found in Deepgram response');
+            // If transcript missing or empty, try alternate language (en <-> ar) before failing
+            $transcriptText = $transcript['transcript'] ?? '';
+            $transcriptWords = $transcript['words'] ?? [];
+            if ((!$transcript) || ($transcriptText === '' && empty($transcriptWords))) {
+                $alternateLanguage = $languageCode === 'en' ? 'ar' : 'en';
+                $this->logToCustomFile('🔁 Deepgram returned empty transcript, retrying with alternate language', [
+                    'original_language' => $languageCode,
+                    'alternate_language' => $alternateLanguage
+                ]);
+
+                // Try alternate language with primary key
+                $response = $this->attemptTranscription($audioContent, $mimeType, $alternateLanguage, config('services.deepgram.api_key'), 'primary');
+                if (!$response->successful()) {
+                    // Try alternate language with fallback key
+                    $response = $this->attemptTranscription($audioContent, $mimeType, $alternateLanguage, config('services.deepgram.fallback_api_key'), 'fallback');
+                }
+
+                if ($response->successful()) {
+                    $data = $response->json();
+                    $transcript = $data['results']['channels'][0]['alternatives'][0] ?? null;
+                    $transcriptText = $transcript['transcript'] ?? '';
+                    $transcriptWords = $transcript['words'] ?? [];
+                }
+            }
+
+            if (!$transcript || ($transcriptText === '' && empty($transcriptWords))) {
+                // Try to recover from utterances (segment-level timings) if available
+                $utterances = $data['results']['utterances'] ?? [];
+                if (is_array($utterances) && count($utterances) > 0) {
+                    $this->logToCustomFile('🧩 No words found; synthesizing timings from Deepgram utterances', [
+                        'utterances_count' => count($utterances)
+                    ]);
+                    $synthetic = $this->synthesizeWordsFromUtterances($utterances);
+                    if (count($synthetic['words']) > 0) {
+                        return $synthetic;
+                    }
+                }
+
+                // Return empty transcript to allow script-only fallback upstream
+                $this->logToCustomFile('⚠️ Deepgram produced no transcript; returning empty for script-only fallback', []);
+                return [
+                    'text' => '',
+                    'words' => []
+                ];
             }
 
             Log::info('✅ Audio transcription completed', [
-                'transcript_text' => $transcript['transcript'] ?? '',
-                'words_count' => count($transcript['words'] ?? [])
+                'transcript_text' => $transcriptText,
+                'words_count' => count($transcriptWords)
             ]);
 
             return [
-                'text' => $transcript['transcript'] ?? '',
-                'words' => $transcript['words'] ?? []
+                'text' => $transcriptText,
+                'words' => $transcriptWords
             ];
 
         } catch (\Exception $e) {
+            // Log to custom scene-generation log as well
+            $this->logToCustomFile('❌ Audio transcription failed', [
+                'error' => $e->getMessage(),
+                'exception_class' => get_class($e)
+            ]);
             Log::error('❌ Audio transcription failed', [
                 'error' => $e->getMessage()
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Attempt transcription with a specific API key
+     */
+    private function attemptTranscription(string $audioContent, string $mimeType, string $languageCode, string $apiKey, string $keyType): \Illuminate\Http\Client\Response
+    {
+        Log::info("🎤 Attempting transcription with {$keyType} API key", [
+            'api_key_length' => strlen($apiKey),
+            'key_type' => $keyType
+        ]);
+
+        $deepgramUrl = rtrim(config('services.deepgram.base_url'), '/');
+        // Enable auto language detection only; avoid translate to prevent 400 errors
+        $params = [
+            'smart_format' => 'true',
+            'punctuate' => 'true',
+            'detect_language' => 'true',
+        ];
+        $deepgramUrlWithParams = $deepgramUrl . '?' . http_build_query($params);
+
+        return Http::withHeaders([
+            'Authorization' => 'Token ' . $apiKey,
+            'Content-Type' => $mimeType
+        ])->withBody($audioContent, $mimeType)
+        ->timeout(120) // 2 minutes timeout
+        ->connectTimeout(10) // fail fast on connection issues
+        ->retry(3, 1000) // Retry 3 times with 1 second delay
+        ->withoutVerifying() // Disable SSL verification for local development
+        ->withOptions([
+            // Disable "Expect: 100-continue" which can cause long waits on some servers
+            'expect' => false,
+        ])
+        ->post($deepgramUrlWithParams);
+    }
+
+    /**
+     * Map language to Deepgram language code
+     */
+    private function mapLanguageCode(string $language): string
+    {
+        $languageMap = [
+            'english' => 'en',
+            'french' => 'fr',
+            'spanish' => 'es',
+            'german' => 'de',
+            'italian' => 'it',
+            'portuguese' => 'pt',
+            'russian' => 'ru',
+            'chinese' => 'zh',
+            'japanese' => 'ja',
+            'korean' => 'ko',
+            'arabic' => 'ar',
+            'hindi' => 'hi'
+        ];
+
+        return $languageMap[strtolower($language)] ?? 'en';
     }
 
     /**
@@ -175,6 +449,10 @@ class SceneGenerationService
             ];
 
         } catch (\Exception $e) {
+            $this->logToCustomFile('❌ Scene phrase generation failed', [
+                'error' => $e->getMessage(),
+                'exception_class' => get_class($e)
+            ]);
             Log::error('❌ Scene phrase generation failed', [
                 'error' => $e->getMessage()
             ]);
@@ -266,6 +544,54 @@ Transcript Words: {$transcriptWords}
     }
 
     /**
+     * Create synthetic word timings from Deepgram utterances when word-level data is unavailable.
+     * Splits each utterance text into tokens and linearly distributes time across tokens.
+     */
+    private function synthesizeWordsFromUtterances(array $utterances): array
+    {
+        $words = [];
+        $allTextParts = [];
+
+        foreach ($utterances as $utt) {
+            $uttText = (string)($utt['transcript'] ?? '');
+            $uttStart = (float)($utt['start'] ?? 0.0);
+            $uttEnd = (float)($utt['end'] ?? $uttStart);
+            if ($uttText === '' || $uttEnd <= $uttStart) {
+                continue;
+            }
+
+            $tokens = preg_split('/\s+/', trim($uttText));
+            $tokenCount = is_array($tokens) ? count($tokens) : 0;
+            if ($tokenCount === 0) {
+                continue;
+            }
+
+            $segmentDuration = max(0.0, $uttEnd - $uttStart);
+            $perToken = $segmentDuration / $tokenCount;
+            $cursor = $uttStart;
+
+            foreach ($tokens as $token) {
+                if ($token === '') continue;
+                $start = $cursor;
+                $end = $cursor + $perToken;
+                $words[] = [
+                    'word' => $token,
+                    'start' => round($start, 3),
+                    'end' => round($end, 3),
+                    'confidence' => 0.6,
+                ];
+                $cursor = $end;
+                $allTextParts[] = $token;
+            }
+        }
+
+        return [
+            'text' => trim(implode(' ', $allTextParts)),
+            'words' => $words,
+        ];
+    }
+
+    /**
      * Search videos for each phrase using Pexels
      */
     private function searchVideosForPhrases(array $phrases): array
@@ -288,7 +614,8 @@ Transcript Words: {$transcriptWords}
                         'keywords' => $phrase['keywords'],
                         'start_time' => $phrase['start_time'] ?? null,
                         'end_time' => $phrase['end_time'] ?? null,
-                        'duration_seconds' => $phrase['duration_seconds'],
+                        'duration_seconds' => $videoData['duration_seconds'], // Use actual video duration from Pexels
+                        'gemini_duration' => $phrase['duration_seconds'], // Store Gemini timing separately
                         'prompt' => $phrase['prompt'] ?? null,
                         'subtitles_script' => $phrase['subtitles_script'] ?? []
                     ];
@@ -392,6 +719,124 @@ Transcript Words: {$transcriptWords}
                 'error' => $e->getMessage()
             ]);
             return null;
+        }
+    }
+
+    /**
+     * Estimate total audio duration and produce synthetic word timings when transcript is empty.
+     * Priority:
+     * 1) ffprobe if available
+     * 2) Deepgram duration hint from utterances if present (handled earlier)
+     * 3) Text-based estimation (words per second)
+     */
+    private function estimateTimingWhenNoTranscript(string $audioFullPath, string $script): array
+    {
+        $durationSeconds = $this->probeAudioDuration($audioFullPath);
+        if ($durationSeconds <= 0) {
+            // fallback to text-based estimate: ~2.2 words/sec (≈130 wpm)
+            $wordCount = str_word_count($script);
+            $durationSeconds = max(6, round($wordCount / 2.2, 1));
+        }
+
+        // Build pseudo-words array aligned across full duration from script tokens
+        $tokens = preg_split('/\s+/', trim($script));
+        $tokens = is_array($tokens) ? array_values(array_filter($tokens, fn($t) => $t !== '')) : [];
+
+        $words = [];
+        if (count($tokens) > 0) {
+            $perToken = $durationSeconds / count($tokens);
+            $cursor = 0.0;
+            foreach ($tokens as $token) {
+                $start = $cursor;
+                $end = $cursor + $perToken;
+                $words[] = [
+                    'word' => $token,
+                    'start' => round($start, 3),
+                    'end' => round($end, 3),
+                    'confidence' => 0.3,
+                ];
+                $cursor = $end;
+            }
+        }
+
+        $this->logToCustomFile('⏱️ Using synthetic timing due to missing transcript', [
+            'script_word_count' => count($tokens),
+            'estimated_duration_seconds' => $durationSeconds,
+        ]);
+
+        return [
+            'text' => $script,
+            'words' => $words,
+        ];
+    }
+
+    /**
+     * Get media duration in seconds using ffprobe if available.
+     */
+    private function probeAudioDuration(string $audioFullPath): float
+    {
+        try {
+            $candidates = [
+                'ffprobe',
+                base_path('storage/tools/ffmpeg/bin/ffprobe.exe'),
+                base_path('storage/tools/ffmpeg/bin/ffprobe'),
+            ];
+
+            foreach ($candidates as $bin) {
+                $cmdWin = '"' . $bin . '" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "' . addslashes($audioFullPath) . '" 2> NUL';
+                $cmdNix = '"' . $bin . '" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "' . addslashes($audioFullPath) . '" 2>/dev/null';
+
+                $out = trim((string)@shell_exec($cmdWin));
+                if ($out === '' || !is_numeric($out)) {
+                    $out = trim((string)@shell_exec($cmdNix));
+                }
+                if ($out !== '' && is_numeric($out)) {
+                    $seconds = (float)$out;
+                    if ($seconds > 0) {
+                        $this->logToCustomFile('🎯 ffprobe duration detected', [
+                            'ffprobe_path' => $bin,
+                            'duration_seconds' => $seconds,
+                        ]);
+                        return $seconds;
+                    }
+                }
+            }
+            return 0.0;
+        } catch (\Throwable $e) {
+            return 0.0;
+        }
+    }
+
+    /**
+     * Log to custom scene generation log file
+     */
+    private function logToCustomFile(string $message, array $context = []): void
+    {
+        try {
+            $logEntry = [
+                'timestamp' => now()->toISOString(),
+                'message' => $message,
+                'context' => $context,
+                'memory_usage' => memory_get_usage(true),
+                'memory_peak' => memory_get_peak_usage(true),
+                'execution_time' => defined('LARAVEL_START') ? microtime(true) - LARAVEL_START : 'N/A'
+            ];
+
+            $logContent = json_encode($logEntry, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n" . str_repeat('-', 80) . "\n";
+
+            // Use the custom logging channel
+            Log::channel('scene_generation')->info($message, $context);
+            
+            // Also write to a custom file for easier debugging
+            $customLogPath = storage_path('logs/scene_generation_detailed.log');
+            file_put_contents($customLogPath, $logContent, FILE_APPEND | LOCK_EX);
+            
+        } catch (\Exception $e) {
+            // Fallback to default logging if custom logging fails
+            Log::error('Failed to write to custom log file', [
+                'error' => $e->getMessage(),
+                'original_message' => $message
+            ]);
         }
     }
 }

@@ -1190,7 +1190,7 @@
                         </span>
                         <span class="format-badge">
                             <i class="bi bi-clock"></i>
-                            Total: {{ $scenes->sum('duration_seconds') ? gmdate('i:s', $scenes->sum('duration_seconds')) : 'N/A' }}
+                            Total: {{ $scenes->sum('gemini_duration') ? gmdate('i:s', $scenes->sum('gemini_duration')) : 'N/A' }}
                         </span>
                         @if($project->hasVoiceoverTranscript() && $project->voiceover_option === 'upload')
                         <button type="button" class="btn btn-outline-primary btn-sm" onclick="viewTranscript()">
@@ -1256,16 +1256,16 @@
                             <div class="mb-4">
                                 <div class="d-flex justify-content-between align-items-center mb-3">
                                     <h6 class="fw-bold mb-0">Video Preview</h6>
-                                    @if($scene->duration_seconds)
+                                    @if($scene->gemini_duration)
                                         <span class="detail-badge">
                                             <i class="bi bi-clock"></i>
-                                            <span>{{ number_format($scene->duration_seconds, 1) }}s</span>
+                                            <span>{{ number_format($scene->gemini_duration, 1) }}s</span>
                                         </span>
                                     @endif
                                 </div>
 
                                 @if($scene->video_url || $scene->video_path)
-                                    <div class="video-player-container" data-scene-id="{{ $scene->id }}" data-project-id="{{ $project->id }}" data-duration="{{ $scene->duration_seconds ?? 0 }}">
+                                    <div class="video-player-container" data-scene-id="{{ $scene->id }}" data-project-id="{{ $project->id }}" data-duration="{{ $scene->gemini_duration ?? 0 }}">
                                         <div class="video-wrapper">
                                             <video id="video-{{ $scene->id }}" class="scene-video" preload="metadata" muted>
                                                 @if($scene->video_url)
@@ -1313,7 +1313,7 @@
                                                     <span class="fw-medium">Trim Duration:
                                                         <span class="selected-duration text-primary editable-header-duration"
                                                               id="header-duration-{{ $scene->id }}"
-                                                              title="Double-click to edit duration">{{ number_format($scene->duration_seconds ?? 0, 1) }}s</span>
+                                                              title="Double-click to edit duration">{{ number_format($scene->gemini_duration ?? 0, 1) }}s</span>
                                                     </span>
                                                 </div>
                                             </div>
@@ -1325,7 +1325,8 @@
                                                 <!-- Trim Selection -->
                                                 @php
                                                     // Calculate initial width based on scene duration vs estimated video duration
-                                                    $sceneDuration = $scene->duration_seconds ?? 5;
+                                                    // Use gemini_duration (script timing) instead of duration_seconds (video file duration)
+                                                    $sceneDuration = $scene->gemini_duration ?? $scene->duration_seconds ?? 5;
                                                     $estimatedVideoDuration = 30; // Default estimate, will be updated by JS
                                                     $initialWidth = min(100, ($sceneDuration / $estimatedVideoDuration) * 100);
                                                     $initialWidth = max(20, $initialWidth); // Minimum 20% width
@@ -1334,6 +1335,7 @@
                                                     logger()->info('🔍 Scene duration debug', [
                                                         'scene_id' => $scene->id,
                                                         'duration_seconds' => $scene->duration_seconds,
+                                                        'gemini_duration' => $scene->gemini_duration,
                                                         'calculated_duration' => $sceneDuration,
                                                         'initial_width' => $initialWidth
                                                     ]);
@@ -1491,7 +1493,7 @@
                         <div>
                             <h5 class="fw-bold mb-2">Ready to proceed?</h5>
                             <p class="text-muted mb-0">
-                                Review your scenes and their trim settings, then click "Confirm All Scenes" to process your video
+                                Review your scenes and their trim settings, then click "Confirm All Scenes" to proceed to subtitle selection
                             </p>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
@@ -3454,7 +3456,7 @@
         }
 
         function confirmAllScenes() {
-            if (!confirm('Are you sure you want to confirm all scenes with their current trim settings?')) {
+            if (!confirm('Are you sure you want to confirm all scenes and proceed to subtitle selection?')) {
                 return;
             }
 
@@ -3597,8 +3599,8 @@
             confirmBtn.disabled = true;
             confirmBtn.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Processing...';
 
-            // Send data to trim endpoint
-            fetch('{{ route("projects.trim-scenes", $project) }}', {
+            // Send data to confirm endpoint
+            fetch('{{ route("projects.confirm-scenes", $project) }}', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -3625,24 +3627,14 @@
                 console.log('📡 Response data:', data);
 
                 if (data.success) {
-                    if (data.redirect_to_waiting) {
-                        // Redirect to processing/waiting page
-                        console.log('⏳ Redirecting to processing page...');
-                        window.location.href = `{{ route("projects.processing", ":project") }}`.replace(':project', data.project_id);
-                    } else if (data.redirect_to_subtitles) {
-                        // Project already processed, redirect to subtitles
-                        console.log('✅ Project already processed, redirecting to subtitles...');
+                    if (data.redirect_to_subtitles) {
+                        // Redirect to subtitle selection
+                        console.log('✅ Scenes confirmed, redirecting to subtitle selection...');
                         window.location.href = `{{ route('projects.subtitle-styles', $project) }}`;
                     } else if (data.redirect_to_final) {
                         // Project already completed, redirect to final page
                         console.log('✅ Project already completed, redirecting to final page...');
                         window.location.href = `{{ route('projects.final', $project) }}`;
-                    } else if (data.trimmed_videos && data.trimmed_videos.length > 0) {
-                        // Direct success (shouldn't happen with async processing)
-                        console.log('🎬 Trimmed videos received:', data.trimmed_videos);
-                        sessionStorage.setItem('trimmedVideos', JSON.stringify(data.trimmed_videos));
-                        sessionStorage.setItem('projectId', '{{ $project->id }}');
-                        window.location.href = `{{ route('projects.subtitle-styles', $project) }}`;
                     } else if (data.redirect_url) {
                         window.location.href = data.redirect_url;
                     } else {

@@ -3,7 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\GenerateScenesFromVoiceJob;
-use App\Jobs\ProcessTrimScenesJob;
+
 use App\Models\Project;
 use App\Models\Scene;
 use Illuminate\Http\Request;
@@ -347,243 +347,6 @@ class ProjectController extends Controller
             ->with('success', 'Scenes approved! Your video is ready.');
     }
 
-    public function trimScenes(Request $request, Project $project)
-    {
-        try {
-            $this->authorize('update', $project);
-
-            logger()->info('🎬 Trim scenes request received', [
-                'project_id' => $project->id,
-                'user_id' => auth()->id(),
-                'request_data' => $request->all(),
-                'current_status' => $project->status
-            ]);
-
-            // Validate the request first to get current scene configuration
-            $validatedData = $request->validate([
-                'scenes' => 'required|array|min:1',
-                'scenes.*.scene_id' => 'required|integer|exists:scenes,id',
-                'scenes.*.video_url' => 'required|url',
-                'scenes.*.duration' => 'required|numeric|min:0',
-                'scenes.*.trimmed_duration' => 'sometimes|numeric|min:0',
-                'scenes.*.start_time' => 'required|numeric|min:0',
-                'scenes.*.end_time' => 'required|numeric|min:0',
-                'scenes.*.overlays' => 'sometimes|array',
-                'scenes.*.overlays.logo' => 'sometimes|boolean',
-                'scenes.*.overlays.cta' => 'sometimes|boolean',
-                'scenes.*.overlays.text' => 'sometimes|boolean',
-                'scenes.*.overlays.text_content' => 'sometimes|nullable|string|max:255'
-            ]);
-
-            // Check if project is already being processed
-            if ($project->status === 'processing') {
-                logger()->info('⚠️ Project already processing, redirecting to processing page', [
-                    'project_id' => $project->id
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Project is already being processed',
-                    'redirect_to_waiting' => true,
-                    'project_id' => $project->id
-                ]);
-            }
-
-            // Check if project is already completed
-            if ($project->status === 'completed') {
-                logger()->info('✅ Project already completed, redirecting to final page', [
-                    'project_id' => $project->id
-                ]);
-
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Project is already completed',
-                    'redirect_to_final' => true,
-                    'project_id' => $project->id
-                ]);
-            }
-
-            // Check if project is in subtitle_selection status
-            if ($project->status === 'subtitle_selection') {
-                // Check if scenes have changed since last confirmation
-                $currentSceneConfig = $this->generateSceneConfigHash($validatedData['scenes'], $project);
-                $lastSceneConfig = $project->last_scene_config ?? null;
-
-                if ($lastSceneConfig && $currentSceneConfig === $lastSceneConfig) {
-                    // No changes detected, redirect to subtitles
-                    logger()->info('✅ No scene changes detected, redirecting to subtitles', [
-                        'project_id' => $project->id,
-                        'status' => $project->status
-                    ]);
-
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Project has already been processed',
-                        'redirect_to_subtitles' => true,
-                        'project_id' => $project->id
-                    ]);
-                } else {
-                    // Changes detected, need to re-process
-                    logger()->info('🔄 Scene changes detected, re-processing required', [
-                        'project_id' => $project->id,
-                        'last_config' => $lastSceneConfig,
-                        'current_config' => $currentSceneConfig
-                    ]);
-
-                    // Reset project status to allow re-processing
-                    $project->update([
-                        'status' => 'reviewing',
-                        'trim_response' => null,
-                        'processing_started_at' => null,
-                        'processing_completed_at' => null,
-                        'error_message' => null
-                    ]);
-                }
-            }
-
-            // Validate scene data and prepare for processing
-            $scenesData = [];
-            $invalidScenes = [];
-
-            foreach ($validatedData['scenes'] as $sceneData) {
-                // Validate that scene belongs to this project
-                $scene = $project->scenes()
-                    ->where('id', $sceneData['scene_id'])
-                    ->first();
-
-                if (!$scene) {
-                    $invalidScenes[] = "Scene {$sceneData['scene_id']} does not belong to this project";
-                    continue;
-                }
-
-                // Additional validation for video URL
-                if (empty(trim($sceneData['video_url'])) || $sceneData['video_url'] === 'about:blank') {
-                    $invalidScenes[] = "Scene {$sceneData['scene_id']} has invalid video URL";
-                    continue;
-                }
-
-                // Process overlay data with defaults
-                $overlays = $sceneData['overlays'] ?? [];
-                $processedOverlays = [
-                    'logo' => (bool) ($overlays['logo'] ?? false),
-                    'cta' => (bool) ($overlays['cta'] ?? false),
-                    'text' => (bool) ($overlays['text'] ?? false),
-                    'text_content' => (string) ($overlays['text_content'] ?? '')
-                ];
-
-                $scenesData[] = [
-                    'scene_id' => $sceneData['scene_id'],
-                    'video_url' => $sceneData['video_url'],
-                    'duration' => (float) $sceneData['duration'], // Original video duration
-                    'trimmed_duration' => (float) ($sceneData['trimmed_duration'] ?? ($sceneData['end_time'] - $sceneData['start_time'])),
-                    'start_time' => (float) $sceneData['start_time'],
-                    'end_time' => (float) $sceneData['end_time'],
-                    'scene_number' => $scene->scene_number,
-                    'script_text' => $scene->script_text,
-                    'overlays' => $processedOverlays
-                ];
-
-                logger()->info('📊 Scene data prepared for n8n', [
-                    'scene_id' => $sceneData['scene_id'],
-                    'original_duration' => (float) $sceneData['duration'],
-                    'trimmed_duration' => (float) ($sceneData['trimmed_duration'] ?? ($sceneData['end_time'] - $sceneData['start_time'])),
-                    'start_time' => (float) $sceneData['start_time'],
-                    'end_time' => (float) $sceneData['end_time']
-                ]);
-            }
-
-            // Check if we have invalid scenes
-            if (!empty($invalidScenes)) {
-                logger()->warning('⚠️ Invalid scenes detected', [
-                    'project_id' => $project->id,
-                    'invalid_scenes' => $invalidScenes
-                ]);
-
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Some scenes are invalid: ' . implode(', ', $invalidScenes)
-                ], 422);
-            }
-
-            if (empty($scenesData)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No valid scenes found to process'
-                ], 422);
-            }
-
-            $webhookData = [
-                'project_id' => $project->id,
-                'project_name' => $project->name,
-                'scenes' => $scenesData
-            ];
-
-            // Generate and store scene configuration hash for future comparison
-            $sceneConfigHash = $this->generateSceneConfigHash($validatedData['scenes'], $project);
-
-            // Update project status to processing and store scene config
-            $project->update([
-                'status' => 'processing',
-                'processing_started_at' => now(),
-                'last_scene_config' => $sceneConfigHash
-            ]);
-
-            logger()->info('🚀 Dispatching trim scenes job', [
-                'project_id' => $project->id,
-                'scenes_count' => count($scenesData),
-                'scene_config_hash' => $sceneConfigHash
-            ]);
-
-            // Dispatch the job for async processing
-            ProcessTrimScenesJob::dispatch($project, $webhookData);
-
-            logger()->info('✅ Trim scenes job dispatched successfully', [
-                'project_id' => $project->id
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Scenes are being processed',
-                'redirect_to_waiting' => true,
-                'project_id' => $project->id
-            ]);
-
-        } catch (\Illuminate\Validation\ValidationException $e) {
-            logger()->error('❌ Validation failed for trim scenes', [
-                'project_id' => $project->id,
-                'errors' => $e->errors()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed: ' . implode(', ', collect($e->errors())->flatten()->toArray())
-            ], 422);
-
-        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
-            logger()->error('❌ Authorization failed for trim scenes', [
-                'project_id' => $project->id,
-                'user_id' => auth()->id()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'You are not authorized to perform this action'
-            ], 403);
-
-        } catch (\Exception $e) {
-            logger()->error('❌ Scene trimming failed', [
-                'project_id' => $project->id,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'An unexpected error occurred: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
     public function processingStatus(Project $project)
     {
         $this->authorize('view', $project);
@@ -640,7 +403,7 @@ class ProjectController extends Controller
             case 'reviewing':
                 return 50; // Scenes generated, ready for review
             case 'subtitle_selection':
-                return 75; // Scenes trimmed, ready for subtitles
+                return 75; // Scenes confirmed, ready for subtitles
             case 'subtitle_generating':
                 return 85; // Subtitle generation in progress
             case 'completed':
@@ -663,7 +426,7 @@ class ProjectController extends Controller
             case 'reviewing':
                 return 'Scenes generated! Review and customize your video...';
             case 'subtitle_selection':
-                return 'Scenes trimmed! Ready to add subtitles...';
+                return 'Scenes confirmed! Ready to add subtitles...';
             case 'subtitle_generating':
                 return 'Generating subtitles and merging videos...';
             case 'completed':
@@ -1039,7 +802,29 @@ class ProjectController extends Controller
             'project_status' => $project->status
         ]);
 
-        return view('projects.subtitle-styles', compact('project'));
+        // Prepare scene videos data for the view
+        $sceneVideos = $project->scenes()->orderBy('scene_number')->get()->map(function($scene) {
+            return [
+                'scene_id' => $scene->id,
+                'video_url' => $scene->video_url,
+                'duration' => (float) $scene->duration_seconds, // Actual video duration from Pexels
+                'gemini_duration' => (float) $scene->gemini_duration, // Timing from Gemini API
+                'trimmed_duration' => (float) $scene->trimmed_duration, // Actual trimmed duration from review page
+                'scene_number' => $scene->scene_number,
+                'script_text' => $scene->script_text ?? '',
+                'start_time' => (float) ($scene->start_time ?? 0),
+                'end_time' => (float) ($scene->end_time ?? $scene->duration_seconds)
+            ];
+        })->toArray(); // Convert to array to ensure proper JSON encoding
+
+        logger()->info('📹 Subtitle styles page - scene videos data', [
+            'project_id' => $project->id,
+            'scenes_count' => count($sceneVideos),
+            'first_scene' => $sceneVideos[0] ?? null,
+            'scene_videos_data' => $sceneVideos
+        ]);
+
+        return view('projects.subtitle-styles', compact('project', 'sceneVideos'));
     }
 
     public function prepareVoiceover(Request $request, Project $project)
@@ -1235,9 +1020,11 @@ class ProjectController extends Controller
 
     private function prepareSubtitleData(Project $project, array $validated): array
     {
-        // Extract video URLs and durations from trimmed videos
+        // Extract video URLs and durations from scene videos
         $clipUrls = [];
         $clipDurations = [];
+        $clipStartTimes = [];
+        $clipEndTimes = [];
         $scenes = $project->scenes()->orderBy('scene_number')->get()->keyBy('id');
 
         foreach ($validated['videos'] as $video) {
@@ -1245,19 +1032,33 @@ class ProjectController extends Controller
                 $scene = $scenes->get($video['scene_id']);
 
                 $clipUrls[] = $video['video_url'];
-                $clipDurations[] = $scene ? (float) $scene->duration_seconds : 0;
+                // Use trimmed duration from review page, fallback to scene duration if not set
+                $clipDurations[] = $scene ? (float) ($scene->trimmed_duration ?? $scene->duration_seconds) : 0;
+                
+                // Add Gemini timing information for precise trimming
+                if ($scene && $scene->start_time !== null && $scene->end_time !== null) {
+                    $clipStartTimes[] = (float) $scene->start_time;
+                    $clipEndTimes[] = (float) $scene->end_time;
+                } else {
+                    $clipStartTimes[] = 0;
+                    $clipEndTimes[] = $scene ? (float) ($scene->trimmed_duration ?? $scene->duration_seconds) : 0;
+                }
             } elseif (isset($video['video_url'])) {
                 // Fallback for videos without scene_id
                 $clipUrls[] = $video['video_url'];
                 $clipDurations[] = 0;
+                $clipStartTimes[] = 0;
+                $clipEndTimes[] = 0;
             }
         }
 
-        logger()->info('📹 Prepared clips with durations', [
+        logger()->info('📹 Prepared scene clips with durations and timing', [
             'project_id' => $project->id,
             'clips_count' => count($clipUrls),
             'total_duration' => array_sum($clipDurations),
-            'durations_sample' => array_slice($clipDurations, 0, 3)
+            'durations_sample' => array_slice($clipDurations, 0, 3),
+            'start_times_sample' => array_slice($clipStartTimes, 0, 3),
+            'end_times_sample' => array_slice($clipEndTimes, 0, 3)
         ]);
 
         // Get project aspect ratio (default to 16:9 if not specified)
@@ -1285,6 +1086,8 @@ class ProjectController extends Controller
         $videoData = [
             'clips' => $clipUrls,
             'clipDurations' => $clipDurations,
+            'clipStartTimes' => $clipStartTimes,
+            'clipEndTimes' => $clipEndTimes,
             'voiceOver' => $voiceOverUrl,
             'voiceOverVolume' => $validated['voiceOverVolume'] ?? 1.3,
             'music' => $validated['music'] ?? null,
@@ -1426,11 +1229,54 @@ class ProjectController extends Controller
                     'duration' => round($timing['end'] - $timing['start'], 3),
                     'word_range' => $timing['startIndex'] . '-' . $timing['endIndex']
                 ]);
-            } else {
+                        } else {
                 logger()->warning('⚠️ Could not find timing for subtitle', [
                     'subtitle_index' => $subtitleIndex,
                     'text' => substr($subtitleText, 0, 30) . '...',
                     'last_used_index' => $lastUsedIndex
+                ]);
+                
+                // Fallback: Create subtitle with estimated timing
+                if (count($subtitles) > 0) {
+                    $lastSubtitle = end($subtitles);
+                    $estimatedStart = $lastSubtitle['end'] + 0.1; // Start 0.1s after last subtitle
+                    $estimatedEnd = $estimatedStart + 2.0; // Assume 2 seconds duration
+                } else {
+                    // First subtitle - start at beginning
+                    $estimatedStart = 0.0;
+                    $estimatedEnd = 2.0; // Assume 2 seconds duration
+                }
+                
+                $subtitle = [
+                    'text' => $subtitleText,
+                    'start' => $estimatedStart,
+                    'end' => $estimatedEnd,
+                    'style' => $styleConfig['style'] ?? 'tiktok_trending',
+                    'position' => $styleConfig['position'] ?? 'bottom',
+                    'fontFamily' => $styleConfig['fontFamily'] ?? 'Roboto'
+                ];
+
+                // Add style-specific parameters
+                if (isset($styleConfig['backgroundColor'])) {
+                    $subtitle['backgroundColor'] = $styleConfig['backgroundColor'];
+                }
+                if (isset($styleConfig['color'])) {
+                    $subtitle['color'] = $styleConfig['color'];
+                }
+
+                // Add color variations for banner styles
+                if (in_array($styleConfig['style'] ?? '', ['arabic_banner', 'rectangular_banner'])) {
+                    $colors = ['#007acc', '#28a745', '#dc3545', '#ffc107', '#ff8800', '#6f42c1'];
+                    $subtitle['backgroundColor'] = $colors[$subtitleIndex % count($colors)];
+                }
+
+                $subtitles[] = $subtitle;
+                
+                logger()->info('✅ Added subtitle with fallback timing', [
+                    'subtitle_index' => $subtitleIndex,
+                    'text' => $subtitleText,
+                    'start' => $estimatedStart,
+                    'end' => $estimatedEnd
                 ]);
             }
         }
@@ -1443,6 +1289,35 @@ class ProjectController extends Controller
 
         return $subtitles;
     }
+    
+    private function convertNumbersToWords(array $words): array
+    {
+        $numberMap = [
+            '0' => 'zero', '1' => 'one', '2' => 'two', '3' => 'three', '4' => 'four',
+            '5' => 'five', '6' => 'six', '7' => 'seven', '8' => 'eight', '9' => 'nine',
+            '10' => 'ten', '11' => 'eleven', '12' => 'twelve', '13' => 'thirteen',
+            '14' => 'fourteen', '15' => 'fifteen', '16' => 'sixteen', '17' => 'seventeen',
+            '18' => 'eighteen', '19' => 'nineteen', '20' => 'twenty', '21' => 'twenty one',
+            '22' => 'twenty two', '23' => 'twenty three', '24' => 'twenty four',
+            '25' => 'twenty five', '26' => 'twenty six', '27' => 'twenty seven',
+            '28' => 'twenty eight', '29' => 'twenty nine', '30' => 'thirty'
+        ];
+        
+        $converted = [];
+        foreach ($words as $word) {
+            if (isset($numberMap[$word])) {
+                // Split multi-word numbers into separate words
+                $numberWords = explode(' ', $numberMap[$word]);
+                foreach ($numberWords as $numberWord) {
+                    $converted[] = $numberWord;
+                }
+            } else {
+                $converted[] = $word;
+            }
+        }
+        
+        return $converted;
+    }
 
     private function findSubtitleTimingSequential(string $subtitleText, array $transcript, int $lastUsedIndex): ?array
     {
@@ -1450,6 +1325,9 @@ class ProjectController extends Controller
         $subtitleWords = array_filter(array_map(function($word) {
             return strtolower(trim(preg_replace('/[^\w\s]/', '', $word)));
         }, explode(' ', $subtitleText)));
+        
+        // Convert numbers to words for better matching
+        $subtitleWords = $this->convertNumbersToWords($subtitleWords);
 
         if (empty($subtitleWords)) {
             return null;
@@ -1498,8 +1376,8 @@ class ProjectController extends Controller
             $consecutiveBonus = $maxConsecutive / count($subtitleWords);
             $finalScore = $score + ($consecutiveBonus * 10); // Bonus for consecutive matches
 
-            // Accept if we have a good match (at least 60% words matched)
-            if ($matchPercentage >= 0.6 && $finalScore > $bestScore) {
+            // Accept if we have a good match (at least 40% words matched)
+            if ($matchPercentage >= 0.4 && $finalScore > $bestScore) {
                 $endIndex = min($i + count($subtitleWords) - 1, count($transcript) - 1);
 
                 $bestScore = $finalScore;
@@ -2269,5 +2147,104 @@ class ProjectController extends Controller
         }
     }
 
+    public function confirmScenes(Request $request, Project $project)
+    {
+        try {
+            $this->authorize('update', $project);
+
+            logger()->info('🎬 Confirm scenes request received', [
+                'project_id' => $project->id,
+                'user_id' => auth()->id(),
+                'request_data' => $request->all(),
+                'current_status' => $project->status
+            ]);
+
+            // Validate the request
+            $validatedData = $request->validate([
+                'scenes' => 'required|array|min:1',
+                'scenes.*.scene_id' => 'required|integer|exists:scenes,id',
+                'scenes.*.video_url' => 'required|url',
+                'scenes.*.duration' => 'required|numeric|min:0',
+                'scenes.*.start_time' => 'required|numeric|min:0',
+                'scenes.*.end_time' => 'required|numeric|min:0',
+                'scenes.*.overlays' => 'sometimes|array',
+                'scenes.*.overlays.logo' => 'sometimes|boolean',
+                'scenes.*.overlays.cta' => 'sometimes|boolean',
+                'scenes.*.overlays.text' => 'sometimes|boolean',
+                'scenes.*.overlays.text_content' => 'sometimes|nullable|string|max:255'
+            ]);
+
+            // Update scenes with trimming data from review page
+            foreach ($validatedData['scenes'] as $sceneData) {
+                $scene = $project->scenes()->find($sceneData['scene_id']);
+                if ($scene) {
+                    // Calculate the actual trimmed duration
+                    $startTime = $sceneData['start_time'] ?? 0;
+                    $endTime = $sceneData['end_time'] ?? $scene->duration_seconds;
+                    $trimmedDuration = $endTime - $startTime;
+                    
+                    // Ensure trimmed duration doesn't exceed actual video duration
+                    $trimmedDuration = min($trimmedDuration, $scene->duration_seconds);
+                    
+                    logger()->info('🎬 Updating scene with trimming data', [
+                        'scene_id' => $scene->id,
+                        'scene_number' => $scene->scene_number,
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
+                        'trimmed_duration' => $trimmedDuration,
+                        'original_duration' => $scene->duration_seconds
+                    ]);
+                    
+                    $scene->update([
+                        'start_time' => $startTime,
+                        'end_time' => $endTime,
+                        'trimmed_duration' => $trimmedDuration
+                    ]);
+                }
+            }
+
+            // Update project status to subtitle_selection
+            $project->update([
+                'status' => 'subtitle_selection',
+                'last_scene_config' => $this->generateSceneConfigHash($validatedData['scenes'], $project),
+                'processing_started_at' => now()
+            ]);
+
+            logger()->info('✅ Project status updated to subtitle_selection', [
+                'project_id' => $project->id,
+                'scenes_count' => count($validatedData['scenes'])
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Scenes confirmed! Ready to add subtitles.',
+                'redirect_to_subtitles' => true,
+                'project_id' => $project->id
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            logger()->error('❌ Scene confirmation validation error', [
+                'project_id' => $project->id,
+                'errors' => $e->errors()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation error: ' . implode(', ', array_flatten($e->errors())),
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            logger()->error('❌ Scene confirmation exception', [
+                'project_id' => $project->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An error occurred while confirming scenes: ' . $e->getMessage()
+            ], 500);
+        }
+    }
 
 }

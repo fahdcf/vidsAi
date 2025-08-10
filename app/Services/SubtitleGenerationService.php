@@ -84,7 +84,7 @@ class SubtitleGenerationService
             }
 
             $responseData = $response->json();
-            $renderId = $responseData['id'] ?? null;
+            $renderId = $responseData['jobId'] ?? $responseData['id'] ?? null;
 
             if (!$renderId) {
                 throw new \Exception('No render ID received from render service');
@@ -117,7 +117,7 @@ class SubtitleGenerationService
 
         while ($attempt < $maxAttempts) {
             try {
-                $statusUrl = config('services.video_render.base_url') . config('services.video_render.status_endpoint') . '/' . $renderId;
+                $statusUrl = config('services.video_render.base_url') . '/status/' . $renderId;
                 
                 Log::info('🔍 Checking render status', [
                     'attempt' => $attempt + 1,
@@ -146,7 +146,7 @@ class SubtitleGenerationService
                     ]);
 
                     return [
-                        'merged video url' => $statusData['download_url'] ?? '',
+                        'merged video url' => $statusData['remoteUrl'] ?? $statusData['download_url'] ?? '',
                         'completed_at' => $statusData['completedAt'] ?? now()->toISOString()
                     ];
                 } elseif ($status === 'failed') {

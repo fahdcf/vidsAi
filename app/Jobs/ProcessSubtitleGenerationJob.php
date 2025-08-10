@@ -145,6 +145,10 @@ class ProcessSubtitleGenerationJob implements ShouldQueue
             $mergedVideoUrl = $responseData['merged_video_url'];
             Log::info('✅ Found merged video URL in merged_video_url key', ['url' => $mergedVideoUrl]);
             return $mergedVideoUrl;
+        } elseif (isset($responseData['remoteUrl'])) {
+            $mergedVideoUrl = $responseData['remoteUrl'];
+            Log::info('✅ Found merged video URL in remoteUrl key', ['url' => $mergedVideoUrl]);
+            return $mergedVideoUrl;
         } elseif (is_array($responseData) && count($responseData) > 0) {
             $responseItem = $responseData[0] ?? [];
             Log::info('🔍 Checking first array item', ['item_keys' => is_array($responseItem) ? array_keys($responseItem) : 'not_array']);
