@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use GuzzleHttp\Client;
+use Illuminate\Support\Arr;
 
 
 class ProjectController extends Controller
@@ -1001,7 +1002,7 @@ class ProjectController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error: ' . implode(', ', array_flatten($e->errors())),
+                'message' => 'Validation error: ' . implode(', ', Arr::flatten($e->errors())),
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {
@@ -1069,6 +1070,30 @@ class ProjectController extends Controller
 
         // Prepare subtitles from project scenes and transcript
         $subtitles = $this->generateSubtitleEntries($project, $validated['style_config']);
+
+        // Clamp subtitles to voiceover duration (prefer transcript duration; fallback to total clips duration)
+        $maxDuration = 0.0;
+        if ($project->hasVoiceoverTranscript() && $project->voiceover_option === 'upload') {
+            try {
+                $maxDuration = (float) ($project->getTranscriptDuration() ?? 0.0);
+                // As a fallback, compute from last transcript word
+                if ($maxDuration <= 0.0) {
+                    $transcript = $project->getVoiceoverTranscript();
+                    if (is_array($transcript) && count($transcript) > 0) {
+                        $last = $transcript[count($transcript) - 1];
+                        $maxDuration = (float) ($last['end'] ?? 0.0);
+                    }
+                }
+            } catch (\Throwable $e) {
+                $maxDuration = 0.0;
+            }
+        }
+        if ($maxDuration <= 0.0) {
+            $maxDuration = array_sum($clipDurations);
+        }
+        if ($maxDuration > 0.0) {
+            $subtitles = $this->clampSubtitlesToDuration($subtitles, $maxDuration);
+        }
 
         // Get voiceover URL if available
         $voiceOverUrl = null;
@@ -1155,6 +1180,31 @@ class ProjectController extends Controller
         }
 
         return $subtitles;
+    }
+
+    /**
+     * Ensure subtitles do not exceed the maximum duration and are monotonic.
+     */
+    private function clampSubtitlesToDuration(array $subtitles, float $maxDuration): array
+    {
+        $clamped = [];
+        $prevEnd = 0.0;
+        foreach ($subtitles as $s) {
+            $start = (float) ($s['start'] ?? 0.0);
+            $end = (float) ($s['end'] ?? $start);
+            $start = max($prevEnd, min($start, $maxDuration));
+            $end = max($start, min($end, $maxDuration));
+            $s['start'] = round($start, 3);
+            $s['end'] = round($end, 3);
+            $clamped[] = $s;
+            $prevEnd = $s['end'];
+        }
+        // Force last end to exactly maxDuration if very close or beyond
+        if (count($clamped) > 0) {
+            $i = count($clamped) - 1;
+            $clamped[$i]['end'] = round(min(max($clamped[$i]['end'], $clamped[$i]['start']), $maxDuration), 3);
+        }
+        return $clamped;
     }
 
     private function generateSubtitlesFromScript(array $subtitlesScript, array $transcript, array $styleConfig): array
@@ -1321,16 +1371,26 @@ class ProjectController extends Controller
 
     private function findSubtitleTimingSequential(string $subtitleText, array $transcript, int $lastUsedIndex): ?array
     {
-        // Clean and split subtitle text into words
+        // Unicode-clean and split subtitle text into words (Arabic-friendly)
         $subtitleWords = array_filter(array_map(function($word) {
-            return strtolower(trim(preg_replace('/[^\w\s]/', '', $word)));
-        }, explode(' ', $subtitleText)));
-        
-        // Convert numbers to words for better matching
-        $subtitleWords = $this->convertNumbersToWords($subtitleWords);
+            $w = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', (string) $word);
+            if ($w === null) { $w = (string) $word; }
+            $w = trim(preg_replace('/\s+/u', ' ', $w));
+            return mb_strtolower($w, 'UTF-8');
+        }, preg_split('/\s+/u', (string) $subtitleText) ?: []));
 
         if (empty($subtitleWords)) {
             return null;
+        }
+
+        // Precompute normalized transcript words
+        $transcriptNorm = [];
+        foreach ($transcript as $idx => $tw) {
+            $w = (string)($tw['word'] ?? '');
+            $w = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $w);
+            if ($w === null) { $w = (string)($tw['word'] ?? ''); }
+            $w = trim(preg_replace('/\s+/u', ' ', $w));
+            $transcriptNorm[$idx] = mb_strtolower($w, 'UTF-8');
         }
 
         logger()->debug('🔍 Finding sequential timing for subtitle', [
@@ -1354,8 +1414,8 @@ class ProjectController extends Controller
 
             // Check how many words match in sequence
             for ($j = 0; $j < count($subtitleWords) && ($i + $j) < count($transcript); $j++) {
-                $transcriptWord = strtolower(trim($transcript[$i + $j]['word']));
-                $subtitleWord = $subtitleWords[$j];
+                $transcriptWord = $transcriptNorm[$i + $j] ?? '';
+                $subtitleWord = $subtitleWords[$j] ?? '';
 
                 if ($transcriptWord === $subtitleWord) {
                     $score += 3; // Exact match gets highest score
@@ -1481,6 +1541,24 @@ class ProjectController extends Controller
 
     private function findSubtitleTimingFuzzy(array $subtitleWords, array $transcript, int $subtitleIndex): ?array
     {
+        // Normalize subtitle words
+        $subtitleWords = array_values(array_filter(array_map(function($w) {
+            $w = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', (string) $w);
+            if ($w === null) { $w = (string) $w; }
+            $w = trim(preg_replace('/\s+/u', ' ', $w));
+            return mb_strtolower($w, 'UTF-8');
+        }, $subtitleWords)));
+
+        // Precompute normalized transcript words
+        $transcriptNorm = [];
+        foreach ($transcript as $idx => $tw) {
+            $w = (string)($tw['word'] ?? '');
+            $w = preg_replace('/[^\p{L}\p{N}\s]/u', ' ', $w);
+            if ($w === null) { $w = (string)($tw['word'] ?? ''); }
+            $w = trim(preg_replace('/\s+/u', ' ', $w));
+            $transcriptNorm[$idx] = mb_strtolower($w, 'UTF-8');
+        }
+
         $bestMatch = null;
         $bestScore = 0;
 
@@ -1491,8 +1569,8 @@ class ProjectController extends Controller
 
             // Check how many words match in sequence
             for ($j = 0; $j < count($subtitleWords) && ($i + $j) < count($transcript); $j++) {
-                $transcriptWord = strtolower(trim($transcript[$i + $j]['word']));
-                $subtitleWord = $subtitleWords[$j];
+                $transcriptWord = $transcriptNorm[$i + $j] ?? '';
+                $subtitleWord = $subtitleWords[$j] ?? '';
 
                 if ($transcriptWord === $subtitleWord) {
                     $score += 2; // Exact match
@@ -2230,7 +2308,7 @@ class ProjectController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Validation error: ' . implode(', ', array_flatten($e->errors())),
+                'message' => 'Validation error: ' . implode(', ', Arr::flatten($e->errors())),
                 'errors' => $e->errors()
             ], 422);
         } catch (\Exception $e) {

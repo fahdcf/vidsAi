@@ -64,6 +64,15 @@ return [
         'base_url' => env('DEEPGRAM_BASE_URL', 'https://api.deepgram.com/v1/listen'),
     ],
 
+    // Optional Aeneas forced-alignment fallback via Docker
+    'aeneas' => [
+        'enabled' => env('AENEAS_ENABLED', true),
+        // If Docker is not desired, use local Python runner
+        'docker_image' => env('AENEAS_DOCKER_IMAGE', 'readbeyond/aeneas'),
+        'python_path' => env('AENEAS_PYTHON_PATH', 'python'),
+        'script_path' => env('AENEAS_SCRIPT_PATH', base_path('scripts/aeneas_align.py')),
+    ],
+
     'video_trim' => [
         'base_url' => env('VIDEO_TRIM_BASE_URL', 'https://8d7efae734fa.ngrok-free.app'),
         'trim_endpoint' => env('VIDEO_TRIM_ENDPOINT', '/trim'),

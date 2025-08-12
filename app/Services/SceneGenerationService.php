@@ -62,17 +62,45 @@ class SceneGenerationService
                 throw new \Exception('Voiceover file not found');
             }
 
-            // Step 3: Transcribe audio using Deepgram
-            $this->logToCustomFile('🎤 Step 3: Starting audio transcription', [
-                'project_id' => $project->id,
-                'audio_path' => $voiceoverFullPath,
-                'language' => $project->language,
-                'deepgram_url' => config('services.deepgram.base_url'),
-                'deepgram_api_key_length' => strlen(config('services.deepgram.api_key')),
-                'timestamp' => now()->toISOString()
-            ]);
+            // Step 3: Obtain timings
+            $transcriptData = null;
+            $isArabic = strtolower($project->language) === 'arabic' || strtolower($project->language) === 'ar';
 
-            $transcriptData = $this->transcribeAudio($voiceoverFullPath, $project->language);
+            if ($isArabic) {
+                // Prefer Aeneas forced alignment first for Arabic
+                $this->logToCustomFile('🧭 Step 3: Trying Aeneas alignment first (Arabic)', [
+                    'project_id' => $project->id,
+                    'audio_path' => $voiceoverFullPath,
+                    'language' => $project->language,
+                    'timestamp' => now()->toISOString()
+                ]);
+                try {
+                    $aligned = $this->attemptAeneasAlignment($voiceoverFullPath, $script, $project->language);
+                    if (is_array($aligned) && count($aligned['words'] ?? []) > 0) {
+                        $transcriptData = $aligned;
+                        $this->logToCustomFile('✅ Aeneas alignment succeeded (Arabic)', [
+                            'words_count' => count($aligned['words'])
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    $this->logToCustomFile('⚠️ Aeneas alignment threw; will try Deepgram next', [
+                        'error' => $e->getMessage()
+                    ]);
+                }
+            }
+
+            if ($transcriptData === null) {
+                // Fallback or non-Arabic: Transcribe audio using Deepgram
+                $this->logToCustomFile('🎤 Step 3: Starting audio transcription', [
+                    'project_id' => $project->id,
+                    'audio_path' => $voiceoverFullPath,
+                    'language' => $project->language,
+                    'deepgram_url' => config('services.deepgram.base_url'),
+                    'deepgram_api_key_length' => strlen(config('services.deepgram.api_key')),
+                    'timestamp' => now()->toISOString()
+                ]);
+                $transcriptData = $this->transcribeAudio($voiceoverFullPath, $project->language);
+            }
 
             // Avoid passing by reference to end() on expression
             $transcriptWords = $transcriptData['words'] ?? [];
@@ -560,8 +588,8 @@ Transcript Words: {$transcriptWords}
                 continue;
             }
 
-            $tokens = preg_split('/\s+/', trim($uttText));
-            $tokenCount = is_array($tokens) ? count($tokens) : 0;
+            $tokens = $this->tokenizeWords(trim($uttText));
+            $tokenCount = count($tokens);
             if ($tokenCount === 0) {
                 continue;
             }
@@ -731,6 +759,21 @@ Transcript Words: {$transcriptWords}
      */
     private function estimateTimingWhenNoTranscript(string $audioFullPath, string $script): array
     {
+        // Try Aeneas forced alignment first, if available
+        try {
+            $aeneas = $this->attemptAeneasAlignment($audioFullPath, $script, 'auto');
+            if (is_array($aeneas) && isset($aeneas['words']) && count($aeneas['words']) > 0) {
+                $this->logToCustomFile('🧭 Using Aeneas alignment fallback', [
+                    'words_count' => count($aeneas['words'])
+                ]);
+                return $aeneas;
+            }
+        } catch (\Throwable $e) {
+            $this->logToCustomFile('⚠️ Aeneas fallback failed, continuing with other strategies', [
+                'error' => $e->getMessage()
+            ]);
+        }
+
         $durationSeconds = $this->probeAudioDuration($audioFullPath);
         if ($durationSeconds <= 0) {
             // fallback to text-based estimate: ~2.2 words/sec (≈130 wpm)
@@ -739,8 +782,7 @@ Transcript Words: {$transcriptWords}
         }
 
         // Build pseudo-words array aligned across full duration from script tokens
-        $tokens = preg_split('/\s+/', trim($script));
-        $tokens = is_array($tokens) ? array_values(array_filter($tokens, fn($t) => $t !== '')) : [];
+        $tokens = $this->tokenizeWords(trim($script));
 
         $words = [];
         if (count($tokens) > 0) {
@@ -768,6 +810,229 @@ Transcript Words: {$transcriptWords}
             'text' => $script,
             'words' => $words,
         ];
+    }
+
+    /**
+     * Attempt offline alignment using a local Python Aeneas runner script to obtain fragment timings,
+     * then synthesize per-word timings. Returns ['text' => string, 'words' => array] or null if failed.
+     */
+    private function attemptAeneasAlignment(string $audioFullPath, string $script, string $language): ?array
+    {
+        // Feature flag
+        $enabled = (bool) (config('services.aeneas.enabled') ?? true);
+        if (!$enabled) {
+            return null;
+        }
+
+        $python = (string) (config('services.aeneas.python_path') ?? 'python');
+        $runner = (string) (config('services.aeneas.script_path') ?? base_path('scripts/aeneas_align.py'));
+        if (!is_file($runner)) {
+            return null;
+        }
+
+        // Prepare temp files
+        $tmpDir = storage_path('app/tmp');
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0775, true);
+        }
+        $token = uniqid('aeneas_', true);
+        $textPath = $tmpDir . DIRECTORY_SEPARATOR . $token . '.txt';
+        $outPath = $tmpDir . DIRECTORY_SEPARATOR . $token . '.json';
+        file_put_contents($textPath, $script);
+
+        $aeneasLang = $this->mapAeneasLanguageCode($language);
+
+        // Build command; quote for spaces; capture stdout/stderr
+        $cmd = escapeshellarg($python)
+            . ' ' . escapeshellarg($runner)
+            . ' --audio ' . escapeshellarg($audioFullPath)
+            . ' --text ' . escapeshellarg($textPath)
+            . ' --lang ' . escapeshellarg($aeneasLang)
+            . ' --out ' . escapeshellarg($outPath)
+            . ' 2>&1';
+
+        $this->logToCustomFile('🐍 Running local Aeneas runner', [ 'cmd' => $cmd ]);
+        $output = (string) @shell_exec($cmd);
+
+        if (!file_exists($outPath)) {
+            $this->logToCustomFile('❌ Aeneas local run produced no output file', [ 'runner_output' => mb_substr($output, 0, 2000) ]);
+            @unlink($textPath);
+            return null;
+        }
+
+        $json = json_decode((string) @file_get_contents($outPath), true);
+        @unlink($textPath);
+        // keep JSON for diagnostics
+
+        if (!is_array($json) || !isset($json['fragments']) || !is_array($json['fragments'])) {
+            $this->logToCustomFile('❌ Aeneas JSON invalid', [ 'runner_output' => mb_substr($output, 0, 1000) ]);
+            return null;
+        }
+
+        // Convert fragments to per-word timings by distributing fragment duration across words
+        $words = [];
+        $allTokens = [];
+        foreach ($json['fragments'] as $frag) {
+            $begin = isset($frag['begin']) ? (float) $frag['begin'] : null;
+            $end = isset($frag['end']) ? (float) $frag['end'] : null;
+            $lines = $frag['lines'] ?? [];
+
+            if ($begin === null || $end === null || $end <= $begin) {
+                continue;
+            }
+
+            $fragText = trim(implode(' ', array_map('strval', $lines)));
+            if ($fragText === '') {
+                continue;
+            }
+
+            $tokens = $this->tokenizeWords($fragText);
+            if (count($tokens) === 0) {
+                continue;
+            }
+
+            $fragDuration = max(0.0, $end - $begin);
+            // Length-weighted distribution for a bit more realism
+            $lengths = array_map(fn($t) => max(1, mb_strlen($t)), $tokens);
+            $lengthSum = array_sum($lengths);
+            $cursor = $begin;
+            foreach ($tokens as $idx => $tok) {
+                $portion = $lengths[$idx] / ($lengthSum > 0 ? $lengthSum : count($tokens));
+                $dur = $fragDuration * $portion;
+                $start = $cursor;
+                $endw = $cursor + $dur;
+                $words[] = [
+                    'word' => $tok,
+                    'start' => round($start, 3),
+                    'end' => round($endw, 3),
+                    'confidence' => 0.7,
+                ];
+                $cursor = $endw;
+                $allTokens[] = $tok;
+            }
+        }
+
+        if (count($words) === 0) {
+            return null;
+        }
+
+        // Clamp to actual audio duration if available
+        $audioDuration = $this->probeAudioDuration($audioFullPath);
+        if ($audioDuration > 0) {
+            $words = $this->clampWordsToDuration($words, $audioDuration);
+        }
+
+        return [
+            'text' => trim(implode(' ', $allTokens)),
+            'words' => $words,
+        ];
+    }
+
+    /**
+     * Map application language to Aeneas 3-letter code.
+     * Fallback to 'eng' if unknown.
+     */
+    private function mapAeneasLanguageCode(string $language): string
+    {
+        $lang = strtolower(trim($language));
+        if ($lang === 'auto') {
+            return 'eng';
+        }
+        $map = [
+            'english' => 'eng',
+            'en' => 'eng',
+            'arabic' => 'ara',
+            'ar' => 'ara',
+            'french' => 'fra',
+            'fr' => 'fra',
+            'spanish' => 'spa',
+            'es' => 'spa',
+            'german' => 'deu',
+            'de' => 'deu',
+            'italian' => 'ita',
+            'it' => 'ita',
+            'portuguese' => 'por',
+            'pt' => 'por',
+            'russian' => 'rus',
+            'ru' => 'rus',
+        ];
+        return $map[$lang] ?? 'eng';
+    }
+
+    /**
+     * Compute path of $full relative to $root using forward slashes for Docker volume paths.
+     */
+    private function pathRelativeTo(string $root, string $full): string
+    {
+        $rootNorm = rtrim(str_replace('\\', '/', $root), '/');
+        $fullNorm = str_replace('\\', '/', $full);
+        if (strpos($fullNorm, $rootNorm) === 0) {
+            return ltrim(substr($fullNorm, strlen($rootNorm)), '/');
+        }
+        // If not under root, copy into tmp and return that relative path
+        $tmpDir = storage_path('app/tmp');
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0775, true);
+        }
+        $target = $tmpDir . DIRECTORY_SEPARATOR . basename($full);
+        if ($full !== $target) {
+            @copy($full, $target);
+        }
+        $targetNorm = str_replace('\\', '/', $target);
+        return ltrim(substr($targetNorm, strlen($rootNorm)), '/');
+    }
+
+    /**
+     * Adjust word timings so none exceed the media duration and times are monotonic.
+     */
+    private function clampWordsToDuration(array $words, float $duration): array
+    {
+        $clamped = [];
+        $prevEnd = 0.0;
+        foreach ($words as $w) {
+            $start = isset($w['start']) ? (float)$w['start'] : 0.0;
+            $end = isset($w['end']) ? (float)$w['end'] : $start;
+            // Ensure monotonic and within [0, duration]
+            $start = max($prevEnd, min($start, $duration));
+            $end = max($start, min($end, $duration));
+            $clamped[] = [
+                'word' => (string)($w['word'] ?? ''),
+                'start' => round($start, 3),
+                'end' => round($end, 3),
+                'confidence' => (float)($w['confidence'] ?? 0.5),
+            ];
+            $prevEnd = $end;
+        }
+        // Force last end to exactly duration if it is very close or beyond
+        if (count($clamped) > 0) {
+            $lastIdx = count($clamped) - 1;
+            $clamped[$lastIdx]['end'] = round(min(max($clamped[$lastIdx]['end'], $clamped[$lastIdx]['start']), $duration), 3);
+        }
+        return $clamped;
+    }
+
+    /**
+     * Unicode-aware tokenizer: strips punctuation/symbols and splits on whitespace.
+     */
+    private function tokenizeWords(string $text): array
+    {
+        $normalized = preg_replace('/[\p{P}\p{S}]+/u', ' ', (string) $text);
+        if ($normalized === null) {
+            $normalized = (string) $text;
+        }
+        $normalized = preg_replace('/\s+/u', ' ', $normalized);
+        if ($normalized === null) {
+            $normalized = (string) $text;
+        }
+        $normalized = trim($normalized);
+        if ($normalized === '') {
+            return [];
+        }
+        $parts = preg_split('/\s+/u', $normalized);
+        if (!is_array($parts)) {
+            return [];
+        }
+        return array_values(array_filter($parts, fn ($t) => $t !== ''));
     }
 
     /**
