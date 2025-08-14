@@ -205,10 +205,15 @@ class ProjectController extends Controller
         ]);
 
         try {
-            // Prepare data for n8n webhook
-            // Convert keywords string to array
-            $keywordsArray = array_map('trim', explode(';', $request->keywords));
-            $keywordsArray = array_filter($keywordsArray); // Remove empty values
+            // Prepare data for regeneration
+            // Convert keywords string to array (split on ; , Arabic comma ، and new lines)
+            $keywordsArray = preg_split('/[;,،\n\r]+/u', (string) $request->keywords);
+            $keywordsArray = array_values(array_filter(array_map(function($k){
+                $k = trim($k);
+                // Remove surrounding quotes and extra punctuation
+                $k = trim($k, "\"' \t\n\r\0\x0B");
+                return $k;
+            }, $keywordsArray ?? []), fn($k) => $k !== ''));
 
             $webhookData = [
                 'regeneration_option' => $request->regeneration_option,
@@ -228,9 +233,9 @@ class ProjectController extends Controller
                 'url' => config('services.n8n.regenerate_url')
             ]);
 
-            // Use the new SceneRegenerationService instead of n8n webhook
+            // Use the new SceneRegenerationService
             $sceneRegenerationService = new \App\Services\SceneRegenerationService();
-            $responseData = $sceneRegenerationService->regenerateScene($scene, $request->regeneration_option);
+            $responseData = $sceneRegenerationService->regenerateScene($scene, $request->regeneration_option, $keywordsArray);
 
             logger()->info('📡 Scene regeneration response', [
                 'response_data' => $responseData
@@ -1070,8 +1075,21 @@ class ProjectController extends Controller
 
         // Prepare subtitles from project scenes and transcript
         $subtitles = $this->generateSubtitleEntries($project, $validated['style_config']);
+        
+        logger()->info('📝 Generated subtitles before processing', [
+            'project_id' => $project->id,
+            'subtitles_count' => count($subtitles),
+            'sample_timing' => array_slice(array_map(function($s) {
+                return [
+                    'text' => substr($s['text'] ?? '', 0, 20) . '...',
+                    'start' => $s['start'] ?? 'not_set',
+                    'end' => $s['end'] ?? 'not_set',
+                    'duration' => isset($s['start'], $s['end']) ? round($s['end'] - $s['start'], 3) : 'unknown'
+                ];
+            }, $subtitles), 0, 3)
+        ]);
 
-        // Clamp subtitles to voiceover duration (prefer transcript duration; fallback to total clips duration)
+        // Clamp/Rebalance subtitles to voiceover duration (prefer transcript duration; fallback to total clips duration)
         $maxDuration = 0.0;
         if ($project->hasVoiceoverTranscript() && $project->voiceover_option === 'upload') {
             try {
@@ -1091,8 +1109,53 @@ class ProjectController extends Controller
         if ($maxDuration <= 0.0) {
             $maxDuration = array_sum($clipDurations);
         }
-        if ($maxDuration > 0.0) {
+        if ($maxDuration > 0.0 && count($subtitles) > 0) {
+                    // Only rebalance if we don't have transcript-based timing
+        $hasTranscriptTiming = false;
+        $transcriptSource = 'unknown';
+        
+        foreach ($subtitles as $subtitle) {
+            if (isset($subtitle['start']) && isset($subtitle['end']) && 
+                $subtitle['start'] > 0.0 && $subtitle['end'] > $subtitle['start']) {
+                $hasTranscriptTiming = true;
+                
+                // Detect transcript source based on timing precision
+                if (isset($subtitle['start']) && $subtitle['start'] > 0.0) {
+                    $transcriptSource = 'transcript_based';
+                }
+                break;
+            }
+        }
+        
+        if ($hasTranscriptTiming) {
+            logger()->info('🎯 Preserving transcript-based subtitle timing - skipping rebalancing', [
+                'project_id' => $project->id,
+                'language' => $project->language,
+                'transcript_source' => $transcriptSource,
+                'subtitles_count' => count($subtitles),
+                'sample_timing' => array_slice(array_map(function($s) {
+                    return [
+                        'text' => substr($s['text'] ?? '', 0, 20) . '...',
+                        'start' => $s['start'] ?? 'not_set',
+                        'end' => $s['end'] ?? 'not_set'
+                    ];
+                }, $subtitles), 0, 2)
+            ]);
+            
+            // Only clamp to ensure we don't exceed max duration
             $subtitles = $this->clampSubtitlesToDuration($subtitles, $maxDuration);
+        } else {
+            logger()->info('📏 No transcript timing found - applying uniform rebalancing', [
+                'project_id' => $project->id,
+                'language' => $project->language,
+                'subtitles_count' => count($subtitles)
+            ]);
+            
+            // Rebalance so each word has equal time and phrases receive duration proportional to their word count
+            $subtitles = $this->rebalanceSubtitlesUniform($subtitles, $maxDuration);
+            // Final safety clamp
+            $subtitles = $this->clampSubtitlesToDuration($subtitles, $maxDuration);
+        }
         }
 
         // Get voiceover URL if available
@@ -1107,6 +1170,20 @@ class ProjectController extends Controller
             ]);
         }
 
+        // Log final subtitle timing
+        logger()->info('📝 Final subtitles after processing', [
+            'project_id' => $project->id,
+            'subtitles_count' => count($subtitles),
+            'sample_timing' => array_slice(array_map(function($s) {
+                return [
+                    'text' => substr($s['text'] ?? '', 0, 20) . '...',
+                    'start' => $s['start'] ?? 'not_set',
+                    'end' => $s['end'] ?? 'not_set',
+                    'duration' => isset($s['start'], $s['end']) ? round($s['end'] - $s['start'], 3) : 'unknown'
+                ];
+            }, $subtitles), 0, 3)
+        ]);
+        
         // Main video data object
         $videoData = [
             'clips' => $clipUrls,
@@ -1205,6 +1282,56 @@ class ProjectController extends Controller
             $clamped[$i]['end'] = round(min(max($clamped[$i]['end'], $clamped[$i]['start']), $maxDuration), 3);
         }
         return $clamped;
+    }
+
+    /**
+     * Re-assign subtitle timings so that each token (word) consumes equal time across the total voiceover duration.
+     * Phrases are allocated duration proportional to their token counts, preserving order and avoiding gaps/overlaps.
+     */
+    private function rebalanceSubtitlesUniform(array $subtitles, float $totalDuration): array
+    {
+        // Count tokens using Unicode-aware split
+        $tokenCounts = [];
+        $totalTokens = 0;
+        foreach ($subtitles as $s) {
+            $tokens = preg_split('/\s+/u', trim((string)($s['text'] ?? '')));
+            $tokens = array_values(array_filter($tokens ?? [], fn($t) => $t !== ''));
+            $count = count($tokens);
+            $tokenCounts[] = $count;
+            $totalTokens += $count;
+        }
+        if ($totalTokens <= 0) {
+            // If no tokens, just spread evenly
+            $per = $totalDuration / max(1, count($subtitles));
+            $cursor = 0.0;
+            return array_map(function($s) use (&$cursor, $per) {
+                $start = $cursor;
+                $end = $cursor + $per;
+                $cursor = $end;
+                $s['start'] = round($start, 3);
+                $s['end'] = round($end, 3);
+                return $s;
+            }, $subtitles);
+        }
+
+        $secondsPerToken = $totalDuration / $totalTokens;
+        $cursor = 0.0;
+        $result = [];
+        foreach ($subtitles as $idx => $s) {
+            $phraseTokens = max(1, $tokenCounts[$idx]);
+            $phraseDuration = $secondsPerToken * $phraseTokens;
+            $start = $cursor;
+            $end = $cursor + $phraseDuration;
+            $cursor = $end;
+            $s['start'] = round($start, 3);
+            $s['end'] = round($end, 3);
+            $result[] = $s;
+        }
+        // Snap last end to totalDuration to absorb rounding
+        if (count($result) > 0) {
+            $result[count($result) - 1]['end'] = round($totalDuration, 3);
+        }
+        return $result;
     }
 
     private function generateSubtitlesFromScript(array $subtitlesScript, array $transcript, array $styleConfig): array
@@ -1418,12 +1545,12 @@ class ProjectController extends Controller
                 $subtitleWord = $subtitleWords[$j] ?? '';
 
                 if ($transcriptWord === $subtitleWord) {
-                    $score += 3; // Exact match gets highest score
+                    $score += 5; // Exact match gets highest score
                     $matchedWords++;
                     $consecutiveMatches++;
                     $maxConsecutive = max($maxConsecutive, $consecutiveMatches);
                 } elseif (strpos($transcriptWord, $subtitleWord) !== false || strpos($subtitleWord, $transcriptWord) !== false) {
-                    $score += 1; // Partial match
+                    $score += 2; // Partial match gets medium score
                     $matchedWords++;
                     $consecutiveMatches = 0; // Reset consecutive counter
                 } else {
@@ -1436,8 +1563,8 @@ class ProjectController extends Controller
             $consecutiveBonus = $maxConsecutive / count($subtitleWords);
             $finalScore = $score + ($consecutiveBonus * 10); // Bonus for consecutive matches
 
-            // Accept if we have a good match (at least 40% words matched)
-            if ($matchPercentage >= 0.4 && $finalScore > $bestScore) {
+            // Accept if we have a good match (at least 60% words matched) - INCREASED THRESHOLD
+            if ($matchPercentage >= 0.6 && $finalScore > $bestScore) {
                 $endIndex = min($i + count($subtitleWords) - 1, count($transcript) - 1);
 
                 $bestScore = $finalScore;
@@ -1459,14 +1586,26 @@ class ProjectController extends Controller
         }
 
         if ($bestMatch) {
-            logger()->debug('✅ Sequential match found', [
+            logger()->info('✅ Sequential match found', [
+                'subtitle_text' => substr($subtitleText, 0, 30) . '...',
                 'match_percentage' => round($bestMatch['match_percentage'], 2),
                 'score' => round($bestMatch['score'], 1),
                 'consecutive_matches' => $bestMatch['consecutive_matches'],
                 'start' => $bestMatch['start'],
                 'end' => $bestMatch['end'],
                 'duration' => round($bestMatch['end'] - $bestMatch['start'], 3),
-                'word_range' => $bestMatch['startIndex'] . '-' . $bestMatch['endIndex']
+                'word_range' => $bestMatch['startIndex'] . '-' . $bestMatch['endIndex'],
+                'transcript_words' => array_slice(array_column($transcript, 'word'), $bestMatch['startIndex'], $bestMatch['endIndex'] - $bestMatch['startIndex'] + 1)
+            ]);
+        }
+
+        if (!$bestMatch) {
+            logger()->warning('⚠️ No sequential match found for subtitle', [
+                'subtitle_text' => substr($subtitleText, 0, 30) . '...',
+                'subtitle_words' => $subtitleWords,
+                'last_used_index' => $lastUsedIndex,
+                'search_range' => $minStartIndex . ' to ' . (count($transcript) - count($subtitleWords)),
+                'transcript_sample' => array_slice(array_column($transcript, 'word'), $minStartIndex, 5)
             ]);
         }
 

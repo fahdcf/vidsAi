@@ -78,8 +78,17 @@ def probe_duration(ffprobe_bin: Optional[str], audio_path: str) -> float:
         return 0.0
 
 
-def split_into_fragments(text: str) -> List[str]:
-    # Prefer sentence-like chunks; fallback to whitespace tokens grouped
+def split_into_fragments(text: str, lang: str = 'eng') -> List[str]:
+    # For Arabic/Moroccan, always split into individual words for better timing
+    if lang in ['ara', 'ar', 'arabic', 'moroccan']:
+        text = re.sub(r'[\r\n]+', ' ', text).strip()
+        if not text:
+            return []
+        # Split into individual words for Arabic
+        words = text.split()
+        return words if words else [text]
+    
+    # For other languages, prefer sentence-like chunks; fallback to whitespace tokens grouped
     text = re.sub(r'[\r\n]+', ' ', text).strip()
     if not text:
         return []
@@ -175,7 +184,7 @@ def main() -> None:
         # Fallback: probe duration with ffprobe or estimate
         ffprobe_bin = ensure_ffprobe(project_root)
         total_secs = probe_duration(ffprobe_bin, audio_path)
-        text_frags = split_into_fragments(text)
+        text_frags = split_into_fragments(text, args.lang)
         if not text_frags:
             text_frags = [text or '']
         fragments = allocate_durations(total_secs, text_frags)

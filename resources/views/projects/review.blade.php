@@ -1373,6 +1373,12 @@
                                                 <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetTrim({{ $scene->id }})">
                                                     <i class="bi bi-arrow-clockwise me-1"></i>Reset
                                                 </button>
+                                                <button type="button" class="btn btn-sm btn-outline-info" onclick="refreshTimeDisplay({{ $scene->id }})">
+                                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh Time
+                                                </button>
+                                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="fixTimeDisplayDirectly({{ $scene->id }})">
+                                                    <i class="bi bi-wrench me-1"></i>Fix Time
+                                                </button>
                                                 <div class="trim-info">
                                                     <small class="text-muted">
                                                         Start: <span class="start-time-display">0:00.0</span> |
@@ -1789,6 +1795,9 @@
 
                 // Update the duration display to match the scene duration exactly
                 this.forceUpdateDurationDisplay(sceneDuration);
+                
+                // Force update time displays immediately
+                this.updateTimeDisplays();
             }
 
             setupEventListeners() {
@@ -2124,6 +2133,8 @@
             updateTimeDisplays() {
                 if (!this.video.duration) return;
 
+                console.log(`🔄 updateTimeDisplays called for scene ${this.sceneId}`);
+
                 // Update video time display (current time / total time) - NO decimals
                 const videoContainer = document.querySelector(`[data-scene-id="${this.sceneId}"]`);
                 if (videoContainer) {
@@ -2140,11 +2151,41 @@
                 const startTimeDisplay = document.querySelector(`[data-scene-id="${this.sceneId}"] .start-time-display`);
                 const endTimeDisplay = document.querySelector(`[data-scene-id="${this.sceneId}"] .end-time-display`);
 
+                console.log(`🔍 Time display elements found:`, {
+                    startTimeDisplay: !!startTimeDisplay,
+                    endTimeDisplay: !!endTimeDisplay,
+                    sceneId: this.sceneId
+                });
+
                 if (startTimeDisplay && endTimeDisplay) {
-                    const startTime = (this.trimStart / 100) * this.video.duration;
-                    const endTime = (this.trimEnd / 100) * this.video.duration;
+                    let startTime, endTime;
+                    
+                    // Use actual scene percentage for accurate timing when available
+                    if (this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 1.0) {
+                        // This is the initial scene duration display - use accurate scene timing
+                        startTime = 0; // Scene always starts at 0
+                        endTime = (this.actualScenePercent / 100) * this.video.duration;
+                        console.log(`🎯 Using actual scene timing: Start: 0s, End: ${endTime.toFixed(2)}s (${this.actualScenePercent.toFixed(2)}%)`);
+                    } else {
+                        // This is user-modified trim - use visual trim timing
+                        startTime = (this.trimStart / 100) * this.video.duration;
+                        endTime = (this.trimEnd / 100) * this.video.duration;
+                        console.log(`📏 Using trim timing: Start: ${startTime.toFixed(2)}s, End: ${endTime.toFixed(2)}s (${this.trimStart}% - ${this.trimEnd}%)`);
+                    }
+                    
+                    console.log(`📝 Updating time displays:`, {
+                        startTime: startTime.toFixed(2),
+                        endTime: endTime.toFixed(2),
+                        formattedStart: this.formatTime(startTime),
+                        formattedEnd: this.formatTime(endTime)
+                    });
+                    
                     startTimeDisplay.textContent = this.formatTime(startTime);
                     endTimeDisplay.textContent = this.formatTime(endTime);
+                    
+                    console.log(`✅ Time displays updated successfully`);
+                } else {
+                    console.error(`❌ Time display elements not found for scene ${this.sceneId}`);
                 }
 
                 // Update selected duration in header with proper decimal format (3.4s style)
@@ -2152,14 +2193,14 @@
                 if (selectedDurationEl) {
                     // Use actual scene percentage if available (for initial display), otherwise use visual trim
                     let duration;
-                    if (this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 0.1) {
-                        // This is the initial scene duration display
-                        duration = (this.actualScenePercent / 100) * this.video.duration;
-                        console.log(`📊 Using actual scene duration: ${duration.toFixed(2)}s (${this.actualScenePercent.toFixed(2)}%)`);
+                    if (this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 1.0) {
+                        // This is the initial scene duration display - use exact scene duration
+                        duration = parseFloat(this.trimSelection.dataset.sceneDuration) || 5;
+                        console.log(`🎯 Using exact scene duration: ${duration.toFixed(2)}s (from dataset)`);
                     } else {
                         // This is user-modified trim
                         duration = ((this.trimEnd - this.trimStart) / 100) * this.video.duration;
-                        console.log(`📊 Using trim duration: ${duration.toFixed(2)}s (${this.trimStart}% - ${this.trimEnd}%)`);
+                        console.log(`📏 Using trim duration: ${duration.toFixed(2)}s (${this.trimStart}% - ${this.trimEnd}%)`);
                     }
 
                     selectedDurationEl.textContent = this.formatDuration(duration);
@@ -3538,9 +3579,22 @@
                 }
 
                 // Calculate actual start and end times based on trim selection
-                const startTime = (timeline.trimStart / 100) * videoDuration;
-                const endTime = (timeline.trimEnd / 100) * videoDuration;
-                const trimmedDuration = endTime - startTime;
+                let startTime, endTime, trimmedDuration;
+                
+                // Use actual scene percentage for accurate timing when available
+                if (timeline.actualScenePercent && timeline.trimStart === 0 && Math.abs(timeline.trimEnd - timeline.actualScenePercent) < 1.0) {
+                    // This is the initial scene duration display - use accurate scene timing
+                    startTime = 0; // Scene always starts at 0
+                    endTime = (timeline.actualScenePercent / 100) * videoDuration;
+                    trimmedDuration = parseFloat(timeline.trimSelection.dataset.sceneDuration) || 5;
+                    console.log(`🎯 Using actual scene timing: Start: 0s, End: ${endTime.toFixed(2)}s, Duration: ${trimmedDuration}s (${timeline.actualScenePercent.toFixed(2)}%)`);
+                } else {
+                    // This is user-modified trim - use visual trim timing
+                    startTime = (timeline.trimStart / 100) * videoDuration;
+                    endTime = (timeline.trimEnd / 100) * videoDuration;
+                    trimmedDuration = endTime - startTime;
+                    console.log(`📏 Using trim timing: Start: ${startTime.toFixed(2)}s, End: ${endTime.toFixed(2)}s, Duration: ${trimmedDuration}s (${timeline.trimStart}% - ${timeline.trimEnd}%)`);
+                }
 
                 // Use original video duration for n8n processing
                 const originalDuration = videoDuration;
@@ -3664,6 +3718,103 @@
                 confirmBtn.innerHTML = originalText;
             });
         }
+
+        // Force refresh all time displays when page loads
+        function forceRefreshAllTimeDisplays() {
+            console.log('🔄 Force refreshing all time displays...');
+            
+            // Get all scenes
+            const sceneElements = document.querySelectorAll('[data-scene-id]');
+            sceneElements.forEach(sceneElement => {
+                const sceneId = sceneElement.dataset.sceneId;
+                const timeline = window[`timeline_${sceneId}`];
+                
+                if (timeline && timeline.updateTimeDisplays) {
+                    console.log(`🔄 Refreshing time display for scene ${sceneId}`);
+                    timeline.updateTimeDisplays();
+                }
+            });
+        }
+
+        // Manual refresh for a specific scene
+        function refreshTimeDisplay(sceneId) {
+            console.log(`🔄 Manual refresh requested for scene ${sceneId}`);
+            
+            const timeline = window[`timeline_${sceneId}`];
+            if (timeline && timeline.updateTimeDisplays) {
+                timeline.updateTimeDisplays();
+                console.log(`✅ Time display refreshed for scene ${sceneId}`);
+            } else {
+                console.error(`❌ Timeline not found for scene ${sceneId}`);
+            }
+        }
+
+        // Direct time display fix - bypasses complex logic
+        function fixTimeDisplayDirectly(sceneId) {
+            console.log(`🔧 Direct fix requested for scene ${sceneId}`);
+            
+            // Get the scene duration from the data attribute
+            const sceneElement = document.querySelector(`[data-scene-id="${sceneId}"]`);
+            if (!sceneElement) {
+                console.error(`❌ Scene element not found for scene ${sceneId}`);
+                return;
+            }
+            
+            const trimSelection = sceneElement.querySelector('.trim-selection');
+            if (!trimSelection) {
+                console.error(`❌ Trim selection not found for scene ${sceneId}`);
+                return;
+            }
+            
+            const sceneDuration = parseFloat(trimSelection.dataset.sceneDuration);
+            if (!sceneDuration) {
+                console.error(`❌ Scene duration not found for scene ${sceneId}`);
+                return;
+            }
+            
+            console.log(`📏 Scene ${sceneId} duration: ${sceneDuration}s`);
+            
+            // Get time display elements
+            const startTimeDisplay = sceneElement.querySelector('.start-time-display');
+            const endTimeDisplay = sceneElement.querySelector('.end-time-display');
+            
+            if (startTimeDisplay && endTimeDisplay) {
+                // Set start time to 0, end time to scene duration
+                startTimeDisplay.textContent = '0:00.0';
+                endTimeDisplay.textContent = formatTime(sceneDuration);
+                
+                console.log(`✅ Direct fix applied: Start: 0:00.0, End: ${formatTime(sceneDuration)}`);
+            } else {
+                console.error(`❌ Time display elements not found for scene ${sceneId}`);
+            }
+        }
+
+        // Global formatTime function
+        function formatTime(seconds) {
+            if (!seconds || isNaN(seconds)) return '0:00.0';
+            const mins = Math.floor(seconds / 60);
+            const wholeSecs = Math.floor(seconds % 60);
+            const decimal = Math.floor((seconds % 1) * 10);
+            return `${mins}:${wholeSecs.toString().padStart(2, '0')}.${decimal}`;
+        }
+
+        // Call this when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('🚀 Page loaded, setting up time display refresh...');
+            
+            // Wait a bit for timelines to initialize, then refresh
+            setTimeout(() => {
+                forceRefreshAllTimeDisplays();
+                
+                // Also apply direct fix to all scenes
+                console.log('🔧 Applying direct fix to all scenes...');
+                const sceneElements = document.querySelectorAll('[data-scene-id]');
+                sceneElements.forEach(sceneElement => {
+                    const sceneId = sceneElement.dataset.sceneId;
+                    fixTimeDisplayDirectly(sceneId);
+                });
+            }, 1000);
+        });
 
 
 

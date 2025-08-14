@@ -11,7 +11,7 @@ class SceneRegenerationService
     /**
      * Regenerate a scene with new video
      */
-    public function regenerateScene(Scene $scene, string $regenerationOption = 'pexels'): array
+    public function regenerateScene(Scene $scene, string $regenerationOption = 'pexels', ?array $providedKeywords = null): array
     {
         try {
             Log::info('🔄 Starting scene regeneration', [
@@ -20,8 +20,10 @@ class SceneRegenerationService
                 'regeneration_option' => $regenerationOption
             ]);
 
-            // Extract keywords from scene script
-            $keywords = $this->extractKeywordsFromScript($scene->script_text);
+            // Use provided keywords if present, otherwise extract from script
+            $keywords = $providedKeywords && count($providedKeywords) > 0
+                ? $this->normalizeKeywords($providedKeywords)
+                : $this->extractKeywordsFromScript($scene->script_text);
 
             if ($regenerationOption === 'ai') {
                 return $this->generateAIVideo($scene, $keywords);
@@ -43,16 +45,30 @@ class SceneRegenerationService
      */
     private function extractKeywordsFromScript(string $scriptText): array
     {
-        // Simple keyword extraction - can be enhanced with NLP
-        $words = preg_split('/\s+/', strtolower($scriptText));
-        $stopWords = ['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these', 'those'];
-        
-        $keywords = array_filter($words, function($word) use ($stopWords) {
-            return !in_array($word, $stopWords) && strlen($word) > 2;
+        $text = mb_strtolower((string) $scriptText, 'UTF-8');
+        // Split by whitespace and punctuation, keep Arabic letters/digits
+        $tokens = preg_split('/[^\p{L}\p{N}]+/u', $text);
+        $tokens = array_values(array_filter($tokens ?? [], fn($t) => $t !== ''));
+
+        // Basic multilingual stopwords (extendable)
+        $stopWords = [
+            'the','a','an','and','or','but','in','on','at','to','for','of','with','by','is','are','was','were','be','been','being','have','has','had','do','does','did','will','would','could','should','may','might','can','this','that','these','those',
+            // Arabic common words
+            'من','في','على','إلى','الى','عن','هذا','هذه','ذلك','تلك','هو','هي','هم','هن','و','يا','ما','لا','لم','لن','إن','ان','كان','كانت','مع','كل','كما','بعد','قبل','حتى','أو','او'
+        ];
+
+        $keywords = array_filter($tokens, function($word) use ($stopWords) {
+            return !in_array($word, $stopWords, true) && mb_strlen($word, 'UTF-8') > 1;
         });
 
-        // Take top 3 keywords
-        return array_slice(array_unique($keywords), 0, 3);
+        // Prefer unique tokens preserving order
+        $unique = [];
+        foreach ($keywords as $k) {
+            if (!in_array($k, $unique, true)) { $unique[] = $k; }
+        }
+
+        // Return up to 4
+        return array_slice($unique, 0, 4);
     }
 
     /**
@@ -87,7 +103,30 @@ class SceneRegenerationService
             $videos = $data['videos'] ?? [];
 
             if (empty($videos)) {
-                throw new \Exception('No videos found for keywords: ' . $query);
+                // Retry strategy: search per keyword, then last-resort broad fallback in English translation if applicable
+                foreach ($keywords as $kw) {
+                    $alt = trim($kw);
+                    if ($alt === '') { continue; }
+                    $altResp = Http::withHeaders([
+                        'Authorization' => config('services.pexels.api_key')
+                    ])->timeout(45)->retry(2, 800)->withoutVerifying()->get(config('services.pexels.base_url'), [
+                        'query' => $alt,
+                        'per_page' => 10,
+                        'orientation' => 'landscape'
+                    ]);
+                    if ($altResp->successful()) {
+                        $altData = $altResp->json();
+                        $altVideos = $altData['videos'] ?? [];
+                        if (!empty($altVideos)) {
+                            $videos = $altVideos;
+                            $query = $alt; // Note used query for logging
+                            break;
+                        }
+                    }
+                }
+                if (empty($videos)) {
+                    throw new \Exception('No videos found for keywords: ' . $query);
+                }
             }
 
             // Limit to first 5 videos and randomly pick one
@@ -165,6 +204,27 @@ class SceneRegenerationService
             ]);
             throw $e;
         }
+    }
+
+    /**
+     * Normalize provided keywords array: trim, dedupe, drop empties
+     */
+    private function normalizeKeywords(array $keywords): array
+    {
+        $clean = [];
+        foreach ($keywords as $k) {
+            // Split if user accidentally provided comma/semicolon separated string within one entry
+            $parts = preg_split('/[;,،\n\r]+/u', (string) $k);
+            foreach ($parts ?? [] as $p) {
+                $p = trim($p);
+                $p = trim($p, "\"' \t\n\r\0\x0B");
+                if ($p !== '' && !in_array($p, $clean, true)) {
+                    $clean[] = $p;
+                }
+            }
+        }
+        // Limit to reasonable count for Pexels
+        return array_slice($clean, 0, 6);
     }
 
     /**

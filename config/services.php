@@ -71,6 +71,15 @@ return [
         'docker_image' => env('AENEAS_DOCKER_IMAGE', 'readbeyond/aeneas'),
         'python_path' => env('AENEAS_PYTHON_PATH', 'python'),
         'script_path' => env('AENEAS_SCRIPT_PATH', base_path('scripts/aeneas_align.py')),
+        // Moroccan dialect optimization settings
+        'moroccan_rhythm_profile' => env('MOROCCAN_RHYTHM_PROFILE', 'conservative'),
+        'max_initial_pause' => env('MAX_INITIAL_PAUSE', 3.5),
+                    'ffmpeg_path' => env('FFMPEG_PATH', base_path('storage/tools/ffmpeg/bin/ffmpeg.exe')),
+            'ffprobe_path' => env('FFPROBE_PATH', base_path('storage/tools/ffmpeg/bin/ffprobe.exe')),
+            // Multi-source transcription tools
+            'whisper_cpp_path' => env('WHISPER_CPP_PATH', 'whisper'),
+            'whisper_model_path' => env('WHISPER_MODEL_PATH', 'models/ggml-base.bin'),
+            'coqui_tts_path' => env('COQUI_TTS_PATH', 'tts'),
     ],
 
     'video_trim' => [
