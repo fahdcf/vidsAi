@@ -25,6 +25,7 @@ class Scene extends Model
         'keywords',
         'prompt',
         'status',
+        'job_id',
         'approved'
     ];
 

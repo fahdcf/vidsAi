@@ -256,25 +256,38 @@ class SceneGenerationService
                 'timestamp' => now()->toISOString()
             ]);
 
-            // Step 4: Generate scene phrases using Gemini
-            $this->logToCustomFile('🤖 Step 4: Starting scene generation with Gemini', [
-                'project_id' => $project->id,
-                'script' => $script,
-                'transcript_words_count' => count($transcriptData['words'] ?? []),
-                'script_length' => strlen($script),
-                'language' => $project->language,
-                'is_arabic' => $isArabic ? 'yes' : 'no',
-                'transcript_timing_ready' => isset($transcriptData['words'][0]['start']) ? 'yes' : 'no',
-                'subtitle_timing_compatible' => isset($transcriptData['words'][0]['start']) ? 'yes - will preserve transcript timing' : 'no - will use estimated timing',
-                'gemini_url' => config('services.gemini.base_url'),
-                'gemini_api_key_length' => strlen(config('services.gemini.api_key')),
-                'timestamp' => now()->toISOString()
-            ]);
+            // Validate transcript data before proceeding
+            if (empty($transcriptData['words']) || !is_array($transcriptData['words'])) {
+                $this->logToCustomFile('⚠️ Invalid transcript data, using script-only fallback', [
+                    'project_id' => $project->id,
+                    'transcript_data' => $transcriptData,
+                    'words_count' => count($transcriptData['words'] ?? [])
+                ]);
+                
+                // Generate synthetic timing and proceed with script-only generation
+                $syntheticTiming = $this->estimateTimingWhenNoTranscript($voiceoverFullPath, $script);
+                $sceneData = $this->generateScenePhrases($script, $syntheticTiming, $project->language);
+            } else {
+                // Step 4: Generate scene phrases using Gemini
+                $this->logToCustomFile('🤖 Step 4: Starting scene generation with Gemini', [
+                    'project_id' => $project->id,
+                    'script' => $script,
+                    'transcript_words_count' => count($transcriptData['words'] ?? []),
+                    'script_length' => strlen($script),
+                    'language' => $project->language,
+                    'is_arabic' => $isArabic ? 'yes' : 'no',
+                    'transcript_timing_ready' => isset($transcriptData['words'][0]['start']) ? 'yes' : 'no',
+                    'subtitle_timing_compatible' => isset($transcriptData['words'][0]['start']) ? 'yes - will preserve transcript timing' : 'no - will use estimated timing',
+                    'gemini_url' => config('services.gemini.base_url'),
+                    'gemini_api_key_length' => strlen(config('services.gemini.api_key')),
+                    'timestamp' => now()->toISOString()
+                ]);
             try {
                 $sceneData = $this->generateScenePhrases($script, $transcriptData, $project->language);
             } catch (\Exception $e) {
                 // If Gemini reports mismatch, retry using transcript text as script (voice-first fallback)
-                if (stripos($e->getMessage(), 'Audio does not match script') !== false) {
+                if (stripos($e->getMessage(), 'Audio does not match script') !== false || 
+                    stripos($e->getMessage(), 'Gemini error: Audio does not match script') !== false) {
                     $this->logToCustomFile('🔁 Gemini mismatch detected, retrying with transcript as script', [
                         'project_id' => $project->id,
                         'original_script_length' => strlen($script),
@@ -282,13 +295,36 @@ class SceneGenerationService
                     ]);
 
                     $fallbackScript = $transcriptData['text'] ?? '';
+                    $this->logToCustomFile('🔍 Fallback analysis', [
+                        'project_id' => $project->id,
+                        'fallback_script_length' => strlen($fallbackScript),
+                        'fallback_script_preview' => substr($fallbackScript, 0, 100),
+                        'transcript_words_count' => count($transcriptData['words'] ?? []),
+                        'transcript_data_keys' => array_keys($transcriptData)
+                    ]);
+                    
                     if (!empty($fallbackScript)) {
-                        $sceneData = $this->generateScenePhrases($fallbackScript, $transcriptData, $project->language);
+                        $this->logToCustomFile('🔄 Retrying with transcript as script', [
+                            'project_id' => $project->id,
+                            'fallback_script' => $fallbackScript
+                        ]);
+                        try {
+                            $sceneData = $this->generateScenePhrases($fallbackScript, $transcriptData, $project->language);
+                        } catch (\Exception $fallbackError) {
+                            $this->logToCustomFile('❌ Fallback with transcript also failed', [
+                                'project_id' => $project->id,
+                                'fallback_error' => $fallbackError->getMessage()
+                            ]);
+                            // Try script-only fallback
+                            $syntheticTiming = $this->estimateTimingWhenNoTranscript($voiceoverFullPath, $script);
+                            $sceneData = $this->generateScenePhrases($script, $syntheticTiming, $project->language);
+                        }
                     } else {
                         // As last resort, generate from script only (empty words). Backfill durations.
                         $this->logToCustomFile('🪄 Script-only fallback: generating scenes without transcript', [
                             'project_id' => $project->id,
-                            'script_length' => strlen($script)
+                            'script_length' => strlen($script),
+                            'transcript_data' => $transcriptData
                         ]);
                         $syntheticTiming = $this->estimateTimingWhenNoTranscript($voiceoverFullPath, $script);
                         $sceneData = $this->generateScenePhrases($script, $syntheticTiming, $project->language);
@@ -296,6 +332,7 @@ class SceneGenerationService
                 } else {
                     throw $e;
                 }
+            }
             }
 
             $this->logToCustomFile('📊 Step 4 completed: Scene generation results', [
@@ -590,6 +627,11 @@ class SceneGenerationService
             // Parse the JSON response
             $rawText = preg_replace('/```json\s*|\s*```/s', '', $rawText);
             $parsed = json_decode($rawText, true);
+
+            // Check if Gemini returned an error
+            if ($parsed && isset($parsed['error'])) {
+                throw new \Exception('Gemini error: ' . $parsed['error']);
+            }
 
             if (!$parsed || !isset($parsed['phrases']) || !is_array($parsed['phrases'])) {
                 throw new \Exception('Invalid response format from Gemini: ' . $rawText);

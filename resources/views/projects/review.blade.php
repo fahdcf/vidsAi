@@ -1641,6 +1641,30 @@
                                 <textarea class="form-control" id="aiPrompt" rows="4" placeholder="Click 'Generate Prompt' for AI suggestions or describe the video you want to generate..."></textarea>
                                 <div class="form-text">Describe the style, mood, and content you want for the regenerated video.</div>
                             </div>
+
+                            <!-- AI Model Selection -->
+                            <div class="row mb-3">
+                                <div class="col-md-6">
+                                    <label for="aiModel" class="form-label fw-semibold">AI Model</label>
+                                    <select class="form-select" id="aiModel" onchange="updateResolutionOptions()">
+                                        <option value="wan2.2-t2v-plus">WAN 2.2 T2V Plus (Best Quality)</option>
+                                        <option value="wan2.1-t2v-turbo">WAN 2.1 T2V Turbo (Fast)</option>
+                                        <option value="wan2.1-t2v-plus">WAN 2.1 T2V Plus (Balanced)</option>
+                                    </select>
+                                    <div class="form-text" id="modelPricing"></div>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="aiResolution" class="form-label fw-semibold">Resolution</label>
+                                    <select class="form-select" id="aiResolution">
+                                        <option value="1920*1080">1920×1080 (16:9)</option>
+                                        <option value="1080*1920">1080×1920 (9:16)</option>
+                                        <option value="1440*1440">1440×1440 (1:1)</option>
+                                        <option value="1632*1248">1632×1248 (4:3)</option>
+                                        <option value="1248*1632">1248×1632 (3:4)</option>
+                                    </select>
+                                </div>
+                            </div>
+
                             <button type="button" class="btn btn-primary w-100" onclick="regenerateWithAI()">
                                 <i class="bi bi-robot me-2"></i>Regenerate with AI
                             </button>
@@ -2761,6 +2785,9 @@
                     }
                 });
             }
+
+            // Initialize AI model and resolution options
+            updateResolutionOptions();
         }
 
         // Initialize video time displays
@@ -2825,14 +2852,70 @@
 
 
 
+        // Progress helper functions
+        function getProgressText(status, progress) {
+            switch (status) {
+                case 'QUEUED':
+                    return `AI Job Queued... (${progress || 5}%)`;
+                case 'PROCESSING':
+                    return `AI Job Running... (${progress || 25}%)`;
+                case 'PENDING':
+                    return `AI Generation Starting... (${progress || 10}%)`;
+                case 'RUNNING':
+                    return `AI Generating Video... (${progress || 50}%)`;
+                default:
+                    return `AI Processing... (${progress || 25}%)`;
+            }
+        }
+
+        function showProgressMessage(message, progress) {
+            // Create or update progress message
+            let progressDiv = document.getElementById('ai-progress-message');
+            if (!progressDiv) {
+                progressDiv = document.createElement('div');
+                progressDiv.id = 'ai-progress-message';
+                progressDiv.className = 'alert alert-info mt-3';
+                progressDiv.style.position = 'fixed';
+                progressDiv.style.top = '20px';
+                progressDiv.style.right = '20px';
+                progressDiv.style.zIndex = '9999';
+                progressDiv.style.minWidth = '300px';
+                document.body.appendChild(progressDiv);
+            }
+            
+            progressDiv.innerHTML = `
+                <div class="d-flex align-items-center">
+                    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+                    <div>
+                        <strong>AI Video Generation</strong><br>
+                        <small>${message}</small>
+                        ${progress ? `<div class="progress mt-2" style="height: 4px;">
+                            <div class="progress-bar" role="progressbar" style="width: ${progress}%"></div>
+                        </div>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function hideProgressMessage() {
+            const progressDiv = document.getElementById('ai-progress-message');
+            if (progressDiv) {
+                progressDiv.remove();
+            }
+        }
+
         // Utility Functions
         let currentSceneId = null;
         let currentSceneKeywords = [];
 
         function regenerateScene(sceneId) {
+            console.log('🔄 Opening regenerate modal for scene:', sceneId);
+            
             // Store scene ID in the modal for later use
             const modal = document.getElementById('regenerateModal');
             modal.setAttribute('data-current-scene-id', sceneId);
+            
+            console.log('✅ Modal data attribute set:', modal.getAttribute('data-current-scene-id'));
 
             // Also update global variables for backward compatibility
             currentSceneId = sceneId;
@@ -2859,8 +2942,18 @@
             populateKeywords();
 
             // Show the regenerate modal
+            console.log('🎭 Opening modal with Bootstrap');
             const modalInstance = new bootstrap.Modal(modal);
             modalInstance.show();
+            
+            // Verify modal is open and data is set
+            setTimeout(() => {
+                console.log('🔍 Modal verification after opening:', {
+                    modalVisible: modal.classList.contains('show'),
+                    dataAttribute: modal.getAttribute('data-current-scene-id'),
+                    globalSceneId: currentSceneId
+                });
+            }, 100);
         }
 
         function populateKeywords() {
@@ -3138,14 +3231,250 @@
         }
 
         function regenerateWithAI() {
-            console.log('🤖 Regenerate with AI button clicked - showing coming soon message');
+            console.log('🤖 Regenerate with AI button clicked');
 
-            // Close modal first
-            const modal = bootstrap.Modal.getInstance(document.getElementById('regenerateModal'));
-            modal.hide();
+            const modal = document.getElementById('regenerateModal');
+            const aiPrompt = document.getElementById('aiPrompt').value.trim();
+            const aiModel = document.getElementById('aiModel').value;
+            const aiResolution = document.getElementById('aiResolution').value;
 
-            // Show coming soon message
-            showComingSoonMessage();
+            if (!aiPrompt) {
+                alert('Please enter an AI prompt or use the "Generate Prompt" button.');
+                return;
+            }
+
+            // Get current scene ID from the modal or global variable
+            const sceneId = modal.dataset.currentSceneId || modal.dataset.sceneId || currentSceneId;
+            console.log('🔍 Scene ID sources:', {
+                modalCurrentSceneId: modal.dataset.currentSceneId,
+                modalSceneId: modal.dataset.sceneId,
+                globalCurrentSceneId: currentSceneId,
+                finalSceneId: sceneId
+            });
+            
+            if (!sceneId) {
+                console.error('❌ No scene ID found in modal or global variable');
+                console.error('❌ Modal element:', modal);
+                console.error('❌ Modal dataset:', modal.dataset);
+                console.error('❌ Global currentSceneId:', currentSceneId);
+                alert('Error: Scene ID not found. Please try again.');
+                return;
+            }
+
+            console.log('🤖 Starting AI generation', {
+                sceneId: sceneId,
+                prompt: aiPrompt,
+                model: aiModel,
+                resolution: aiResolution
+            });
+
+            // Close modal
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            modalInstance.hide();
+
+            // Show loading state
+            const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
+            if (button) {
+                button.innerHTML = '<i class="bi bi-hourglass-split me-2"></i>Generating AI Video...';
+                button.disabled = true;
+            }
+
+            // Send AI generation request
+            const regenerateUrl = `{{ route('scenes.regenerate-proxy', ['scene' => '__SCENE_ID__']) }}`.replace('__SCENE_ID__', sceneId);
+            console.log('🌐 AI Regenerate URL:', regenerateUrl);
+            
+            fetch(regenerateUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({
+                    regeneration_option: 'ai',
+                    keywords: aiPrompt, // Use prompt as keywords for fallback
+                    ai_prompt: aiPrompt,
+                    ai_model: aiModel,
+                    ai_resolution: aiResolution
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('🤖 AI generation response:', data);
+
+                if (data.success) {
+                    if (data.polling_required) {
+                        // Start polling for completion
+                        startAiGenerationPolling(sceneId, data.task_id);
+                        showSuccessMessage('AI video generation job queued! This may take a few minutes...');
+                        
+                        // Show initial progress message
+                        showProgressMessage('AI video generation job queued successfully', 5);
+                    } else {
+                        // Immediate success (shouldn't happen with AI)
+                        showSuccessMessage('AI video generation completed!');
+                        location.reload();
+                    }
+                } else {
+                    console.error('❌ AI generation failed:', data.message);
+                    alert(`AI generation failed: ${data.message}`);
+                    
+                    // Reset button
+                    if (button) {
+                        button.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Regenerate';
+                        button.disabled = false;
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('❌ AI generation request failed:', error);
+                alert('Failed to start AI generation. Please try again.');
+                
+                // Reset button
+                if (button) {
+                    button.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Regenerate';
+                    button.disabled = false;
+                }
+            });
+        }
+
+        // AI Generation Polling
+        function startAiGenerationPolling(sceneId, taskId) {
+            console.log('🔄 Starting AI generation polling', { sceneId, taskId });
+            
+            const pollInterval = setInterval(() => {
+                checkAiGenerationStatus(sceneId, taskId, pollInterval);
+            }, 10000); // Poll every 10 seconds
+        }
+
+        function checkAiGenerationStatus(sceneId, taskId, pollInterval) {
+            const statusUrl = `{{ route('scenes.ai-status', ['scene' => '__SCENE_ID__']) }}`.replace('__SCENE_ID__', sceneId);
+            
+            fetch(statusUrl, {
+                method: 'GET',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('🔍 AI generation status check:', data);
+
+                if (data.status === 'SUCCEEDED') {
+                    clearInterval(pollInterval);
+                    hideProgressMessage();
+                    showSuccessMessage('AI video generation completed successfully!');
+                    
+                    // Reset button
+                    const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
+                    if (button) {
+                        button.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Regenerate';
+                        button.disabled = false;
+                    }
+                    
+                    // Reload page to show new video
+                    setTimeout(() => {
+                        location.reload();
+                    }, 2000);
+                } else if (data.status === 'FAILED') {
+                    clearInterval(pollInterval);
+                    hideProgressMessage();
+                    alert(`AI video generation failed: ${data.message}`);
+                    
+                    // Reset button
+                    const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
+                    if (button) {
+                        button.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Regenerate';
+                        button.disabled = false;
+                    }
+                } else {
+                    // Still processing - update button text with progress
+                    const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
+                    if (button) {
+                        const progressText = getProgressText(data.status, data.progress);
+                        button.innerHTML = `<i class="bi bi-hourglass-split me-2"></i>${progressText}`;
+                    }
+                    
+                    // Show progress message
+                    if (data.message) {
+                        showProgressMessage(data.message, data.progress || 25);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('❌ AI status check failed:', error);
+                clearInterval(pollInterval);
+                
+                // Reset button
+                const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
+                if (button) {
+                    button.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Regenerate';
+                    button.disabled = false;
+                }
+            });
+        }
+
+        // Update resolution options based on selected model
+        function updateResolutionOptions() {
+            const modelSelect = document.getElementById('aiModel');
+            const resolutionSelect = document.getElementById('aiResolution');
+            const pricingDiv = document.getElementById('modelPricing');
+            
+            const model = modelSelect.value;
+            
+            // Model configurations
+            const modelConfigs = {
+                'wan2.2-t2v-plus': {
+                    resolutions: [
+                        { value: '832*480', text: '832×480 (16:9)' },
+                        { value: '480*832', text: '480×832 (9:16)' },
+                        { value: '624*624', text: '624×624 (1:1)' },
+                        { value: '1920*1080', text: '1920×1080 (16:9)' },
+                        { value: '1080*1920', text: '1080×1920 (9:16)' },
+                        { value: '1440*1440', text: '1440×1440 (1:1)' },
+                        { value: '1632*1248', text: '1632×1248 (4:3)' },
+                        { value: '1248*1632', text: '1248×1632 (3:4)' }
+                    ],
+                    pricing: '480P: $0.02/second • 1080P: $0.10/second'
+                },
+                'wan2.1-t2v-turbo': {
+                    resolutions: [
+                        { value: '832*480', text: '832×480 (16:9)' },
+                        { value: '480*832', text: '480×832 (9:16)' },
+                        { value: '624*624', text: '624×624 (1:1)' },
+                        { value: '1280*720', text: '1280×720 (16:9)' },
+                        { value: '720*1280', text: '720×1280 (9:16)' },
+                        { value: '960*960', text: '960×960 (1:1)' },
+                        { value: '1088*832', text: '1088×832 (4:3)' },
+                        { value: '832*1088', text: '832×1088 (3:4)' }
+                    ],
+                    pricing: '480P: $0.036/second • 720P: $0.036/second'
+                },
+                'wan2.1-t2v-plus': {
+                    resolutions: [
+                        { value: '1280*720', text: '1280×720 (16:9)' },
+                        { value: '720*1280', text: '720×1280 (9:16)' },
+                        { value: '960*960', text: '960×960 (1:1)' },
+                        { value: '1088*832', text: '1088×832 (4:3)' },
+                        { value: '832*1088', text: '832×1088 (3:4)' }
+                    ],
+                    pricing: '720P: $0.10/second'
+                }
+            };
+            
+            const config = modelConfigs[model];
+            if (config) {
+                // Update resolution options
+                resolutionSelect.innerHTML = '';
+                config.resolutions.forEach(resolution => {
+                    const option = document.createElement('option');
+                    option.value = resolution.value;
+                    option.textContent = resolution.text;
+                    resolutionSelect.appendChild(option);
+                });
+                
+                // Update pricing info
+                pricingDiv.textContent = config.pricing;
+            }
         }
 
         function showComingSoonMessage() {

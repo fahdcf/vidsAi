@@ -34,6 +34,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/review/{project}/scenes/{scene}/upload', [ProjectController::class, 'uploadCustomMedia'])->name('projects.upload-custom');
     Route::put('/scenes/{scene}/update', [ProjectController::class, 'updateScene'])->name('scenes.update');
     Route::post('/scenes/{scene}/regenerate-proxy', [ProjectController::class, 'regenerateSceneProxy'])->name('scenes.regenerate-proxy');
+    Route::get('/scenes/{scene}/ai-status', [ProjectController::class, 'checkAiGenerationStatus'])->name('scenes.ai-status');
 
 
 

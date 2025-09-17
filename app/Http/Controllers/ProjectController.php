@@ -201,11 +201,18 @@ class ProjectController extends Controller
         $request->validate([
             'regeneration_option' => 'required|in:pexels,ai',
             'keywords' => 'required|string',
-            'ai_prompt' => 'nullable|string'
+            'ai_prompt' => 'nullable|string',
+            'ai_model' => 'nullable|string',
+            'ai_resolution' => 'nullable|string'
         ]);
 
         try {
-            // Prepare data for regeneration
+            // Handle AI generation differently
+            if ($request->regeneration_option === 'ai') {
+                return $this->handleAiGeneration($request, $scene);
+            }
+
+            // Prepare data for Pexels regeneration
             // Convert keywords string to array (split on ; , Arabic comma ، and new lines)
             $keywordsArray = preg_split('/[;,،\n\r]+/u', (string) $request->keywords);
             $keywordsArray = array_values(array_filter(array_map(function($k){
@@ -220,11 +227,6 @@ class ProjectController extends Controller
                 'scene_video_url' => $scene->video_url,
                 'keywords' => $keywordsArray // Send as array
             ];
-
-            // Add AI prompt if it's AI regeneration
-            if ($request->regeneration_option === 'ai' && $request->ai_prompt) {
-                $webhookData['ai_prompt'] = $request->ai_prompt;
-            }
 
             logger()->info('🌐 Sending request to n8n regenerate webhook', [
                 'webhook_data' => $webhookData,
@@ -335,6 +337,189 @@ class ProjectController extends Controller
                 'success' => false,
                 'message' => 'Regeneration failed: ' . $e->getMessage()
             ], 500);
+        }
+    }
+
+    /**
+     * Handle AI video generation using WAN AI
+     */
+    private function handleAiGeneration(Request $request, Scene $scene)
+    {
+        try {
+            logger()->info('🤖 Starting AI video generation', [
+                'scene_id' => $scene->id,
+                'ai_prompt' => $request->ai_prompt,
+                'ai_model' => $request->ai_model,
+                'ai_resolution' => $request->ai_resolution
+            ]);
+
+            // Validate AI parameters
+            $aiPrompt = $request->ai_prompt ?: $request->keywords;
+            $aiModel = $request->ai_model ?: 'wan2.2-t2v-plus';
+            $aiResolution = $request->ai_resolution ?: '1920*1080';
+
+            if (empty($aiPrompt)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'AI prompt is required for AI generation'
+                ], 422);
+            }
+
+            // Dispatch WAN AI generation job to queue
+            $job = new \App\Jobs\WanAiVideoGenerationJob($scene, $aiPrompt, $aiModel, $aiResolution);
+            dispatch($job);
+
+            logger()->info('✅ AI video generation job dispatched successfully', [
+                'scene_id' => $scene->id,
+                'prompt' => $aiPrompt,
+                'model' => $aiModel,
+                'resolution' => $aiResolution
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'message' => 'AI video generation job queued successfully',
+                'status' => 'QUEUED',
+                'scene_id' => $scene->id,
+                'polling_required' => true
+            ]);
+
+        } catch (\Exception $e) {
+            logger()->error('❌ AI generation handler failed', [
+                'scene_id' => $scene->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'AI generation failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Check AI video generation status
+     */
+    public function checkAiGenerationStatus(Scene $scene)
+    {
+        try {
+            // Check if scene is still processing (job might still be running)
+            if ($scene->status === 'processing' && !$scene->job_id) {
+                return response()->json([
+                    'success' => true,
+                    'status' => 'PROCESSING',
+                    'message' => 'AI video generation job is running...',
+                    'progress' => 25
+                ]);
+            }
+
+            if (!$scene->job_id) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No AI generation task found for this scene'
+                ], 404);
+            }
+
+            $wanAiService = new \App\Services\WanAiVideoGenerationService();
+            $status = $wanAiService->checkTaskStatus($scene->job_id);
+
+            // Handle different WAN AI status values based on documentation
+            switch ($status['status']) {
+                case 'SUCCEEDED':
+                    // Update scene with the generated video
+                    $wanAiService->updateSceneWithVideo($scene, $status['video_url']);
+
+                    return response()->json([
+                        'success' => true,
+                        'status' => 'SUCCEEDED',
+                        'video_url' => $status['video_url'],
+                        'message' => 'AI video generation completed successfully'
+                    ]);
+
+                case 'FAILED':
+                    // Update scene status to failed
+                    $scene->update(['status' => 'failed']);
+
+                    return response()->json([
+                        'success' => false,
+                        'status' => 'FAILED',
+                        'message' => 'AI video generation failed: ' . ($status['error_message'] ?? 'Unknown error')
+                    ]);
+
+                case 'CANCELED':
+                    // Update scene status to pending (can retry)
+                    $scene->update(['status' => 'pending', 'job_id' => null]);
+
+                    return response()->json([
+                        'success' => false,
+                        'status' => 'CANCELED',
+                        'message' => 'AI video generation was canceled'
+                    ]);
+
+                case 'UNKNOWN':
+                    // Task expired (24 hours), update scene status
+                    $scene->update(['status' => 'failed', 'job_id' => null]);
+
+                    return response()->json([
+                        'success' => false,
+                        'status' => 'UNKNOWN',
+                        'message' => 'AI video generation task expired (24 hours)'
+                    ]);
+
+                case 'PENDING':
+                case 'RUNNING':
+                default:
+                    // Still processing - provide progress information
+                    $progressMessage = $this->getProgressMessage($status['status']);
+                    
+                    return response()->json([
+                        'success' => true,
+                        'status' => $status['status'],
+                        'message' => $progressMessage,
+                        'progress' => $this->getProgressPercentage($status['status'])
+                    ]);
+            }
+
+        } catch (\Exception $e) {
+            logger()->error('❌ AI status check failed', [
+                'scene_id' => $scene->id,
+                'error' => $e->getMessage()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to check AI generation status: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get progress message for AI generation status
+     */
+    private function getProgressMessage(string $status): string
+    {
+        switch ($status) {
+            case 'PENDING':
+                return 'AI video generation request submitted and waiting to start...';
+            case 'RUNNING':
+                return 'AI is generating your video. This may take 2-5 minutes...';
+            default:
+                return 'AI video generation in progress...';
+        }
+    }
+
+    /**
+     * Get progress percentage for AI generation status
+     */
+    private function getProgressPercentage(string $status): int
+    {
+        switch ($status) {
+            case 'PENDING':
+                return 10;
+            case 'RUNNING':
+                return 50;
+            default:
+                return 25;
         }
     }
 

@@ -94,4 +94,30 @@ return [
         'status_endpoint' => env('VIDEO_RENDER_STATUS_ENDPOINT', '/status'),
     ],
 
+    'wan_ai' => [
+        'api_key' => env('WAN_AI_API_KEY'),
+        'base_url' => env('WAN_AI_BASE_URL', 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis'),
+        'task_status_url' => env('WAN_AI_TASK_STATUS_URL', 'https://dashscope-intl.aliyuncs.com/api/v1/tasks'),
+        'models' => [
+            'wan2.2-t2v-plus' => [
+                'name' => 'WAN 2.2 T2V Plus',
+                'resolutions' => ['832*480', '480*832', '624*624', '1920*1080', '1080*1920', '1440*1440', '1632*1248', '1248*1632'],
+                'default_resolution' => '1920*1080',
+                'pricing' => ['480P: $0.02/second', '1080P: $0.10/second']
+            ],
+            'wan2.1-t2v-turbo' => [
+                'name' => 'WAN 2.1 T2V Turbo',
+                'resolutions' => ['832*480', '480*832', '624*624', '1280*720', '720*1280', '960*960', '1088*832', '832*1088'],
+                'default_resolution' => '1280*720',
+                'pricing' => ['480P: $0.036/second', '720P: $0.036/second']
+            ],
+            'wan2.1-t2v-plus' => [
+                'name' => 'WAN 2.1 T2V Plus',
+                'resolutions' => ['1280*720', '720*1280', '960*960', '1088*832', '832*1088'],
+                'default_resolution' => '1280*720',
+                'pricing' => ['720P: $0.10/second']
+            ]
+        ]
+    ],
+
 ];
