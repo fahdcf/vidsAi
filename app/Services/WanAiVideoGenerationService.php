@@ -11,13 +11,17 @@ class WanAiVideoGenerationService
     /**
      * Generate video using WAN AI
      */
-    public function generateVideo(Scene $scene, string $prompt, string $model = 'wan2.2-t2v-plus', string $resolution = '1920*1080'): array
+    public function generateVideo(Scene $scene, string $prompt, string $model = 'wan2.2-t2v-plus', string $resolution = '1920*1080', string $generationType = 'text-to-video', ?string $imageUrl = null): array
     {
         try {
             Log::info('🤖 Starting WAN AI video generation', [
                 'scene_id' => $scene->id,
                 'model' => $model,
                 'resolution' => $resolution,
+                'generation_type' => $generationType,
+                'image_url' => $imageUrl,
+                'image_url_type' => gettype($imageUrl),
+                'image_url_empty' => empty($imageUrl),
                 'prompt_length' => strlen($prompt)
             ]);
 
@@ -31,7 +35,7 @@ class WanAiVideoGenerationService
             $this->validateModelAndResolution($model, $resolution);
 
             // Prepare the request data
-            $requestData = $this->prepareRequestData($prompt, $model, $resolution);
+            $requestData = $this->prepareRequestData($prompt, $model, $resolution, $generationType, $imageUrl);
 
             // Send the generation request
             $response = $this->sendGenerationRequest($requestData);
@@ -225,23 +229,45 @@ class WanAiVideoGenerationService
     /**
      * Prepare request data for WAN AI API
      */
-    private function prepareRequestData(string $prompt, string $model, string $resolution): array
+    private function prepareRequestData(string $prompt, string $model, string $resolution, string $generationType = 'text-to-video', ?string $imageUrl = null): array
     {
         // Enhance the prompt with cinematic quality instructions
         $enhancedPrompt = $this->enhancePrompt($prompt);
 
-        return [
+        $requestData = [
             'model' => $model,
-            'input' => [
-                'prompt' => $enhancedPrompt,
-                'negative_prompt' => 'text, logo, distortion, glitch, low quality, poor lighting, artifacts, watermark, blurry, pixelated'
-            ],
             'parameters' => [
                 'size' => $resolution,
                 'prompt_extend' => true,
                 'watermark' => false
             ]
         ];
+
+        if ($generationType === 'image-to-video') {
+            // Image-to-video request format
+            Log::info('🖼️ Preparing image-to-video request', [
+                'image_url' => $imageUrl,
+                'image_url_type' => gettype($imageUrl),
+                'image_url_empty' => empty($imageUrl)
+            ]);
+            
+            $requestData['input'] = [
+                'prompt' => $enhancedPrompt,
+                'img_url' => $imageUrl,
+                'negative_prompt' => 'text, logo, distortion, glitch, low quality, poor lighting, artifacts, watermark, blurry, pixelated'
+            ];
+            
+            // For image-to-video, keep size parameter (not resolution)
+            // The API expects size in format like "720*1280"
+        } else {
+            // Text-to-video request format
+            $requestData['input'] = [
+                'prompt' => $enhancedPrompt,
+                'negative_prompt' => 'text, logo, distortion, glitch, low quality, poor lighting, artifacts, watermark, blurry, pixelated'
+            ];
+        }
+
+        return $requestData;
     }
 
     /**
@@ -288,7 +314,9 @@ class WanAiVideoGenerationService
             Log::info('📤 Sending WAN AI generation request', [
                 'url' => $baseUrl,
                 'model' => $requestData['model'],
-                'resolution' => $requestData['parameters']['size']
+                'parameters' => $requestData['parameters'],
+                'input' => $requestData['input'],
+                'full_request' => $requestData
             ]);
 
             $response = Http::withOptions([
@@ -368,4 +396,5 @@ class WanAiVideoGenerationService
         $models = config('services.wan_ai.models');
         return $models[$model]['resolutions'] ?? [];
     }
+
 }

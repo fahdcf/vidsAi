@@ -116,6 +116,30 @@ return [
                 'resolutions' => ['1280*720', '720*1280', '960*960', '1088*832', '832*1088'],
                 'default_resolution' => '1280*720',
                 'pricing' => ['720P: $0.10/second']
+            ],
+            'wan2.2-i2v-flash' => [
+                'name' => 'WAN 2.2 I2V Flash',
+                'resolutions' => ['832*480', '480*832', '624*624', '1280*720', '720*1280', '960*960', '1088*832', '832*1088'],
+                'default_resolution' => '1280*720',
+                'pricing' => ['480P: $0.015/second', '720P: $0.036/second']
+            ],
+            'wan2.2-i2v-plus' => [
+                'name' => 'WAN 2.2 I2V Plus',
+                'resolutions' => ['832*480', '480*832', '624*624', '1920*1080', '1080*1920', '1440*1440', '1632*1248', '1248*1632'],
+                'default_resolution' => '1920*1080',
+                'pricing' => ['480P: $0.02/second', '1080P: $0.10/second']
+            ],
+            'wan2.1-i2v-turbo' => [
+                'name' => 'WAN 2.1 I2V Turbo',
+                'resolutions' => ['832*480', '480*832', '624*624', '1280*720', '720*1280', '960*960', '1088*832', '832*1088'],
+                'default_resolution' => '1280*720',
+                'pricing' => ['480P: $0.036/second', '720P: $0.036/second']
+            ],
+            'wan2.1-i2v-plus' => [
+                'name' => 'WAN 2.1 I2V Plus',
+                'resolutions' => ['1280*720', '720*1280', '960*960', '1088*832', '832*1088'],
+                'default_resolution' => '1280*720',
+                'pricing' => ['720P: $0.10/second']
             ]
         ]
     ],

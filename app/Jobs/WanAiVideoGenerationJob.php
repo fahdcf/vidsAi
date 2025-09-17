@@ -23,7 +23,9 @@ class WanAiVideoGenerationJob implements ShouldQueue
         public Scene $scene,
         public string $prompt,
         public string $model = 'wan2.2-t2v-plus',
-        public string $resolution = '1920*1080'
+        public string $resolution = '1920*1080',
+        public string $generationType = 'text-to-video',
+        public ?string $imageUrl = null
     ) {
         //
     }
@@ -39,8 +41,13 @@ class WanAiVideoGenerationJob implements ShouldQueue
                 'prompt' => $this->prompt,
                 'model' => $this->model,
                 'resolution' => $this->resolution,
+                'generation_type' => $this->generationType,
+                'image_url' => $this->imageUrl,
+                'image_url_type' => gettype($this->imageUrl),
+                'image_url_empty' => empty($this->imageUrl),
                 'job_attempt' => $this->attempts(),
-                'max_tries' => $this->tries
+                'max_tries' => $this->tries,
+                'job_id' => $this->job->getJobId()
             ]);
 
             // Update scene status to processing
@@ -48,7 +55,14 @@ class WanAiVideoGenerationJob implements ShouldQueue
 
             // Use the WAN AI service
             $wanAiService = new WanAiVideoGenerationService();
-            $result = $wanAiService->generateVideo($this->scene, $this->prompt, $this->model, $this->resolution);
+            $result = $wanAiService->generateVideo(
+                $this->scene, 
+                $this->prompt, 
+                $this->model, 
+                $this->resolution,
+                $this->generationType,
+                $this->imageUrl
+            );
 
             if ($result['success']) {
                 Log::info('✅ WAN AI video generation job completed successfully', [

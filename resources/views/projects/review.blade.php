@@ -805,6 +805,40 @@
             background: rgba(255, 255, 255, 0.2);
         }
 
+        /* Image Upload Styles */
+        .upload-area {
+            position: relative;
+            cursor: pointer;
+        }
+
+        .upload-placeholder {
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+            border-color: #dee2e6 !important;
+        }
+
+        .upload-placeholder:hover {
+            background: #e9ecef;
+            border-color: #3b82f6 !important;
+        }
+
+        .uploaded-image img {
+            border: 2px solid #e5e7eb;
+            transition: border-color 0.3s ease;
+        }
+
+        .uploaded-image img:hover {
+            border-color: #3b82f6;
+        }
+
+        /* Generation Type Toggle */
+        .btn-check:checked + .btn-outline-primary {
+            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            border-color: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+
         /* Loading Animation */
         .spin {
             animation: spin 1s linear infinite;
@@ -1631,6 +1665,24 @@
 
                         <!-- AI Tab -->
                         <div class="tab-pane fade" id="ai-content" role="tabpanel">
+                            <!-- AI Generation Type Selection -->
+                            <div class="mb-4">
+                                <label class="form-label fw-semibold">Generation Type</label>
+                                <div class="btn-group w-100" role="group">
+                                    <input type="radio" class="btn-check" name="aiGenerationType" id="textToVideo" value="text-to-video" checked>
+                                    <label class="btn btn-outline-primary" for="textToVideo">
+                                        <i class="bi bi-type me-2"></i>Text to Video
+                                    </label>
+                                    
+                                    <input type="radio" class="btn-check" name="aiGenerationType" id="imageToVideo" value="image-to-video">
+                                    <label class="btn btn-outline-primary" for="imageToVideo">
+                                        <i class="bi bi-image me-2"></i>Image to Video
+                                    </label>
+                                </div>
+                            </div>
+
+                            <!-- Text to Video Section -->
+                            <div id="textToVideoSection">
                             <div class="mb-3">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <label for="aiPrompt" class="form-label fw-semibold mb-0">AI Prompt</label>
@@ -1640,6 +1692,37 @@
                                 </div>
                                 <textarea class="form-control" id="aiPrompt" rows="4" placeholder="Click 'Generate Prompt' for AI suggestions or describe the video you want to generate..."></textarea>
                                 <div class="form-text">Describe the style, mood, and content you want for the regenerated video.</div>
+                                </div>
+                            </div>
+
+                            <!-- Image to Video Section -->
+                            <div id="imageToVideoSection" style="display: none;">
+                                <div class="mb-3">
+                                    <label for="imageUpload" class="form-label fw-semibold">First Frame Image</label>
+                                    <div class="upload-area" id="imageUploadArea">
+                                        <input type="file" class="form-control d-none" id="imageUpload" accept="image/*" onchange="handleImageUpload(event)">
+                                        <div class="upload-placeholder text-center p-4 border-2 border-dashed rounded">
+                                            <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
+                                            <p class="mb-2 fw-semibold">Click to upload image</p>
+                                            <p class="text-muted small mb-0">Supports JPEG, JPG, PNG, BMP, WEBP (Max 10MB)</p>
+                                        </div>
+                                        <div class="uploaded-image d-none" id="uploadedImagePreview">
+                                            <img id="imagePreview" class="img-fluid rounded mb-2" style="max-height: 200px;">
+                                            <div class="d-flex justify-content-between align-items-center">
+                                                <small class="text-muted" id="imageInfo"></small>
+                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedImage()">
+                                                    <i class="bi bi-trash me-1"></i>Remove
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <div class="mb-3">
+                                    <label for="imagePrompt" class="form-label fw-semibold">Video Prompt</label>
+                                    <textarea class="form-control" id="imagePrompt" rows="3" placeholder="Describe the motion and action you want in the video..."></textarea>
+                                    <div class="form-text">Describe how the image should animate or what motion should occur.</div>
+                                </div>
                             </div>
 
                             <!-- AI Model Selection -->
@@ -1650,6 +1733,10 @@
                                         <option value="wan2.2-t2v-plus">WAN 2.2 T2V Plus (Best Quality)</option>
                                         <option value="wan2.1-t2v-turbo">WAN 2.1 T2V Turbo (Fast)</option>
                                         <option value="wan2.1-t2v-plus">WAN 2.1 T2V Plus (Balanced)</option>
+                                        <option value="wan2.2-i2v-flash">WAN 2.2 I2V Flash (Image to Video)</option>
+                                        <option value="wan2.2-i2v-plus">WAN 2.2 I2V Plus (Image to Video)</option>
+                                        <option value="wan2.1-i2v-turbo">WAN 2.1 I2V Turbo (Image to Video)</option>
+                                        <option value="wan2.1-i2v-plus">WAN 2.1 I2V Plus (Image to Video)</option>
                                     </select>
                                     <div class="form-text" id="modelPricing"></div>
                                 </div>
@@ -2831,6 +2918,9 @@
             // Initialize regenerate modal functionality
             initializeRegenerateModal();
 
+            // Initialize image upload and generation type functionality
+            initializeImageUploadAndGenerationType();
+
             players.forEach(player => {
                 const sceneId = player.dataset.sceneId;
                 console.log(`Initializing timeline for scene ${sceneId}`);
@@ -3060,8 +3150,17 @@
             console.log('🌐 Keywords:', sceneKeywords.join('; '));
 
             // Make request via Laravel proxy to avoid CORS issues
-            const regenerateUrl = `{{ route('scenes.regenerate-proxy', ['scene' => '__SCENE_ID__']) }}`.replace('__SCENE_ID__', sceneId);
+            // Use the correct base URL for Laragon setup
+            const currentPath = window.location.pathname;
+            const pathParts = currentPath.split('/');
+            const reviewIndex = pathParts.findIndex(part => part === 'review');
+            const basePath = pathParts.slice(0, reviewIndex).join('/');
+            const regenerateUrl = basePath + '/scenes/' + sceneId + '/regenerate-proxy';
             console.log('🌐 Regenerate URL:', regenerateUrl);
+            console.log('📁 Current Path:', currentPath);
+            console.log('📁 Path Parts:', pathParts);
+            console.log('📁 Review Index:', reviewIndex);
+            console.log('📁 Base Path:', basePath);
 
             fetch(regenerateUrl, {
                 method: 'POST',
@@ -3230,17 +3329,211 @@
             }, 2000);
         }
 
-        function regenerateWithAI() {
+        // Image upload and generation type handling
+        let uploadedImageFile = null;
+        let uploadedImageUrl = null;
+
+        function handleImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file type
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                showErrorMessage('Please upload a valid image file (JPEG, JPG, PNG, BMP, WEBP)');
+                return;
+            }
+
+            // Validate file size (10MB max)
+            const maxSize = 10 * 1024 * 1024; // 10MB
+            if (file.size > maxSize) {
+                showErrorMessage('Image file size must be less than 10MB');
+                return;
+            }
+
+            // Validate image dimensions (360-2000 pixels)
+            const img = new Image();
+            img.onload = function() {
+                if (this.width < 360 || this.width > 2000 || this.height < 360 || this.height > 2000) {
+                    showErrorMessage('Image dimensions must be between 360x360 and 2000x2000 pixels');
+                    return;
+                }
+
+                // Store the file and show preview
+                uploadedImageFile = file;
+                showImagePreview(file);
+            };
+            img.src = URL.createObjectURL(file);
+        }
+
+        function showImagePreview(file) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const preview = document.getElementById('imagePreview');
+                const info = document.getElementById('imageInfo');
+                const placeholder = document.querySelector('.upload-placeholder');
+                const uploadedDiv = document.getElementById('uploadedImagePreview');
+
+                preview.src = e.target.result;
+                info.textContent = `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`;
+                
+                placeholder.classList.add('d-none');
+                uploadedDiv.classList.remove('d-none');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeUploadedImage() {
+            uploadedImageFile = null;
+            uploadedImageUrl = null;
+            
+            const placeholder = document.querySelector('.upload-placeholder');
+            const uploadedDiv = document.getElementById('uploadedImagePreview');
+            const fileInput = document.getElementById('imageUpload');
+            
+            placeholder.classList.remove('d-none');
+            uploadedDiv.classList.add('d-none');
+            fileInput.value = '';
+        }
+
+        function updateModelOptions(type) {
+            const modelSelect = document.getElementById('aiModel');
+            
+            // Clear and repopulate options based on type
+            modelSelect.innerHTML = '';
+            
+            if (type === 'text-to-video') {
+                modelSelect.innerHTML = `
+                    <option value="wan2.2-t2v-plus">WAN 2.2 T2V Plus (Best Quality)</option>
+                    <option value="wan2.1-t2v-turbo">WAN 2.1 T2V Turbo (Fast)</option>
+                    <option value="wan2.1-t2v-plus">WAN 2.1 T2V Plus (Balanced)</option>
+                `;
+            } else {
+                modelSelect.innerHTML = `
+                    <option value="wan2.2-i2v-flash">WAN 2.2 I2V Flash (Fast)</option>
+                    <option value="wan2.2-i2v-plus">WAN 2.2 I2V Plus (Best Quality)</option>
+                    <option value="wan2.1-i2v-turbo">WAN 2.1 I2V Turbo (Fast)</option>
+                    <option value="wan2.1-i2v-plus">WAN 2.1 I2V Plus (Balanced)</option>
+                `;
+            }
+            
+            // Update resolution options
+            updateResolutionOptions();
+        }
+
+        function initializeImageUploadAndGenerationType() {
+            const textToVideoRadio = document.getElementById('textToVideo');
+            const imageToVideoRadio = document.getElementById('imageToVideo');
+            const textToVideoSection = document.getElementById('textToVideoSection');
+            const imageToVideoSection = document.getElementById('imageToVideoSection');
+
+            function updateGenerationType() {
+                if (textToVideoRadio.checked) {
+                    textToVideoSection.style.display = 'block';
+                    imageToVideoSection.style.display = 'none';
+                    updateModelOptions('text-to-video');
+                } else {
+                    textToVideoSection.style.display = 'none';
+                    imageToVideoSection.style.display = 'block';
+                    updateModelOptions('image-to-video');
+                }
+            }
+
+            if (textToVideoRadio && imageToVideoRadio) {
+                textToVideoRadio.addEventListener('change', updateGenerationType);
+                imageToVideoRadio.addEventListener('change', updateGenerationType);
+            }
+
+            // Make upload area clickable
+            const uploadArea = document.getElementById('imageUploadArea');
+            if (uploadArea) {
+                uploadArea.addEventListener('click', function() {
+                    document.getElementById('imageUpload').click();
+                });
+            }
+        }
+
+        async function uploadImageToServer(file) {
+            try {
+                console.log('📤 Uploading image to server (will be uploaded to 0x0)...', file.name);
+                console.log('📊 File details:', {
+                    name: file.name,
+                    size: file.size,
+                    type: file.type,
+                    lastModified: file.lastModified
+                });
+                
+                const formData = new FormData();
+                formData.append('image', file);
+                formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
+
+                // Use the correct base URL for Laragon setup
+                const currentPath = window.location.pathname;
+                const pathParts = currentPath.split('/');
+                const reviewIndex = pathParts.findIndex(part => part === 'review');
+                const basePath = pathParts.slice(0, reviewIndex).join('/');
+                const uploadUrl = basePath + '/upload-image';
+                
+                console.log('🌐 Upload URL:', uploadUrl);
+
+                const response = await fetch(uploadUrl, {
+                    method: 'POST',
+                    body: formData,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                });
+                
+                console.log('📡 Upload response status:', response.status);
+                console.log('📡 Upload response headers:', Object.fromEntries(response.headers.entries()));
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('❌ Upload error response:', errorText);
+                    throw new Error(`Upload failed: ${response.status} - ${errorText}`);
+                }
+
+                const result = await response.json();
+                
+                if (result.success && result.url) {
+                    uploadedImageUrl = result.url;
+                    console.log('✅ Image uploaded to 0x0 successfully:', uploadedImageUrl);
+                    return result.url;
+                } else {
+                    throw new Error('Invalid response from server: ' + JSON.stringify(result));
+                }
+            } catch (error) {
+                console.error('❌ Image upload failed:', error);
+                showErrorMessage('Failed to upload image: ' + error.message);
+                throw error;
+            }
+        }
+
+        async function regenerateWithAI() {
             console.log('🤖 Regenerate with AI button clicked');
 
             const modal = document.getElementById('regenerateModal');
-            const aiPrompt = document.getElementById('aiPrompt').value.trim();
+            const generationType = document.querySelector('input[name="aiGenerationType"]:checked').value;
             const aiModel = document.getElementById('aiModel').value;
             const aiResolution = document.getElementById('aiResolution').value;
 
+            // Validate based on generation type
+            if (generationType === 'text-to-video') {
+                const aiPrompt = document.getElementById('aiPrompt').value.trim();
             if (!aiPrompt) {
                 alert('Please enter an AI prompt or use the "Generate Prompt" button.');
                 return;
+                }
+            } else {
+                const imagePrompt = document.getElementById('imagePrompt').value.trim();
+                if (!uploadedImageFile) {
+                    alert('Please upload an image for the first frame.');
+                    return;
+                }
+                if (!imagePrompt) {
+                    alert('Please describe the motion and action you want in the video.');
+                    return;
+                }
             }
 
             // Get current scene ID from the modal or global variable
@@ -3280,8 +3573,49 @@
             }
 
             // Send AI generation request
-            const regenerateUrl = `{{ route('scenes.regenerate-proxy', ['scene' => '__SCENE_ID__']) }}`.replace('__SCENE_ID__', sceneId);
+            // Use the correct base URL for Laragon setup
+            const currentPath = window.location.pathname;
+            const pathParts = currentPath.split('/');
+            const reviewIndex = pathParts.findIndex(part => part === 'review');
+            const basePath = pathParts.slice(0, reviewIndex).join('/');
+            const regenerateUrl = basePath + '/scenes/' + sceneId + '/regenerate-proxy';
             console.log('🌐 AI Regenerate URL:', regenerateUrl);
+            console.log('📁 Current Path:', currentPath);
+            console.log('📁 Path Parts:', pathParts);
+            console.log('📁 Review Index:', reviewIndex);
+            console.log('📁 Base Path:', basePath);
+            console.log('🔍 Scene ID:', sceneId);
+            console.log('🔍 Full URL:', window.location.origin + regenerateUrl);
+            
+            // Prepare request data based on generation type
+            let requestData = {
+                regeneration_option: 'ai',
+                ai_model: aiModel,
+                ai_resolution: aiResolution
+            };
+
+            if (generationType === 'text-to-video') {
+                const aiPrompt = document.getElementById('aiPrompt').value.trim();
+                requestData.keywords = aiPrompt;
+                requestData.ai_prompt = aiPrompt;
+            } else {
+                const imagePrompt = document.getElementById('imagePrompt').value.trim();
+                requestData.keywords = imagePrompt; // Required field
+                requestData.ai_prompt = imagePrompt;
+                requestData.generation_type = 'image-to-video';
+                
+                // Upload image first if not already uploaded
+                if (uploadedImageFile && !uploadedImageUrl) {
+                    await uploadImageToServer(uploadedImageFile);
+                }
+                
+                if (uploadedImageUrl) {
+                    requestData.image_url = uploadedImageUrl;
+                }
+            }
+            
+            console.log('📤 Request data:', requestData);
+            console.log('🌐 Regenerate URL:', regenerateUrl);
             
             fetch(regenerateUrl, {
                 method: 'POST',
@@ -3289,22 +3623,35 @@
                     'Content-Type': 'application/json',
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
                 },
-                body: JSON.stringify({
-                    regeneration_option: 'ai',
-                    keywords: aiPrompt, // Use prompt as keywords for fallback
-                    ai_prompt: aiPrompt,
-                    ai_model: aiModel,
-                    ai_resolution: aiResolution
-                })
+                body: JSON.stringify(requestData),
+                credentials: 'same-origin'
             })
-            .then(response => response.json())
+            .then(async response => {
+                console.log('📡 AI generation response status:', response.status);
+                console.log('📡 AI generation response headers:', Object.fromEntries(response.headers.entries()));
+                
+                // Get response text for debugging
+                const responseText = await response.text();
+                console.log('📡 AI generation response body:', responseText);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status} - ${responseText}`);
+                }
+                
+                try {
+                    return JSON.parse(responseText);
+                } catch (parseError) {
+                    console.error('❌ Failed to parse JSON response:', parseError);
+                    throw new Error(`Invalid JSON response: ${responseText.substring(0, 200)}...`);
+                }
+            })
             .then(data => {
                 console.log('🤖 AI generation response:', data);
 
                 if (data.success) {
                     if (data.polling_required) {
                         // Start polling for completion
-                        startAiGenerationPolling(sceneId, data.task_id);
+                        startAiGenerationPolling(sceneId);
                         showSuccessMessage('AI video generation job queued! This may take a few minutes...');
                         
                         // Show initial progress message
@@ -3327,6 +3674,11 @@
             })
             .catch(error => {
                 console.error('❌ AI generation request failed:', error);
+                console.error('❌ Error details:', {
+                    message: error.message,
+                    stack: error.stack,
+                    name: error.name
+                });
                 alert('Failed to start AI generation. Please try again.');
                 
                 // Reset button
@@ -3338,22 +3690,32 @@
         }
 
         // AI Generation Polling
-        function startAiGenerationPolling(sceneId, taskId) {
-            console.log('🔄 Starting AI generation polling', { sceneId, taskId });
+        function startAiGenerationPolling(sceneId) {
+            console.log('🔄 Starting AI generation polling', { sceneId });
             
             const pollInterval = setInterval(() => {
-                checkAiGenerationStatus(sceneId, taskId, pollInterval);
+                checkAiGenerationStatus(sceneId, pollInterval);
             }, 10000); // Poll every 10 seconds
         }
 
-        function checkAiGenerationStatus(sceneId, taskId, pollInterval) {
-            const statusUrl = `{{ route('scenes.ai-status', ['scene' => '__SCENE_ID__']) }}`.replace('__SCENE_ID__', sceneId);
+        function checkAiGenerationStatus(sceneId, pollInterval) {
+            // Use the correct base URL for Laragon setup
+            const currentPath = window.location.pathname;
+            const pathParts = currentPath.split('/');
+            const reviewIndex = pathParts.findIndex(part => part === 'review');
+            const basePath = pathParts.slice(0, reviewIndex).join('/');
+            const statusUrl = basePath + '/scenes/' + sceneId + '/ai-status';
+            console.log('🔍 AI Status URL:', statusUrl);
+            console.log('🔍 Request with credentials: same-origin');
+            console.log('🔍 Cache busting timestamp:', Date.now());
+            console.log('🔍 Browser cache test - if you see this, cache is working');
             
             fetch(statusUrl, {
                 method: 'GET',
                 headers: {
                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                }
+                },
+                credentials: 'same-origin'
             })
             .then(response => response.json())
             .then(data => {
@@ -3450,6 +3812,55 @@
                     pricing: '480P: $0.036/second • 720P: $0.036/second'
                 },
                 'wan2.1-t2v-plus': {
+                    resolutions: [
+                        { value: '1280*720', text: '1280×720 (16:9)' },
+                        { value: '720*1280', text: '720×1280 (9:16)' },
+                        { value: '960*960', text: '960×960 (1:1)' },
+                        { value: '1088*832', text: '1088×832 (4:3)' },
+                        { value: '832*1088', text: '832×1088 (3:4)' }
+                    ],
+                    pricing: '720P: $0.10/second'
+                },
+                'wan2.2-i2v-flash': {
+                    resolutions: [
+                        { value: '832*480', text: '832×480 (16:9)' },
+                        { value: '480*832', text: '480×832 (9:16)' },
+                        { value: '624*624', text: '624×624 (1:1)' },
+                        { value: '1280*720', text: '1280×720 (16:9)' },
+                        { value: '720*1280', text: '720×1280 (9:16)' },
+                        { value: '960*960', text: '960×960 (1:1)' },
+                        { value: '1088*832', text: '1088×832 (4:3)' },
+                        { value: '832*1088', text: '832×1088 (3:4)' }
+                    ],
+                    pricing: '480P: $0.015/second • 720P: $0.036/second'
+                },
+                'wan2.2-i2v-plus': {
+                    resolutions: [
+                        { value: '832*480', text: '832×480 (16:9)' },
+                        { value: '480*832', text: '480×832 (9:16)' },
+                        { value: '624*624', text: '624×624 (1:1)' },
+                        { value: '1920*1080', text: '1920×1080 (16:9)' },
+                        { value: '1080*1920', text: '1080×1920 (9:16)' },
+                        { value: '1440*1440', text: '1440×1440 (1:1)' },
+                        { value: '1632*1248', text: '1632×1248 (4:3)' },
+                        { value: '1248*1632', text: '1248×1632 (3:4)' }
+                    ],
+                    pricing: '480P: $0.02/second • 1080P: $0.10/second'
+                },
+                'wan2.1-i2v-turbo': {
+                    resolutions: [
+                        { value: '832*480', text: '832×480 (16:9)' },
+                        { value: '480*832', text: '480×832 (9:16)' },
+                        { value: '624*624', text: '624×624 (1:1)' },
+                        { value: '1280*720', text: '1280×720 (16:9)' },
+                        { value: '720*1280', text: '720×1280 (9:16)' },
+                        { value: '960*960', text: '960×960 (1:1)' },
+                        { value: '1088*832', text: '1088×832 (4:3)' },
+                        { value: '832*1088', text: '832×1088 (3:4)' }
+                    ],
+                    pricing: '480P: $0.036/second • 720P: $0.036/second'
+                },
+                'wan2.1-i2v-plus': {
                     resolutions: [
                         { value: '1280*720', text: '1280×720 (16:9)' },
                         { value: '720*1280', text: '720×1280 (9:16)' },

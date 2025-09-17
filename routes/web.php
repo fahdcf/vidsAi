@@ -10,6 +10,27 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/pricing', [HomeController::class, 'pricing'])->name('pricing');
 
+// Test route for debugging Laragon setup
+Route::get('/test-laravel', function() {
+    return response()->json([
+        'success' => true,
+        'message' => 'Laravel is working correctly',
+        'timestamp' => now(),
+        'url' => request()->url(),
+        'path' => request()->path()
+    ]);
+})->name('test-laravel');
+
+// Test route for debugging regenerate-proxy (outside auth for testing)
+Route::post('/test-regenerate-proxy', function(Request $request) {
+    return response()->json([
+        'success' => true,
+        'message' => 'Regenerate proxy test successful',
+        'data' => $request->all(),
+        'timestamp' => now()
+    ]);
+})->name('test-regenerate-proxy')->withoutMiddleware(['web']);
+
 
 
 // Music API routes (moved outside auth middleware for testing)
@@ -19,6 +40,8 @@ Route::middleware('auth')->group(function () {
     Route::get('/api/music/popular', [ProjectController::class, 'getPopularMusic'])->name('api.music.popular');
     Route::get('/api/music/trending', [ProjectController::class, 'getTrendingMusic'])->name('api.music.trending');
 });
+
+
 
 // Authenticated routes
 Route::middleware('auth')->group(function () {
@@ -35,6 +58,7 @@ Route::middleware('auth')->group(function () {
     Route::put('/scenes/{scene}/update', [ProjectController::class, 'updateScene'])->name('scenes.update');
     Route::post('/scenes/{scene}/regenerate-proxy', [ProjectController::class, 'regenerateSceneProxy'])->name('scenes.regenerate-proxy');
     Route::get('/scenes/{scene}/ai-status', [ProjectController::class, 'checkAiGenerationStatus'])->name('scenes.ai-status');
+    Route::post('/upload-image', [ProjectController::class, 'uploadImage'])->name('upload-image');
 
 
 

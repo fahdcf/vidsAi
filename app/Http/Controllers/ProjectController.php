@@ -9,6 +9,7 @@ use App\Models\Scene;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use GuzzleHttp\Client;
 use Illuminate\Support\Arr;
@@ -203,7 +204,9 @@ class ProjectController extends Controller
             'keywords' => 'required|string',
             'ai_prompt' => 'nullable|string',
             'ai_model' => 'nullable|string',
-            'ai_resolution' => 'nullable|string'
+            'ai_resolution' => 'nullable|string',
+            'generation_type' => 'nullable|in:text-to-video,image-to-video',
+            'image_url' => 'nullable|string|url'
         ]);
 
         try {
@@ -350,13 +353,16 @@ class ProjectController extends Controller
                 'scene_id' => $scene->id,
                 'ai_prompt' => $request->ai_prompt,
                 'ai_model' => $request->ai_model,
-                'ai_resolution' => $request->ai_resolution
+                'ai_resolution' => $request->ai_resolution,
+                'generation_type' => $request->generation_type,
+                'image_url' => $request->image_url
             ]);
 
             // Validate AI parameters
             $aiPrompt = $request->ai_prompt ?: $request->keywords;
             $aiModel = $request->ai_model ?: 'wan2.2-t2v-plus';
             $aiResolution = $request->ai_resolution ?: '1920*1080';
+            $generationType = $request->generation_type ?: 'text-to-video';
 
             if (empty($aiPrompt)) {
                 return response()->json([
@@ -365,15 +371,54 @@ class ProjectController extends Controller
                 ], 422);
             }
 
+            // Validate image-to-video specific requirements
+            if ($generationType === 'image-to-video') {
+                if (empty($request->image_url)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Image URL is required for image-to-video generation'
+                    ], 422);
+                }
+
+                // Validate that the model supports image-to-video
+                $imageToVideoModels = ['wan2.2-i2v-flash', 'wan2.2-i2v-plus', 'wan2.1-i2v-turbo', 'wan2.1-i2v-plus'];
+                if (!in_array($aiModel, $imageToVideoModels)) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Selected model does not support image-to-video generation'
+                    ], 422);
+                }
+            }
+
             // Dispatch WAN AI generation job to queue
-            $job = new \App\Jobs\WanAiVideoGenerationJob($scene, $aiPrompt, $aiModel, $aiResolution);
+            $job = new \App\Jobs\WanAiVideoGenerationJob(
+                $scene, 
+                $aiPrompt, 
+                $aiModel, 
+                $aiResolution,
+                $generationType,
+                $request->image_url
+            );
+            
+            Log::info('🚀 About to dispatch job', [
+                'scene_id' => $scene->id,
+                'job_class' => get_class($job)
+            ]);
+            
             dispatch($job);
+            
+            Log::info('✅ Job dispatched successfully', [
+                'scene_id' => $scene->id,
+                'queue' => config('queue.default')
+            ]);
 
             logger()->info('✅ AI video generation job dispatched successfully', [
                 'scene_id' => $scene->id,
                 'prompt' => $aiPrompt,
                 'model' => $aiModel,
-                'resolution' => $aiResolution
+                'resolution' => $aiResolution,
+                'generation_type' => $generationType,
+                'image_url' => $request->image_url
             ]);
 
             return response()->json([
@@ -393,6 +438,99 @@ class ProjectController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'AI generation failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Upload image for image-to-video generation
+     */
+    public function uploadImage(Request $request)
+    {
+        try {
+            Log::info('📤 Image upload request received', [
+                'user_id' => auth()->id(),
+                'authenticated' => auth()->check(),
+                'request_method' => $request->method(),
+                'has_image' => $request->hasFile('image'),
+                'request_size' => $request->header('Content-Length')
+            ]);
+
+            // Check if user is authenticated
+            if (!auth()->check()) {
+                Log::warning('❌ Unauthenticated image upload attempt');
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Authentication required'
+                ], 401);
+            }
+
+            $request->validate([
+                'image' => 'required|image|mimes:jpeg,jpg,png,bmp,webp|max:10240' // 10MB max
+            ]);
+
+            $image = $request->file('image');
+            
+            // Generate unique filename
+            $filename = 'ai_images/' . time() . '_' . uniqid() . '.' . $image->getClientOriginalExtension();
+            
+            // Store the image
+            $path = $image->storeAs('public', $filename);
+            
+            // Upload image to 0x0.st to get public URL (same as video uploads)
+            $publicUrl = $this->uploadToFileHost($image);
+            
+            if (!$publicUrl) {
+                // Fallback to local storage if 0x0.st fails
+                $url = asset('storage/' . $filename);
+                
+                Log::warning('⚠️ Failed to upload to 0x0.st, using local URL', [
+                    'filename' => $filename,
+                    'local_url' => $url
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'url' => $url,
+                    'filename' => $filename,
+                    'message' => 'Image uploaded successfully (local URL - may not work with external APIs)'
+                ]);
+            }
+            
+            Log::info('📤 Image uploaded to 0x0.st successfully', [
+                'filename' => $filename,
+                'public_url' => $publicUrl,
+                'size' => $image->getSize(),
+                'user_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => true,
+                'url' => $publicUrl,
+                'filename' => $filename,
+                'message' => 'Image uploaded successfully to 0x0.st'
+            ]);
+
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            Log::error('❌ Image upload validation failed', [
+                'errors' => $e->errors(),
+                'user_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed: ' . implode(', ', Arr::flatten($e->errors()))
+            ], 422);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Image upload failed', [
+                'error' => $e->getMessage(),
+                'user_id' => auth()->id()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload failed: ' . $e->getMessage()
             ], 500);
         }
     }
