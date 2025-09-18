@@ -477,14 +477,14 @@ class ProjectController extends Controller
             // Store the image
             $path = $image->storeAs('public', $filename);
             
-            // Upload image to 0x0.st to get public URL (same as video uploads)
-            $publicUrl = $this->uploadToFileHost($image);
+            // Try multiple hosting strategies for better WAN AI compatibility
+            $publicUrl = $this->uploadImageWithFallbacks($image);
             
             if (!$publicUrl) {
-                // Fallback to local storage if 0x0.st fails
+                // Final fallback to local storage
                 $url = asset('storage/' . $filename);
                 
-                Log::warning('⚠️ Failed to upload to 0x0.st, using local URL', [
+                Log::warning('⚠️ All hosting services failed, using local URL', [
                     'filename' => $filename,
                     'local_url' => $url
                 ]);
@@ -541,8 +541,19 @@ class ProjectController extends Controller
     public function checkAiGenerationStatus(Scene $scene)
     {
         try {
+            logger()->info('🔍 Checking AI generation status', [
+                'scene_id' => $scene->id,
+                'scene_status' => $scene->status,
+                'job_id' => $scene->job_id,
+                'has_job_id' => !empty($scene->job_id)
+            ]);
+
             // Check if scene is still processing (job might still be running)
             if ($scene->status === 'processing' && !$scene->job_id) {
+                logger()->info('🔄 Scene is processing but no job_id found', [
+                    'scene_id' => $scene->id,
+                    'status' => $scene->status
+                ]);
                 return response()->json([
                     'success' => true,
                     'status' => 'PROCESSING',
@@ -551,11 +562,65 @@ class ProjectController extends Controller
                 ]);
             }
 
-            if (!$scene->job_id) {
+            // If scene is completed and has no job_id, it means generation was successful
+            if ($scene->status === 'completed' && !$scene->job_id) {
+                logger()->info('✅ Scene completed successfully', [
+                    'scene_id' => $scene->id,
+                    'status' => $scene->status,
+                    'video_url' => $scene->video_url
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'status' => 'SUCCEEDED',
+                    'video_url' => $scene->video_url,
+                    'message' => 'AI video generation completed successfully'
+                ]);
+            }
+
+            // Also check if scene is completed even with a job_id (race condition handling)
+            if ($scene->status === 'completed') {
+                logger()->info('✅ Scene completed successfully (race condition)', [
+                    'scene_id' => $scene->id,
+                    'status' => $scene->status,
+                    'video_url' => $scene->video_url,
+                    'job_id' => $scene->job_id
+                ]);
+                return response()->json([
+                    'success' => true,
+                    'status' => 'SUCCEEDED',
+                    'video_url' => $scene->video_url,
+                    'message' => 'AI video generation completed successfully'
+                ]);
+            }
+
+            // If scene failed and has no job_id, it means generation failed
+            if ($scene->status === 'failed' && !$scene->job_id) {
+                logger()->error('❌ Scene generation failed', [
+                    'scene_id' => $scene->id,
+                    'status' => $scene->status,
+                    'scene_data' => $scene->toArray()
+                ]);
                 return response()->json([
                     'success' => false,
-                    'message' => 'No AI generation task found for this scene'
-                ], 404);
+                    'status' => 'FAILED',
+                    'message' => 'AI video generation failed - check backend logs for details',
+                    'scene_status' => $scene->status,
+                    'scene_id' => $scene->id
+                ]);
+            }
+
+            // If no job_id and not in a terminal state, return appropriate message
+            if (!$scene->job_id) {
+                logger()->warning('⚠️ No AI generation task found for scene', [
+                    'scene_id' => $scene->id,
+                    'scene_status' => $scene->status,
+                    'job_id' => $scene->job_id
+                ]);
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No AI generation task found for this scene. Please start a new generation.',
+                    'status' => 'NO_TASK'
+                ]);
             }
 
             $wanAiService = new \App\Services\WanAiVideoGenerationService();
@@ -1117,6 +1182,271 @@ class ProjectController extends Controller
                 'file' => $file->getClientOriginalName()
             ]);
 
+            return null;
+        }
+    }
+
+    /**
+     * Upload image with multiple fallback strategies for better WAN AI compatibility
+     */
+    private function uploadImageWithFallbacks($file)
+    {
+        $strategies = [
+            ['name' => 'optimized_0x0', 'method' => 'uploadOptimizedTo0x0'],
+            ['name' => 'imgbb', 'method' => 'uploadToImgBB'],
+            ['name' => 'alternative_0x0', 'method' => 'uploadToAlternativeHost'],
+            ['name' => 'standard_0x0', 'method' => 'uploadToFileHost']
+        ];
+
+        foreach ($strategies as $strategy) {
+            try {
+                Log::info("🔄 Trying upload strategy: {$strategy['name']}", [
+                    'filename' => $file->getClientOriginalName(),
+                    'size' => $file->getSize()
+                ]);
+
+                $url = $this->{$strategy['method']}($file);
+                
+                if ($url) {
+                    Log::info("✅ Upload successful with strategy: {$strategy['name']}", [
+                        'url' => $url,
+                        'strategy' => $strategy['name']
+                    ]);
+                    return $url;
+                }
+            } catch (\Exception $e) {
+                Log::warning("❌ Strategy {$strategy['name']} failed", [
+                    'error' => $e->getMessage(),
+                    'strategy' => $strategy['name']
+                ]);
+            }
+        }
+
+        Log::error('💀 All upload strategies failed');
+        return null;
+    }
+
+    /**
+     * Upload optimized image to 0x0.st (smaller size, better compatibility)
+     */
+    private function uploadOptimizedTo0x0($file)
+    {
+        try {
+            // Optimize image for AI processing
+            $optimizedFile = $this->optimizeImageForAI($file);
+            if (!$optimizedFile) {
+                return null;
+            }
+
+            Log::info('🚀 Uploading optimized image to 0x0.st', [
+                'original_size' => $file->getSize(),
+                'optimized_size' => $optimizedFile->getSize()
+            ]);
+
+            return $this->uploadToFileHost($optimizedFile);
+        } catch (\Exception $e) {
+            Log::error('Optimized 0x0 upload failed', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Upload to ImgBB (more reliable for AI services)
+     */
+    private function uploadToImgBB($file)
+    {
+        try {
+            $apiKey = config('services.imgbb.api_key');
+            if (!$apiKey) {
+                Log::warning('No ImgBB API key configured');
+                return null;
+            }
+
+            $fileName = $file->getClientOriginalName();
+            $fileContent = file_get_contents($file->getRealPath());
+            $base64Content = base64_encode($fileContent);
+            
+            Log::info('📤 Uploading to ImgBB', [
+                'filename' => $fileName,
+                'size' => $file->getSize()
+            ]);
+            
+            $response = Http::timeout(60)
+                ->withOptions(['verify' => false])
+                ->post('https://api.imgbb.com/1/upload', [
+                    'key' => $apiKey,
+                    'image' => $base64Content,
+                    'name' => $fileName
+                ]);
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                if ($data['success']) {
+                    $uploadUrl = $data['data']['url'];
+                    Log::info('✅ ImgBB upload successful', ['url' => $uploadUrl]);
+                    return $uploadUrl;
+                }
+            }
+            
+            Log::warning('ImgBB upload failed', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            Log::error('ImgBB upload exception', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Upload to alternative hosting service
+     */
+    private function uploadToAlternativeHost($file)
+    {
+        try {
+            Log::info('🔄 Trying alternative hosting approach', [
+                'filename' => $file->getClientOriginalName(),
+                'size' => $file->getSize()
+            ]);
+            
+            // Try uploading with different parameters to 0x0.st
+            $response = Http::timeout(60)
+                ->withOptions(['verify' => false])
+                ->attach('file', $file->getContent(), $file->getClientOriginalName())
+                ->post('https://0x0.st');
+            
+            if ($response->successful()) {
+                $uploadUrl = trim($response->body());
+                if (filter_var($uploadUrl, FILTER_VALIDATE_URL)) {
+                    Log::info('✅ Alternative hosting successful', ['url' => $uploadUrl]);
+                    return $uploadUrl;
+                }
+            }
+            
+            Log::warning('Alternative hosting failed', [
+                'status' => $response->status(),
+                'body' => $response->body()
+            ]);
+            return null;
+        } catch (\Exception $e) {
+            Log::error('Alternative hosting exception', ['error' => $e->getMessage()]);
+            return null;
+        }
+    }
+
+    /**
+     * Optimize image for AI processing (reduce size, improve compatibility)
+     */
+    private function optimizeImageForAI($file)
+    {
+        try {
+            Log::info('🔧 Optimizing image for AI processing', [
+                'original_size' => $file->getSize(),
+                'mime_type' => $file->getMimeType()
+            ]);
+            
+            // Check if GD extension is available
+            if (!extension_loaded('gd')) {
+                Log::warning('GD extension not available, skipping optimization');
+                return null;
+            }
+            
+            // Create a temporary file path
+            $tempPath = tempnam(sys_get_temp_dir(), 'ai_optimized_');
+            
+            // Get image info
+            $imageInfo = getimagesize($file->getRealPath());
+            if (!$imageInfo) {
+                Log::warning('Could not get image info for optimization');
+                return null;
+            }
+            
+            $originalWidth = $imageInfo[0];
+            $originalHeight = $imageInfo[1];
+            $mimeType = $imageInfo['mime'];
+            
+            // Calculate new dimensions (max 1024px on longest side)
+            $maxDimension = 1024;
+            if ($originalWidth > $originalHeight) {
+                $newWidth = $maxDimension;
+                $newHeight = ($originalHeight / $originalWidth) * $maxDimension;
+            } else {
+                $newHeight = $maxDimension;
+                $newWidth = ($originalWidth / $originalHeight) * $maxDimension;
+            }
+            
+            $newWidth = (int) $newWidth;
+            $newHeight = (int) $newHeight;
+            
+            Log::info('📐 Resizing image', [
+                'original' => "{$originalWidth}x{$originalHeight}",
+                'new' => "{$newWidth}x{$newHeight}"
+            ]);
+            
+            // Create image resource based on type
+            switch ($mimeType) {
+                case 'image/jpeg':
+                    $sourceImage = imagecreatefromjpeg($file->getRealPath());
+                    break;
+                case 'image/png':
+                    $sourceImage = imagecreatefrompng($file->getRealPath());
+                    break;
+                case 'image/gif':
+                    $sourceImage = imagecreatefromgif($file->getRealPath());
+                    break;
+                default:
+                    Log::warning('Unsupported image type for optimization', ['mime_type' => $mimeType]);
+                    return null;
+            }
+            
+            if (!$sourceImage) {
+                Log::error('Could not create image resource for optimization');
+                return null;
+            }
+            
+            // Create new image with new dimensions
+            $newImage = imagecreatetruecolor($newWidth, $newHeight);
+            
+            // Preserve transparency for PNG
+            if ($mimeType === 'image/png') {
+                imagealphablending($newImage, false);
+                imagesavealpha($newImage, true);
+                $transparent = imagecolorallocatealpha($newImage, 255, 255, 255, 127);
+                imagefill($newImage, 0, 0, $transparent);
+            }
+            
+            // Resize image
+            imagecopyresampled($newImage, $sourceImage, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
+            
+            // Save optimized image as JPEG (smaller file size)
+            $quality = 85; // Good balance between quality and file size
+            imagejpeg($newImage, $tempPath, $quality);
+            
+            // Clean up
+            imagedestroy($sourceImage);
+            imagedestroy($newImage);
+            
+            // Create UploadedFile object from temp file
+            $optimizedFile = new \Illuminate\Http\UploadedFile(
+                $tempPath,
+                pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME) . '_optimized.jpg',
+                'image/jpeg',
+                null,
+                true
+            );
+            
+            $newSize = filesize($tempPath);
+            Log::info('✅ Image optimization completed', [
+                'original_size' => $file->getSize(),
+                'optimized_size' => $newSize,
+                'compression_ratio' => round((1 - $newSize / $file->getSize()) * 100, 2) . '%'
+            ]);
+            
+            return $optimizedFile;
+            
+        } catch (\Exception $e) {
+            Log::error('Image optimization failed', ['error' => $e->getMessage()]);
             return null;
         }
     }

@@ -2831,6 +2831,209 @@
             }, 5000);
         }
 
+        function showErrorMessage(message) {
+            // Force cleanup any remaining modal issues first
+            forceModalCleanup();
+
+            // Create a temporary error alert
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-danger alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `
+                <i class="bi bi-exclamation-triangle me-2"></i>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+
+            document.body.appendChild(alert);
+
+            // Auto-remove after 8 seconds
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.remove();
+                }
+            }, 8000);
+        }
+
+        function showWarningMessage(message) {
+            // Force cleanup any remaining modal issues first
+            forceModalCleanup();
+
+            // Create a temporary warning alert
+            const alert = document.createElement('div');
+            alert.className = 'alert alert-warning alert-dismissible fade show position-fixed';
+            alert.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+            alert.innerHTML = `
+                <i class="bi bi-exclamation-triangle me-2"></i>${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+
+            document.body.appendChild(alert);
+
+            // Auto-remove after 8 seconds
+            setTimeout(() => {
+                if (alert.parentNode) {
+                    alert.remove();
+                }
+            }, 8000);
+        }
+
+        function showDebugLog(message) {
+            try {
+                // Create a debug log panel that can be toggled
+                let debugPanel = document.getElementById('debug-log-panel');
+                let toggleBtn = document.getElementById('debug-toggle-btn');
+                
+                if (!debugPanel) {
+                    debugPanel = document.createElement('div');
+                    debugPanel.id = 'debug-log-panel';
+                    debugPanel.className = 'position-fixed';
+                    debugPanel.style.cssText = 'bottom: 20px; right: 20px; width: 400px; max-height: 300px; z-index: 9998; background: rgba(0,0,0,0.9); color: #fff; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; overflow-y: auto; display: block; border: 2px solid #007bff;';
+                    
+                    // Add header
+                    const header = document.createElement('div');
+                    header.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #007bff; border-bottom: 1px solid #333; padding-bottom: 5px;';
+                    header.innerHTML = '🐛 AI Generation Debug Logs';
+                    debugPanel.appendChild(header);
+                    
+                    document.body.appendChild(debugPanel);
+                    console.log('🐛 Debug panel created successfully');
+                }
+                
+                if (!toggleBtn) {
+                    toggleBtn = document.createElement('button');
+                    toggleBtn.id = 'debug-toggle-btn';
+                    toggleBtn.innerHTML = '🐛 Debug Logs';
+                    toggleBtn.className = 'btn btn-sm btn-secondary position-fixed';
+                    toggleBtn.style.cssText = 'bottom: 20px; right: 440px; z-index: 9999;';
+                    toggleBtn.onclick = () => {
+                        debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
+                    };
+                    document.body.appendChild(toggleBtn);
+                    console.log('🐛 Debug toggle button created successfully');
+                }
+                
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = document.createElement('div');
+                logEntry.style.marginBottom = '8px';
+                logEntry.style.borderBottom = '1px solid #333';
+                logEntry.style.paddingBottom = '4px';
+                logEntry.innerHTML = `<span style="color: #888;">[${timestamp}]</span> ${message}`;
+                
+                debugPanel.appendChild(logEntry);
+                
+                // Keep only last 50 entries
+                const entries = debugPanel.querySelectorAll('div');
+                if (entries.length > 50) {
+                    entries[0].remove();
+                }
+                
+                // Auto-scroll to bottom
+                debugPanel.scrollTop = debugPanel.scrollHeight;
+                
+                // Also log to console for backup
+                console.log(`🐛 [${timestamp}] ${message}`);
+                
+                // Auto-hide after 10 seconds if no new entries
+                clearTimeout(debugPanel.autoHideTimer);
+                debugPanel.autoHideTimer = setTimeout(() => {
+                    if (debugPanel.style.display === 'block') {
+                        debugPanel.style.display = 'none';
+                    }
+                }, 10000);
+            } catch (error) {
+                console.error('🐛 Error in showDebugLog:', error);
+                console.log(`🐛 [${new Date().toLocaleTimeString()}] ${message}`);
+            }
+        }
+
+        // Test function to simulate image-to-video generation
+        function testImageToVideoGeneration() {
+            showDebugLog('🧪 Starting Image-to-Video Generation Test');
+            showDebugLog('📋 Test Parameters:');
+            showDebugLog('- Scene ID: 329 (test scene)');
+            showDebugLog('- Model: wan2.2-i2v-flash');
+            showDebugLog('- Resolution: 832*480');
+            showDebugLog('- Generation Type: image-to-video');
+            showDebugLog('- Image: test-image.jpg (simulated)');
+            showDebugLog('- Prompt: "A beautiful sunset over mountains with birds flying"');
+            
+            showDebugLog('🔄 Simulating request data preparation...');
+            const testRequestData = {
+                regeneration_option: 'ai',
+                ai_model: 'wan2.2-i2v-flash',
+                ai_resolution: '832*480',
+                keywords: 'A beautiful sunset over mountains with birds flying',
+                ai_prompt: 'A beautiful sunset over mountains with birds flying',
+                generation_type: 'image-to-video',
+                image_url: 'https://0x0.st/test-image.jpg'
+            };
+            
+            showDebugLog(`📤 Test Request Data: ${JSON.stringify(testRequestData, null, 2)}`);
+            showDebugLog('🌐 Test URL: /scenes/329/regenerate-proxy');
+            
+            showDebugLog('📡 Simulating API response...');
+            setTimeout(() => {
+                showDebugLog('✅ API Response: {"success":true,"message":"AI video generation job queued successfully","status":"QUEUED","scene_id":329,"polling_required":true}');
+                showDebugLog('🔄 Starting polling simulation...');
+                
+                let pollCount = 0;
+                const maxPolls = 5;
+                
+                const pollInterval = setInterval(() => {
+                    pollCount++;
+                    showDebugLog(`🔍 Poll ${pollCount}/${maxPolls}: Checking AI status...`);
+                    
+                    if (pollCount === 3) {
+                        showDebugLog('✅ Status Response: {"success":true,"status":"SUCCEEDED","video_url":"https://0x0.st/generated-video.mp4","message":"AI video generation completed successfully"}');
+                        showDebugLog('🎉 Test completed successfully!');
+                        clearInterval(pollInterval);
+                    } else {
+                        showDebugLog(`🔄 Status Response: {"success":true,"status":"PENDING","message":"Video generation in progress","progress":${pollCount * 20}}`);
+                    }
+                }, 2000);
+                
+            }, 1000);
+        }
+
+        // Add test button to debug panel
+        function addTestButton() {
+            setTimeout(() => {
+                const debugPanel = document.getElementById('debug-log-panel');
+                if (debugPanel && !document.getElementById('test-btn')) {
+                    const testBtn = document.createElement('button');
+                    testBtn.id = 'test-btn';
+                    testBtn.innerHTML = '🧪 Test Image-to-Video';
+                    testBtn.className = 'btn btn-sm btn-primary mt-2';
+                    testBtn.style.cssText = 'margin-top: 10px; width: 100%;';
+                    testBtn.onclick = testImageToVideoGeneration;
+                    debugPanel.appendChild(testBtn);
+                }
+            }, 1000);
+        }
+
+        // Initialize test button when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            addTestButton();
+            // Test debug panel immediately
+            setTimeout(() => {
+                showDebugLog('🚀 Debug panel initialized successfully!');
+                showDebugLog('✅ Ready to track AI generation process');
+                console.log('🐛 Debug panel should be visible now');
+            }, 500);
+        });
+
+        // Also try to initialize immediately
+        setTimeout(() => {
+            showDebugLog('🚀 Page loaded - Debug panel ready!');
+            showDebugLog('🧪 Click the "Test Image-to-Video" button to test the debug panel');
+        }, 1000);
+
+        // Add a simple test function that can be called from console
+        window.testDebugPanel = function() {
+            showDebugLog('🧪 Manual test - Debug panel is working!');
+            showDebugLog('✅ If you can see this message, the debug panel is functioning correctly');
+        };
+
         function forceModalCleanup() {
             // Remove all modal backdrops
             document.querySelectorAll('.modal-backdrop').forEach(backdrop => {
@@ -3455,13 +3658,13 @@
 
         async function uploadImageToServer(file) {
             try {
-                console.log('📤 Uploading image to server (will be uploaded to 0x0)...', file.name);
-                console.log('📊 File details:', {
+                showDebugLog(`📤 Uploading image to server: ${file.name}`);
+                showDebugLog(`📊 File details: ${JSON.stringify({
                     name: file.name,
                     size: file.size,
                     type: file.type,
                     lastModified: file.lastModified
-                });
+                }, null, 2)}`);
                 
                 const formData = new FormData();
                 formData.append('image', file);
@@ -3474,7 +3677,7 @@
                 const basePath = pathParts.slice(0, reviewIndex).join('/');
                 const uploadUrl = basePath + '/upload-image';
                 
-                console.log('🌐 Upload URL:', uploadUrl);
+                showDebugLog(`🌐 Upload URL: ${uploadUrl}`);
 
                 const response = await fetch(uploadUrl, {
                     method: 'POST',
@@ -3484,12 +3687,12 @@
                     }
                 });
                 
-                console.log('📡 Upload response status:', response.status);
-                console.log('📡 Upload response headers:', Object.fromEntries(response.headers.entries()));
+                showDebugLog(`📡 Upload response status: ${response.status}`);
+                showDebugLog(`📡 Upload response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`);
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    console.error('❌ Upload error response:', errorText);
+                    showDebugLog(`❌ Upload error response: ${errorText}`);
                     throw new Error(`Upload failed: ${response.status} - ${errorText}`);
                 }
 
@@ -3497,35 +3700,43 @@
                 
                 if (result.success && result.url) {
                     uploadedImageUrl = result.url;
-                    console.log('✅ Image uploaded to 0x0 successfully:', uploadedImageUrl);
+                    showDebugLog(`✅ Image uploaded to 0x0 successfully: ${uploadedImageUrl}`);
                     return result.url;
                 } else {
                     throw new Error('Invalid response from server: ' + JSON.stringify(result));
                 }
             } catch (error) {
-                console.error('❌ Image upload failed:', error);
+                showDebugLog(`❌ Image upload failed: ${error.message}`);
+                showDebugLog(`❌ Upload error details: ${JSON.stringify({
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                }, null, 2)}`);
                 showErrorMessage('Failed to upload image: ' + error.message);
                 throw error;
             }
         }
 
         async function regenerateWithAI() {
-            console.log('🤖 Regenerate with AI button clicked');
+            showDebugLog('🤖 Regenerate with AI button clicked');
 
             const modal = document.getElementById('regenerateModal');
             const generationType = document.querySelector('input[name="aiGenerationType"]:checked').value;
             const aiModel = document.getElementById('aiModel').value;
             const aiResolution = document.getElementById('aiResolution').value;
 
-            // Validate based on generation type
+            // Validate based on generation type and get prompts
+            let aiPrompt = '';
+            let imagePrompt = '';
+            
             if (generationType === 'text-to-video') {
-                const aiPrompt = document.getElementById('aiPrompt').value.trim();
+                aiPrompt = document.getElementById('aiPrompt').value.trim();
             if (!aiPrompt) {
                 alert('Please enter an AI prompt or use the "Generate Prompt" button.');
                 return;
                 }
             } else {
-                const imagePrompt = document.getElementById('imagePrompt').value.trim();
+                imagePrompt = document.getElementById('imagePrompt').value.trim();
                 if (!uploadedImageFile) {
                     alert('Please upload an image for the first frame.');
                     return;
@@ -3554,12 +3765,14 @@
                 return;
             }
 
-            console.log('🤖 Starting AI generation', {
-                sceneId: sceneId,
-                prompt: aiPrompt,
-                model: aiModel,
-                resolution: aiResolution
-            });
+            // Show debug log instead of console log to avoid console spam
+            showDebugLog(`🤖 Starting AI generation for scene ${sceneId}`);
+            showDebugLog(`Generation Type: ${generationType}`);
+            showDebugLog(`Model: ${aiModel}`);
+            showDebugLog(`Resolution: ${aiResolution}`);
+            showDebugLog(`Text Prompt: ${generationType === 'text-to-video' ? (aiPrompt ? aiPrompt.substring(0, 100) + '...' : 'N/A') : 'N/A'}`);
+            showDebugLog(`Image Prompt: ${generationType === 'image-to-video' ? (imagePrompt ? imagePrompt.substring(0, 100) + '...' : 'N/A') : 'N/A'}`);
+            showDebugLog(`Has Image: ${!!uploadedImageFile}`);
 
             // Close modal
             const modalInstance = bootstrap.Modal.getInstance(modal);
@@ -3579,13 +3792,10 @@
             const reviewIndex = pathParts.findIndex(part => part === 'review');
             const basePath = pathParts.slice(0, reviewIndex).join('/');
             const regenerateUrl = basePath + '/scenes/' + sceneId + '/regenerate-proxy';
-            console.log('🌐 AI Regenerate URL:', regenerateUrl);
-            console.log('📁 Current Path:', currentPath);
-            console.log('📁 Path Parts:', pathParts);
-            console.log('📁 Review Index:', reviewIndex);
-            console.log('📁 Base Path:', basePath);
-            console.log('🔍 Scene ID:', sceneId);
-            console.log('🔍 Full URL:', window.location.origin + regenerateUrl);
+            showDebugLog(`🌐 AI Regenerate URL: ${regenerateUrl}`);
+            showDebugLog(`📁 Current Path: ${currentPath}`);
+            showDebugLog(`📁 Base Path: ${basePath}`);
+            showDebugLog(`🔍 Scene ID: ${sceneId}`);
             
             // Prepare request data based on generation type
             let requestData = {
@@ -3595,11 +3805,9 @@
             };
 
             if (generationType === 'text-to-video') {
-                const aiPrompt = document.getElementById('aiPrompt').value.trim();
                 requestData.keywords = aiPrompt;
                 requestData.ai_prompt = aiPrompt;
             } else {
-                const imagePrompt = document.getElementById('imagePrompt').value.trim();
                 requestData.keywords = imagePrompt; // Required field
                 requestData.ai_prompt = imagePrompt;
                 requestData.generation_type = 'image-to-video';
@@ -3614,8 +3822,8 @@
                 }
             }
             
-            console.log('📤 Request data:', requestData);
-            console.log('🌐 Regenerate URL:', regenerateUrl);
+            showDebugLog(`📤 Request data: ${JSON.stringify(requestData, null, 2)}`);
+            showDebugLog(`🌐 Regenerate URL: ${regenerateUrl}`);
             
             fetch(regenerateUrl, {
                 method: 'POST',
@@ -3646,10 +3854,12 @@
                 }
             })
             .then(data => {
-                console.log('🤖 AI generation response:', data);
+                showDebugLog(`🤖 AI generation response: ${JSON.stringify(data, null, 2)}`);
 
                 if (data.success) {
+                    showDebugLog(`✅ AI generation request successful`);
                     if (data.polling_required) {
+                        showDebugLog(`🔄 Starting polling for scene ${sceneId}`);
                         // Start polling for completion
                         startAiGenerationPolling(sceneId);
                         showSuccessMessage('AI video generation job queued! This may take a few minutes...');
@@ -3658,12 +3868,14 @@
                         showProgressMessage('AI video generation job queued successfully', 5);
                     } else {
                         // Immediate success (shouldn't happen with AI)
+                        showDebugLog(`✅ Immediate success - reloading page`);
                         showSuccessMessage('AI video generation completed!');
                         location.reload();
                     }
                 } else {
-                    console.error('❌ AI generation failed:', data.message);
-                    alert(`AI generation failed: ${data.message}`);
+                    showDebugLog(`❌ AI generation failed: ${data.message}`);
+                    showDebugLog(`❌ Full error response: ${JSON.stringify(data, null, 2)}`);
+                    showErrorMessage(`AI generation failed: ${data.message}`);
                     
                     // Reset button
                     if (button) {
@@ -3673,13 +3885,10 @@
                 }
             })
             .catch(error => {
-                console.error('❌ AI generation request failed:', error);
-                console.error('❌ Error details:', {
-                    message: error.message,
-                    stack: error.stack,
-                    name: error.name
-                });
-                alert('Failed to start AI generation. Please try again.');
+                showDebugLog(`❌ AI generation request failed: ${error.message}`);
+                showDebugLog(`❌ Error name: ${error.name}`);
+                showDebugLog(`❌ Error stack: ${error.stack}`);
+                showErrorMessage(`Failed to start AI generation: ${error.message}`);
                 
                 // Reset button
                 if (button) {
@@ -3691,9 +3900,11 @@
 
         // AI Generation Polling
         function startAiGenerationPolling(sceneId) {
-            console.log('🔄 Starting AI generation polling', { sceneId });
+            showDebugLog(`🔄 Starting AI generation polling for scene ${sceneId}`);
+            showDebugLog(`⏰ Polling interval: 10 seconds`);
             
             const pollInterval = setInterval(() => {
+                showDebugLog(`🔍 Polling iteration for scene ${sceneId}`);
                 checkAiGenerationStatus(sceneId, pollInterval);
             }, 10000); // Poll every 10 seconds
         }
@@ -3705,10 +3916,10 @@
             const reviewIndex = pathParts.findIndex(part => part === 'review');
             const basePath = pathParts.slice(0, reviewIndex).join('/');
             const statusUrl = basePath + '/scenes/' + sceneId + '/ai-status';
-            console.log('🔍 AI Status URL:', statusUrl);
-            console.log('🔍 Request with credentials: same-origin');
-            console.log('🔍 Cache busting timestamp:', Date.now());
-            console.log('🔍 Browser cache test - if you see this, cache is working');
+            showDebugLog(`🔍 Checking AI status: ${statusUrl}`);
+            showDebugLog(`📁 Current path: ${currentPath}`);
+            showDebugLog(`📁 Base path: ${basePath}`);
+            showDebugLog(`🔍 Scene ID: ${sceneId}`);
             
             fetch(statusUrl, {
                 method: 'GET',
@@ -3717,11 +3928,18 @@
                 },
                 credentials: 'same-origin'
             })
-            .then(response => response.json())
+            .then(response => {
+                showDebugLog(`🔍 Response status: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return response.json();
+            })
             .then(data => {
-                console.log('🔍 AI generation status check:', data);
+                showDebugLog(`🔍 AI generation status: ${JSON.stringify(data, null, 2)}`);
 
                 if (data.status === 'SUCCEEDED') {
+                    showDebugLog(`✅ AI generation completed successfully for scene ${sceneId}`);
                     clearInterval(pollInterval);
                     hideProgressMessage();
                     showSuccessMessage('AI video generation completed successfully!');
@@ -3738,9 +3956,33 @@
                         location.reload();
                     }, 2000);
                 } else if (data.status === 'FAILED') {
+                    showDebugLog(`❌ AI generation failed for scene ${sceneId}: ${data.message}`);
                     clearInterval(pollInterval);
                     hideProgressMessage();
-                    alert(`AI video generation failed: ${data.message}`);
+                    
+                    // Show more helpful error message based on the error type
+                    let errorMessage = data.message;
+                    if (data.message && data.message.includes('timeout')) {
+                        errorMessage = 'Image download timeout: WAN AI is having trouble accessing the image. This is a known issue with certain image hosting services. Please try: 1) Upload a smaller image (< 2MB), 2) Use JPG format instead of PNG, 3) Try a different image, or 4) Wait a few minutes and try again.';
+                    } else if (data.message && data.message.includes('validation failed')) {
+                        errorMessage = 'Image validation failed: The image may not be accessible. Please try uploading a new image.';
+                    } else if (data.message && data.message.includes('check backend logs')) {
+                        errorMessage = 'AI generation failed due to image processing issues. This is often caused by network connectivity between WAN AI and image hosting services. Please try with a different image or wait a few minutes before retrying.';
+                    }
+                    
+                    showErrorMessage(`AI video generation failed: ${errorMessage}`);
+                    
+                    // Reset button
+                    const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
+                    if (button) {
+                        button.innerHTML = '<i class="bi bi-arrow-clockwise me-2"></i>Regenerate';
+                        button.disabled = false;
+                    }
+                } else if (data.status === 'NO_TASK') {
+                    showDebugLog(`⚠️ No AI generation task found for scene ${sceneId}`);
+                    clearInterval(pollInterval);
+                    hideProgressMessage();
+                    showWarningMessage('No AI generation task found. Please start a new generation.');
                     
                     // Reset button
                     const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
@@ -3750,6 +3992,7 @@
                     }
                 } else {
                     // Still processing - update button text with progress
+                    showDebugLog(`🔄 AI generation still processing for scene ${sceneId}: ${data.status}`);
                     const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
                     if (button) {
                         const progressText = getProgressText(data.status, data.progress);
@@ -3763,8 +4006,17 @@
                 }
             })
             .catch(error => {
-                console.error('❌ AI status check failed:', error);
+                showDebugLog(`❌ AI status check failed for scene ${sceneId}: ${error.message}`);
+                showDebugLog(`❌ Error details: ${JSON.stringify({
+                    name: error.name,
+                    message: error.message,
+                    stack: error.stack
+                }, null, 2)}`);
                 clearInterval(pollInterval);
+                hideProgressMessage();
+                
+                // Show error message
+                showErrorMessage(`AI status check failed: ${error.message}`);
                 
                 // Reset button
                 const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);

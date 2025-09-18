@@ -94,6 +94,10 @@ return [
         'status_endpoint' => env('VIDEO_RENDER_STATUS_ENDPOINT', '/status'),
     ],
 
+    'imgbb' => [
+        'api_key' => env('IMGBB_API_KEY'),
+    ],
+
     'wan_ai' => [
         'api_key' => env('WAN_AI_API_KEY'),
         'base_url' => env('WAN_AI_BASE_URL', 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis'),

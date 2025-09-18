@@ -37,8 +37,8 @@ class WanAiVideoGenerationService
             // Prepare the request data
             $requestData = $this->prepareRequestData($prompt, $model, $resolution, $generationType, $imageUrl);
 
-            // Send the generation request
-            $response = $this->sendGenerationRequest($requestData);
+        // Send the generation request with intelligent retry logic
+        $response = $this->sendGenerationRequestWithRetry($requestData, $generationType);
 
             $taskId = $response['task_id'] ?? null;
 
@@ -251,6 +251,10 @@ class WanAiVideoGenerationService
                 'image_url_empty' => empty($imageUrl)
             ]);
             
+            // Skip image validation for now due to WAN AI timeout issues
+            // TODO: Re-enable when WAN AI fixes their image download issues
+            // $this->validateImageUrl($imageUrl);
+            
             $requestData['input'] = [
                 'prompt' => $enhancedPrompt,
                 'img_url' => $imageUrl,
@@ -299,6 +303,57 @@ class WanAiVideoGenerationService
     }
 
     /**
+     * Send generation request with intelligent retry logic for image-to-video
+     */
+    private function sendGenerationRequestWithRetry(array $requestData, string $generationType): array
+    {
+        $maxRetries = ($generationType === 'image-to-video') ? 3 : 1;
+        $retryDelay = 2; // seconds
+
+        for ($attempt = 1; $attempt <= $maxRetries; $attempt++) {
+            try {
+                Log::info("🚀 Attempting WAN AI request (attempt {$attempt}/{$maxRetries})", [
+                    'generation_type' => $generationType,
+                    'attempt' => $attempt
+                ]);
+
+                $response = $this->sendGenerationRequest($requestData);
+                
+                if ($response) {
+                    Log::info("✅ WAN AI request successful on attempt {$attempt}", [
+                        'task_id' => $response['task_id'] ?? 'unknown'
+                    ]);
+                    return $response;
+                }
+
+            } catch (\Exception $e) {
+                $isTimeoutError = strpos($e->getMessage(), 'DataInspection') !== false || 
+                                strpos($e->getMessage(), 'timeout') !== false;
+                
+                Log::warning("❌ WAN AI request failed on attempt {$attempt}", [
+                    'error' => $e->getMessage(),
+                    'is_timeout_error' => $isTimeoutError,
+                    'generation_type' => $generationType
+                ]);
+
+                // If it's the last attempt, re-throw the exception
+                if ($attempt === $maxRetries) {
+                    throw $e;
+                }
+
+                // For image-to-video timeout errors, wait before retrying
+                if ($isTimeoutError && $generationType === 'image-to-video') {
+                    Log::info("⏳ Waiting {$retryDelay} seconds before retry due to timeout error");
+                    sleep($retryDelay);
+                    $retryDelay *= 2; // Exponential backoff
+                }
+            }
+        }
+
+        throw new \Exception('All retry attempts failed for WAN AI request');
+    }
+
+    /**
      * Send generation request to WAN AI API
      */
     private function sendGenerationRequest(array $requestData): ?array
@@ -320,13 +375,15 @@ class WanAiVideoGenerationService
             ]);
 
             $response = Http::withOptions([
-                'timeout' => 120,
-                'verify' => false
+                'timeout' => 180, // Increased timeout to 3 minutes
+                'verify' => false,
+                'connect_timeout' => 60 // Connection timeout
             ])->withHeaders([
                 'X-DashScope-Async' => 'enable',
                 'Authorization' => 'Bearer ' . $apiKey,
                 'Content-Type' => 'application/json'
-            ])->post($baseUrl, $requestData);
+            ])->retry(3, 2000) // Retry 3 times with 2 second delay
+            ->post($baseUrl, $requestData);
 
             if (!$response->successful()) {
                 $errorBody = $response->json();
@@ -338,6 +395,9 @@ class WanAiVideoGenerationService
                     case 'InvalidApiKey':
                         throw new \Exception('Invalid WAN AI API key. Please check your configuration.');
                     case 'InvalidParameter':
+                        if (strpos($errorMessage, 'DataInspection') !== false && strpos($errorMessage, 'timed out') !== false) {
+                            throw new \Exception('Image download timeout: The image URL may be inaccessible or slow. Please try with a different image or upload a new one.');
+                        }
                         throw new \Exception('Invalid parameters: ' . $errorMessage);
                     case 'QuotaExceeded':
                         throw new \Exception('WAN AI quota exceeded. Please try again later.');
@@ -395,6 +455,47 @@ class WanAiVideoGenerationService
     {
         $models = config('services.wan_ai.models');
         return $models[$model]['resolutions'] ?? [];
+    }
+
+    /**
+     * Validate image URL accessibility
+     */
+    private function validateImageUrl(string $imageUrl): void
+    {
+        try {
+            Log::info('🔍 Validating image URL accessibility', [
+                'image_url' => $imageUrl
+            ]);
+
+            $response = Http::withOptions([
+                'timeout' => 30,
+                'connect_timeout' => 10,
+                'verify' => false
+            ])->head($imageUrl);
+
+            if (!$response->successful()) {
+                throw new \Exception("Image URL is not accessible (HTTP {$response->status()}): {$imageUrl}");
+            }
+
+            $contentType = $response->header('Content-Type');
+            if (!$contentType || !str_starts_with($contentType, 'image/')) {
+                throw new \Exception("URL does not point to a valid image (Content-Type: {$contentType}): {$imageUrl}");
+            }
+
+            Log::info('✅ Image URL validation successful', [
+                'image_url' => $imageUrl,
+                'content_type' => $contentType,
+                'status' => $response->status()
+            ]);
+
+        } catch (\Exception $e) {
+            Log::error('❌ Image URL validation failed', [
+                'image_url' => $imageUrl,
+                'error' => $e->getMessage()
+            ]);
+            
+            throw new \Exception("Image validation failed: " . $e->getMessage());
+        }
     }
 
 }
