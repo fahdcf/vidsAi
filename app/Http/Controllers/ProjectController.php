@@ -2163,6 +2163,9 @@ class ProjectController extends Controller
             return null;
         }
 
+        // Convert numbers to words for better matching with transcript
+        $subtitleWords = $this->convertNumbersToWords($subtitleWords);
+
         // Precompute normalized transcript words
         $transcriptNorm = [];
         foreach ($transcript as $idx => $tw) {
@@ -2180,76 +2183,123 @@ class ProjectController extends Controller
             'search_start' => $lastUsedIndex + 1
         ]);
 
-        // Search for the best matching sequence starting after the last used index
+        // Enhanced matching algorithm with multiple strategies
         $bestMatch = null;
-        $bestScore = 0;
         $minStartIndex = $lastUsedIndex + 1;
 
-        // Try to find a sequence of words that matches our subtitle
+        // Strategy 1: Exact sequential match
         for ($i = $minStartIndex; $i <= count($transcript) - count($subtitleWords); $i++) {
-            $score = 0;
-            $matchedWords = 0;
-            $consecutiveMatches = 0;
-            $maxConsecutive = 0;
+            $match = true;
+            for ($j = 0; $j < count($subtitleWords); $j++) {
+                if ($transcriptNorm[$i + $j] !== $subtitleWords[$j]) {
+                    $match = false;
+                    break;
+                }
+            }
+            if ($match) {
+                $bestMatch = [
+                    'start' => $transcript[$i]['start'],
+                    'end' => $transcript[$i + count($subtitleWords) - 1]['end'],
+                    'startIndex' => $i,
+                    'endIndex' => $i + count($subtitleWords) - 1,
+                    'match_type' => 'exact'
+                ];
+                break;
+            }
+        }
 
-            // Check how many words match in sequence
-            for ($j = 0; $j < count($subtitleWords) && ($i + $j) < count($transcript); $j++) {
-                $transcriptWord = $transcriptNorm[$i + $j] ?? '';
-                $subtitleWord = $subtitleWords[$j] ?? '';
-
-                if ($transcriptWord === $subtitleWord) {
-                    $score += 5; // Exact match gets highest score
-                    $matchedWords++;
-                    $consecutiveMatches++;
-                    $maxConsecutive = max($maxConsecutive, $consecutiveMatches);
-                } elseif (strpos($transcriptWord, $subtitleWord) !== false || strpos($subtitleWord, $transcriptWord) !== false) {
-                    $score += 2; // Partial match gets medium score
-                    $matchedWords++;
-                    $consecutiveMatches = 0; // Reset consecutive counter
+        // Strategy 2: Handle compound words (if exact match failed)
+        if (!$bestMatch) {
+            $expandedWords = [];
+            foreach ($subtitleWords as $word) {
+                // Check if word might be compound (contains capital letters in original)
+                if (preg_match('/[A-Z]/', $subtitleText)) {
+                    // Try to split compound words like "EcoSip" -> "eco sip"
+                    $parts = preg_split('/(?=[A-Z])/', $word);
+                    $parts = array_filter($parts, function($part) { return !empty($part); });
+                    if (count($parts) > 1) {
+                        foreach ($parts as $part) {
+                            $expandedWords[] = strtolower($part);
+                        }
+                    } else {
+                        $expandedWords[] = $word;
+                    }
                 } else {
-                    $consecutiveMatches = 0; // Reset consecutive counter
+                    $expandedWords[] = $word;
                 }
             }
 
-            // Calculate match quality
-            $matchPercentage = $matchedWords / count($subtitleWords);
-            $consecutiveBonus = $maxConsecutive / count($subtitleWords);
-            $finalScore = $score + ($consecutiveBonus * 10); // Bonus for consecutive matches
+            // Try with expanded words
+            if ($expandedWords !== $subtitleWords) {
+                for ($i = $minStartIndex; $i <= count($transcript) - count($expandedWords); $i++) {
+                    $match = true;
+                    for ($j = 0; $j < count($expandedWords); $j++) {
+                        if ($transcriptNorm[$i + $j] !== $expandedWords[$j]) {
+                            $match = false;
+                            break;
+                        }
+                    }
+                    if ($match) {
+                        $bestMatch = [
+                            'start' => $transcript[$i]['start'],
+                            'end' => $transcript[$i + count($expandedWords) - 1]['end'],
+                            'startIndex' => $i,
+                            'endIndex' => $i + count($expandedWords) - 1,
+                            'match_type' => 'expanded'
+                        ];
+                        break;
+                    }
+                }
+            }
+        }
 
-            // Accept if we have a good match (at least 60% words matched) - INCREASED THRESHOLD
-            if ($matchPercentage >= 0.6 && $finalScore > $bestScore) {
-                $endIndex = min($i + count($subtitleWords) - 1, count($transcript) - 1);
-
-                $bestScore = $finalScore;
-                $bestMatch = [
-                    'start' => $transcript[$i]['start'],
-                    'end' => $transcript[$endIndex]['end'],
-                    'startIndex' => $i,
-                    'endIndex' => $endIndex,
-                    'match_percentage' => $matchPercentage,
-                    'score' => $finalScore,
-                    'consecutive_matches' => $maxConsecutive
-                ];
-
-                // If we have a very good match (90%+), use it immediately
-                if ($matchPercentage >= 0.9) {
-                    break;
+        // Strategy 3: Fuzzy matching (if both exact and expanded failed)
+        if (!$bestMatch) {
+            $bestScore = 0;
+            for ($i = $minStartIndex; $i <= count($transcript) - count($subtitleWords); $i++) {
+                $matchedWords = 0;
+                for ($j = 0; $j < count($subtitleWords); $j++) {
+                    $transcriptWord = $transcriptNorm[$i + $j] ?? '';
+                    $subtitleWord = $subtitleWords[$j] ?? '';
+                    
+                    if ($transcriptWord === $subtitleWord) {
+                        $matchedWords++;
+                    } elseif (strpos($transcriptWord, $subtitleWord) !== false || strpos($subtitleWord, $transcriptWord) !== false) {
+                        $matchedWords++;
+                    }
+                }
+                
+                $matchPercentage = $matchedWords / count($subtitleWords);
+                if ($matchPercentage >= 0.8 && $matchPercentage > $bestScore) { // 80% match threshold
+                    $bestScore = $matchPercentage;
+                    $bestMatch = [
+                        'start' => $transcript[$i]['start'],
+                        'end' => $transcript[$i + count($subtitleWords) - 1]['end'],
+                        'startIndex' => $i,
+                        'endIndex' => $i + count($subtitleWords) - 1,
+                        'match_type' => 'fuzzy',
+                        'match_percentage' => $matchPercentage
+                    ];
                 }
             }
         }
 
         if ($bestMatch) {
-            logger()->info('✅ Sequential match found', [
+            $logData = [
                 'subtitle_text' => substr($subtitleText, 0, 30) . '...',
-                'match_percentage' => round($bestMatch['match_percentage'], 2),
-                'score' => round($bestMatch['score'], 1),
-                'consecutive_matches' => $bestMatch['consecutive_matches'],
+                'match_type' => $bestMatch['match_type'],
                 'start' => $bestMatch['start'],
                 'end' => $bestMatch['end'],
                 'duration' => round($bestMatch['end'] - $bestMatch['start'], 3),
                 'word_range' => $bestMatch['startIndex'] . '-' . $bestMatch['endIndex'],
                 'transcript_words' => array_slice(array_column($transcript, 'word'), $bestMatch['startIndex'], $bestMatch['endIndex'] - $bestMatch['startIndex'] + 1)
-            ]);
+            ];
+            
+            if (isset($bestMatch['match_percentage'])) {
+                $logData['match_percentage'] = round($bestMatch['match_percentage'], 2);
+            }
+            
+            logger()->info('✅ Sequential match found', $logData);
         }
 
         if (!$bestMatch) {

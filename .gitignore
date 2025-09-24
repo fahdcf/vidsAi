@@ -22,3 +22,24 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# FFmpeg tools and executables
+/storage/tools/ffmpeg/
+*.exe
+*.zip
+*.tar.gz
+
+# Video and audio files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.wav
+*.mp3
+*.flac
+*.aac
+
+# Large binary files
+*.bin
+*.dll
+*.so
