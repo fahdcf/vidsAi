@@ -140,6 +140,38 @@
         transition: all 0.3s ease;
     }
 
+    .animation-selection {
+        margin-top: 1rem;
+        padding-top: 0.75rem;
+        border-top: 1px solid #e5e7eb;
+    }
+
+    .animation-selection .form-label {
+        color: #374151;
+        font-size: 0.875rem;
+        margin-bottom: 0.5rem;
+        font-weight: 600;
+    }
+
+    .animation-selection .form-select {
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        font-size: 0.875rem;
+        padding: 0.5rem 0.75rem;
+        background: white;
+        transition: all 0.2s ease;
+    }
+
+    .animation-selection .form-select:focus {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        outline: none;
+    }
+
+    .animation-selection .form-select:hover {
+        border-color: #9ca3af;
+    }
+
     .scene-url {
         font-size: 0.875rem;
         color: #6b7280;
@@ -3099,6 +3131,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         </div>
                         <small class="text-muted">Trimmed from ${trimStart.toFixed(1)}s to ${trimEnd.toFixed(1)}s</small>
                     </div>
+                    <div class="animation-selection mt-3">
+                        <label class="form-label small fw-bold">Animation Style:</label>
+                        <select class="form-select form-select-sm animation-select" data-scene-id="${videoData.scene_id}" data-scene-index="${index}">
+                            <option value="none">No Animation</option>
+                            <option value="zoom-in">Zoom In</option>
+                            <option value="zoom-out">Zoom Out</option>
+                        </select>
+                    </div>
                 </div>
             `;
 
@@ -3254,12 +3294,22 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('🔍 Selected style:', selectedStyle);
         console.log('🔍 Current style config:', currentStyleConfig);
 
+        // Collect animation selections for each clip
+        const animations = [];
+        const animationSelects = document.querySelectorAll('.animation-select');
+        animationSelects.forEach(select => {
+            animations.push(select.value);
+        });
+
+        console.log('🎬 Collected animations:', animations);
+
         const subtitleData = {
             project_id: {{ $project->id }},
             style: selectedStyle,
             style_config: currentStyleConfig,
             videos: trimmedVideos,
             clips_duration: trimmedVideos.map(video => video.duration),
+            animations: animations,
             aspect_ratio: "16:9", // Default aspect ratio
             voiceOver: window.voiceoverUrl || @json($project->voiceover_url),
             voiceOverVolume: 1.3,

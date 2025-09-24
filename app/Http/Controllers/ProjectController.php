@@ -1661,6 +1661,8 @@ class ProjectController extends Controller
             'style_config' => 'required|array',
             'videos' => 'required|array|min:1',
             'clips_duration' => 'nullable|array',
+            'animations' => 'nullable|array',
+            'animations.*' => 'nullable|string|in:none,zoom-in,zoom-out',
             'aspect_ratio' => 'nullable|string',
             'voiceOver' => 'nullable|string|url',
             'voiceOverVolume' => 'nullable|numeric',
@@ -1676,17 +1678,19 @@ class ProjectController extends Controller
             $videoData = $preparedData['videoData'];
             $projectInfo = $preparedData['projectInfo'];
 
-            logger()->info('📤 Preparing subtitle generation data', [
-                'project_id' => $project->id,
-                'clips_count' => count($videoData['clips']),
-                'subtitles_count' => count($videoData['subtitles']),
-                'total_duration' => $projectInfo['total_duration'],
-                'video_data_keys' => array_keys($videoData),
-                'project_info_keys' => array_keys($projectInfo),
-                'has_music' => !empty($videoData['music']),
-                'music_url' => $videoData['music'] ?? 'none',
-                'voiceover_url' => $videoData['voiceOver'] ?? 'none'
-            ]);
+        logger()->info('📤 Preparing subtitle generation data', [
+            'project_id' => $project->id,
+            'clips_count' => count($videoData['clips']),
+            'subtitles_count' => count($videoData['subtitles']),
+            'animations_count' => count($videoData['animations'] ?? []),
+            'animations' => $videoData['animations'] ?? [],
+            'total_duration' => $projectInfo['total_duration'],
+            'video_data_keys' => array_keys($videoData),
+            'project_info_keys' => array_keys($projectInfo),
+            'has_music' => !empty($videoData['music']),
+            'music_url' => $videoData['music'] ?? 'none',
+            'voiceover_url' => $videoData['voiceOver'] ?? 'none'
+        ]);
 
             // Update project status to subtitle_generating
             $project->update([
@@ -1899,10 +1903,18 @@ class ProjectController extends Controller
             }, $subtitles), 0, 3)
         ]);
         
+        // Get animations array (default to 'none' if not provided)
+        $animations = $validated['animations'] ?? [];
+        if (empty($animations)) {
+            // Fill with 'none' animations for all clips if not provided
+            $animations = array_fill(0, count($clipUrls), 'none');
+        }
+
         // Main video data object
         $videoData = [
             'clips' => $clipUrls,
             'clipDurations' => $clipDurations,
+            'animations' => $animations,
             'clipStartTimes' => $clipStartTimes,
             'clipEndTimes' => $clipEndTimes,
             'voiceOver' => $voiceOverUrl,
