@@ -300,7 +300,8 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 'duration_seconds' => $sceneData['duration_seconds'] ?? 0,
                 'gemini_duration' => $sceneData['gemini_duration'] ?? null,
                 'keywords' => is_array($sceneData['keywords'] ?? []) ? implode(', ', $sceneData['keywords']) : ($sceneData['keywords'] ?? ''),
-                'prompt' => $sceneData['prompt'] ?? null
+                'prompt' => $sceneData['prompt'] ?? null,
+                'type' => 'video' // Default to video for all generated scenes
             ]);
 
             $sceneNumber++;

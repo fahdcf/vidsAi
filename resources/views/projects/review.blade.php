@@ -1274,7 +1274,18 @@
                     <div class="scene-card">
                         <div class="scene-card-header">
                             <div class="d-flex justify-content-between align-items-center">
-                                <h3 class="scene-number mb-0">Scene {{ $scene->scene_number }}</h3>
+                                <h3 class="scene-number mb-0">
+                                    Scene {{ $scene->scene_number }}
+                                    @if($scene->type === 'image')
+                                        <span class="badge bg-success ms-2">
+                                            <i class="bi bi-image me-1"></i>Image
+                                        </span>
+                                    @else
+                                        <span class="badge bg-primary ms-2">
+                                            <i class="bi bi-camera-video me-1"></i>Video
+                                        </span>
+                                    @endif
+                                </h3>
                             </div>
                         </div>
                         <div class="card-body p-4">
@@ -1301,6 +1312,11 @@
                                 @if($scene->video_url || $scene->video_path)
                                     <div class="video-player-container" data-scene-id="{{ $scene->id }}" data-project-id="{{ $project->id }}" data-duration="{{ $scene->gemini_duration ?? 0 }}">
                                         <div class="video-wrapper">
+                                            @if($scene->type === 'image')
+                                                <!-- Display Image -->
+                                                <img id="video-{{ $scene->id }}" class="scene-video" src="{{ $scene->video_url }}" alt="Scene {{ $scene->scene_number }}" style="width: 100%; height: 100%; object-fit: cover;">
+                                            @else
+                                                <!-- Display Video -->
                                             <video id="video-{{ $scene->id }}" class="scene-video" preload="metadata" muted>
                                                 @if($scene->video_url)
                                                     <source src="{{ $scene->video_url }}" type="video/mp4">
@@ -1309,6 +1325,7 @@
                                                 @endif
                                                 Your browser does not support the video tag.
                                             </video>
+                                            @endif
 
                                             <!-- Video Overlays -->
                                             <div class="video-overlays">
@@ -1329,6 +1346,7 @@
                                                     </div>
                                                 </div>
                                             </div>
+                                            @if($scene->type !== 'image')
                                             <div class="video-overlay">
                                                 <button type="button" class="play-btn" data-video-id="video-{{ $scene->id }}">
                                                     <i class="bi bi-play-fill"></i>
@@ -1337,8 +1355,10 @@
                                             <div class="video-time-display">
                                                 <span class="current-time">0:00</span> / <span class="total-time">0:00</span>
                                             </div>
+                                            @endif
                                         </div>
 
+                                        @if($scene->type !== 'image')
                                         <!-- Professional Video Timeline -->
                                         <div class="video-timeline-section">
                                             <div class="timeline-header">
@@ -1421,6 +1441,7 @@
                                                 </div>
                                             </div>
                                         </div>
+                                        @endif
                                 @else
                                     <div class="video-placeholder d-flex align-items-center justify-content-center" style="height: 280px; background: #f8f9fa; border-radius: 16px;">
                                         <div class="text-center">
@@ -1560,17 +1581,48 @@
                 <div class="modal-body">
                     <form id="uploadForm{{ $scene->id }}" enctype="multipart/form-data">
                         @csrf
+                        
+                        <!-- Media Type Selection -->
                         <div class="mb-3">
+                            <label class="form-label fw-bold">Select Media Type</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" name="mediaType{{ $scene->id }}" id="videoType{{ $scene->id }}" value="video" checked>
+                                <label class="btn btn-outline-primary" for="videoType{{ $scene->id }}">
+                                    <i class="bi bi-camera-video me-2"></i>Video
+                                </label>
+                                
+                                <input type="radio" class="btn-check" name="mediaType{{ $scene->id }}" id="imageType{{ $scene->id }}" value="image">
+                                <label class="btn btn-outline-primary" for="imageType{{ $scene->id }}">
+                                    <i class="bi bi-image me-2"></i>Image
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Video Upload Section -->
+                        <div id="videoUploadSection{{ $scene->id }}" class="mb-3">
                             <label class="form-label fw-bold">Upload Custom Video</label>
                             <input type="file"
                                    name="custom_video"
                                    id="videoInput{{ $scene->id }}"
                                    class="form-control"
-                                   accept="video/mp4,video/webm,video/ogg,video/avi,video/mov"
-                                   required>
+                                   accept="video/mp4,video/webm,video/ogg,video/avi,video/mov">
                             <div class="form-text text-muted">
                                 <i class="bi bi-info-circle me-1"></i>
                                 <strong>Requirements:</strong> MP4, WebM, MOV formats • Max size: 150MB • Max duration: 1 minute
+                            </div>
+                        </div>
+
+                        <!-- Image Upload Section -->
+                        <div id="imageUploadSection{{ $scene->id }}" class="mb-3" style="display: none;">
+                            <label class="form-label fw-bold">Upload Custom Image</label>
+                            <input type="file"
+                                   name="custom_image"
+                                   id="imageInput{{ $scene->id }}"
+                                   class="form-control"
+                                   accept="image/jpeg,image/jpg,image/png,image/gif,image/webp">
+                            <div class="form-text text-muted">
+                                <i class="bi bi-info-circle me-1"></i>
+                                <strong>Requirements:</strong> JPG, PNG, GIF, WebP formats • Max size: 50MB
                             </div>
                         </div>
 
@@ -1587,13 +1639,24 @@
 
                         <!-- Video Preview -->
                         <div id="videoPreview{{ $scene->id }}" class="mb-3" style="display: none;">
-                            <label class="form-label">Preview:</label>
+                            <label class="form-label">Video Preview:</label>
                             <video class="w-100" style="max-height: 200px; border-radius: 8px;" controls>
                                 Your browser does not support the video tag.
                             </video>
                             <div class="mt-2">
                                 <small class="text-muted">
                                     <span class="video-info"></span>
+                                </small>
+                            </div>
+                        </div>
+
+                        <!-- Image Preview -->
+                        <div id="imagePreview{{ $scene->id }}" class="mb-3" style="display: none;">
+                            <label class="form-label">Image Preview:</label>
+                            <img class="w-100" style="max-height: 200px; border-radius: 8px; object-fit: cover;" alt="Preview">
+                            <div class="mt-2">
+                                <small class="text-muted">
+                                    <span class="image-info"></span>
                                 </small>
                             </div>
                         </div>
@@ -1607,7 +1670,7 @@
                     <button type="button"
                             id="uploadBtn{{ $scene->id }}"
                             class="btn btn-primary"
-                            onclick="uploadCustomVideo({{ $scene->id }})"
+                            onclick="uploadCustomMedia({{ $scene->id }})"
                             disabled>
                         <i class="bi bi-upload me-2"></i>Upload & Replace
                     </button>
@@ -2538,15 +2601,149 @@
 
 
 
-        // Video Upload Functionality
-        function setupVideoUpload() {
-            document.querySelectorAll('[id^="videoInput"]').forEach(input => {
+        // Media Upload Functionality
+        function setupMediaUpload() {
+            console.log('🔧 Setting up media upload functionality');
+            
+            // Setup video inputs
+            const videoInputs = document.querySelectorAll('[id^="videoInput"]');
+            console.log(`📹 Found ${videoInputs.length} video inputs`);
+            videoInputs.forEach(input => {
                 const sceneId = input.id.replace('videoInput', '');
+                console.log(`📹 Setting up video input for scene ${sceneId}`);
 
                 input.addEventListener('change', function(e) {
+                    console.log(`📹 Video input changed for scene ${sceneId}`);
                     validateAndPreviewVideo(sceneId, e.target.files[0]);
                 });
             });
+
+            // Setup image inputs
+            const imageInputs = document.querySelectorAll('[id^="imageInput"]');
+            console.log(`🖼️ Found ${imageInputs.length} image inputs`);
+            imageInputs.forEach(input => {
+                const sceneId = input.id.replace('imageInput', '');
+                console.log(`🖼️ Setting up image input for scene ${sceneId}`);
+
+                input.addEventListener('change', function(e) {
+                    console.log(`🖼️ Image input changed for scene ${sceneId}`);
+                    console.log(`🖼️ Files selected:`, e.target.files.length);
+                    if (e.target.files.length > 0) {
+                        console.log(`🖼️ First file:`, {
+                            name: e.target.files[0].name,
+                            size: e.target.files[0].size,
+                            type: e.target.files[0].type
+                        });
+                    }
+                    validateAndPreviewImage(sceneId, e.target.files[0]);
+                });
+            });
+
+            // Setup media type switching
+            const mediaTypeRadios = document.querySelectorAll('[name^="mediaType"]');
+            console.log(`🔄 Found ${mediaTypeRadios.length} media type radios`);
+            mediaTypeRadios.forEach(radio => {
+                const sceneId = radio.name.replace('mediaType', '');
+                console.log(`🔄 Setting up media type radio for scene ${sceneId}`);
+                
+                radio.addEventListener('change', function() {
+                    console.log(`🔄 Media type changed to ${this.value} for scene ${sceneId}`);
+                    toggleMediaSections(sceneId, this.value);
+                });
+            });
+            
+            console.log('✅ Media upload functionality setup complete');
+            
+            // Test function to manually enable button (for debugging)
+            window.testEnableButton = function(sceneId) {
+                const uploadBtn = document.getElementById(`uploadBtn${sceneId}`);
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    console.log(`🔧 Manually enabled button for scene ${sceneId}`);
+                } else {
+                    console.error(`❌ Button not found for scene ${sceneId}`);
+                }
+            };
+            
+            console.log('🔧 Test function available: testEnableButton(sceneId)');
+            
+            // Add global test function for image validation
+            window.testImageValidation = function(sceneId) {
+                console.log(`🧪 Testing image validation for scene ${sceneId}`);
+                
+                // Create a mock file object
+                const mockFile = {
+                    name: 'test.jpg',
+                    size: 1000000, // 1MB
+                    type: 'image/jpeg'
+                };
+                
+                console.log('🧪 Calling validateAndPreviewImage with mock file');
+                validateAndPreviewImage(sceneId, mockFile);
+            };
+            
+            console.log('🧪 Test function available: testImageValidation(sceneId)');
+            
+            // Add emergency button enable function
+            window.enableAllUploadButtons = function() {
+                console.log('🚨 Emergency: Enabling all upload buttons');
+                document.querySelectorAll('[id^="uploadBtn"]').forEach(btn => {
+                    btn.disabled = false;
+                    btn.style.opacity = '1';
+                    btn.style.pointerEvents = 'auto';
+                    console.log(`✅ Enabled button: ${btn.id}`);
+                });
+            };
+            
+            console.log('🚨 Emergency function available: enableAllUploadButtons()');
+            
+            // Test all buttons on page load
+            setTimeout(() => {
+                console.log('🔍 Testing all upload buttons...');
+                document.querySelectorAll('[id^="uploadBtn"]').forEach(btn => {
+                    const sceneId = btn.id.replace('uploadBtn', '');
+                    console.log(`🔍 Button ${sceneId}:`, {
+                        exists: !!btn,
+                        disabled: btn.disabled,
+                        id: btn.id,
+                        onclick: btn.onclick,
+                        className: btn.className
+                    });
+                    
+                    // Test if button can be enabled
+                    const originalDisabled = btn.disabled;
+                    btn.disabled = false;
+                    console.log(`🔧 Button ${sceneId} enable test:`, {
+                        wasDisabled: originalDisabled,
+                        nowDisabled: btn.disabled,
+                        canBeEnabled: !btn.disabled
+                    });
+                    btn.disabled = originalDisabled; // Restore original state
+                });
+            }, 1000);
+        }
+
+        function toggleMediaSections(sceneId, mediaType) {
+            const videoSection = document.getElementById(`videoUploadSection${sceneId}`);
+            const imageSection = document.getElementById(`imageUploadSection${sceneId}`);
+            const videoPreview = document.getElementById(`videoPreview${sceneId}`);
+            const imagePreview = document.getElementById(`imagePreview${sceneId}`);
+            const uploadBtn = document.getElementById(`uploadBtn${sceneId}`);
+            const validationMsg = document.getElementById(`validationMessage${sceneId}`);
+
+            // Reset states
+            uploadBtn.disabled = true;
+            validationMsg.style.display = 'none';
+            videoPreview.style.display = 'none';
+            imagePreview.style.display = 'none';
+
+            if (mediaType === 'video') {
+                videoSection.style.display = 'block';
+                imageSection.style.display = 'none';
+            } else if (mediaType === 'image') {
+                videoSection.style.display = 'none';
+                imageSection.style.display = 'block';
+            }
         }
 
         function validateAndPreviewVideo(sceneId, file) {
@@ -2605,17 +2802,27 @@
         }
 
         function showValidationError(sceneId, message) {
+            console.log(`❌ Validation error for scene ${sceneId}: ${message}`);
             const validationMsg = document.getElementById(`validationMessage${sceneId}`);
+            if (validationMsg) {
             validationMsg.className = 'alert alert-danger';
             validationMsg.innerHTML = `<i class="bi bi-exclamation-triangle me-2"></i>${message}`;
             validationMsg.style.display = 'block';
+            } else {
+                console.error(`❌ Validation message element not found for scene ${sceneId}`);
+            }
         }
 
         function showValidationSuccess(sceneId, message) {
+            console.log(`✅ Validation success for scene ${sceneId}: ${message}`);
             const validationMsg = document.getElementById(`validationMessage${sceneId}`);
+            if (validationMsg) {
             validationMsg.className = 'alert alert-success';
             validationMsg.innerHTML = `<i class="bi bi-check-circle me-2"></i>${message}`;
             validationMsg.style.display = 'block';
+            } else {
+                console.error(`❌ Validation message element not found for scene ${sceneId}`);
+            }
         }
 
         function showVideoPreview(sceneId, file, videoElement) {
@@ -2629,25 +2836,132 @@
             preview.style.display = 'block';
         }
 
-        async function uploadCustomVideo(sceneId) {
+        function validateAndPreviewImage(sceneId, file) {
+            console.log(`🔍 validateAndPreviewImage called for scene ${sceneId}`);
+            
+            const uploadBtn = document.getElementById(`uploadBtn${sceneId}`);
+            const validationMsg = document.getElementById(`validationMessage${sceneId}`);
+            const preview = document.getElementById(`imagePreview${sceneId}`);
+
+            console.log(`🔍 Elements found:`, {
+                uploadBtn: !!uploadBtn,
+                validationMsg: !!validationMsg,
+                preview: !!preview
+            });
+
+            // Reset states
+            if (uploadBtn) uploadBtn.disabled = true;
+            if (validationMsg) validationMsg.style.display = 'none';
+            if (preview) preview.style.display = 'none';
+
+            if (!file) {
+                console.log('❌ No file provided');
+                return;
+            }
+
+            console.log(`🖼️ Validating image for scene ${sceneId}:`, {
+                name: file.name,
+                size: file.size,
+                type: file.type
+            });
+
+            // Check file size (50MB = 50 * 1024 * 1024 bytes)
+            const maxSize = 50 * 1024 * 1024;
+            if (file.size > maxSize) {
+                showValidationError(sceneId, `File too large! Maximum size is 50MB. Your file is ${(file.size / 1024 / 1024).toFixed(1)}MB.`);
+                return;
+            }
+
+            // Check file type
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+            console.log(`🔍 File type check: ${file.type} in [${allowedTypes.join(', ')}]`);
+            
+            if (!allowedTypes.includes(file.type)) {
+                console.error(`❌ Invalid file type: ${file.type}`);
+                showValidationError(sceneId, `Invalid file type! Please upload JPG, PNG, GIF, or WebP files only. (Detected: ${file.type})`);
+                return;
+            }
+            
+            console.log(`✅ File type accepted: ${file.type}`);
+
+            // Show preview and enable upload
+            console.log('✅ Image validation passed, showing preview and enabling button');
+            
+            try {
+                showImagePreview(sceneId, file);
+                console.log('✅ Image preview shown');
+            } catch (error) {
+                console.error('❌ Error showing image preview:', error);
+            }
+            
+            try {
+                if (uploadBtn) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.style.opacity = '1';
+                    uploadBtn.style.pointerEvents = 'auto';
+                    console.log('✅ Upload button enabled successfully');
+                } else {
+                    console.error('❌ Upload button not found!');
+                }
+            } catch (error) {
+                console.error('❌ Error enabling upload button:', error);
+            }
+            
+            try {
+                showValidationSuccess(sceneId, 'Image is ready for upload!');
+                console.log('✅ Validation success message shown');
+            } catch (error) {
+                console.error('❌ Error showing validation success:', error);
+            }
+            
+            console.log('✅ Image validation completed successfully');
+        }
+
+        function showImagePreview(sceneId, file) {
+            const preview = document.getElementById(`imagePreview${sceneId}`);
+            const img = preview.querySelector('img');
+            const info = preview.querySelector('.image-info');
+
+            img.src = URL.createObjectURL(file);
+            info.textContent = `${file.name} • ${(file.size / 1024 / 1024).toFixed(1)}MB`;
+
+            preview.style.display = 'block';
+        }
+
+        async function uploadCustomMedia(sceneId) {
             const form = document.getElementById(`uploadForm${sceneId}`);
-            const fileInput = document.getElementById(`videoInput${sceneId}`);
             const uploadBtn = document.getElementById(`uploadBtn${sceneId}`);
             const progress = document.getElementById(`uploadProgress${sceneId}`);
             const progressBar = progress.querySelector('.progress-bar');
             const statusText = progress.querySelector('.upload-status');
 
+            // Get selected media type
+            const videoType = document.getElementById(`videoType${sceneId}`);
+            const imageType = document.getElementById(`imageType${sceneId}`);
+            const videoInput = document.getElementById(`videoInput${sceneId}`);
+            const imageInput = document.getElementById(`imageInput${sceneId}`);
+
+            let fileInput, fileType, fileName;
+            
+            if (videoType.checked) {
+                fileInput = videoInput;
+                fileType = 'video';
+                fileName = 'custom_video';
+            } else if (imageType.checked) {
+                fileInput = imageInput;
+                fileType = 'image';
+                fileName = 'custom_image';
+            }
+
             // Check if file is selected
             if (!fileInput.files || !fileInput.files[0]) {
-                showValidationError(sceneId, 'Please select a video file first.');
+                showValidationError(sceneId, `Please select a ${fileType} file first.`);
                 return;
             }
 
-            // No need to get project ID since it's in the route
-
             // Create FormData and add the file
             const formData = new FormData();
-            formData.append('custom_video', fileInput.files[0]);
+            formData.append(fileName, fileInput.files[0]);
             formData.append('_token', document.querySelector('meta[name="csrf-token"]').getAttribute('content'));
 
             // Debug FormData contents
@@ -2715,10 +3029,10 @@
 
                 // Update progress to complete
                 progressBar.style.width = '100%';
-                statusText.textContent = 'Upload complete! Updating video...';
+                statusText.textContent = `Upload complete! Updating ${fileType}...`;
 
-                // Replace the video source with the new uploaded video
-                await replaceSceneVideo(sceneId, result.video_url);
+                // Replace the scene media with the new uploaded media
+                await replaceSceneMedia(sceneId, result.video_url, result.type || fileType);
 
                 // Close modal and show success - Force cleanup
                 const modalElement = document.getElementById(`uploadModal${sceneId}`);
@@ -2765,13 +3079,15 @@
             }
         }
 
-        async function replaceSceneVideo(sceneId, newVideoUrl) {
-            console.log(`🔄 Replacing video for scene ${sceneId} with ${newVideoUrl}`);
+        async function replaceSceneMedia(sceneId, newMediaUrl, mediaType) {
+            console.log(`🔄 Replacing ${mediaType} for scene ${sceneId} with ${newMediaUrl}`);
 
+            if (mediaType === 'video') {
+                // Handle video replacement
             const video = document.getElementById(`video-${sceneId}`);
             if (video) {
                 // Update video source
-                video.src = newVideoUrl;
+                    video.src = newMediaUrl;
                 video.load(); // Reload the video
 
                 // Reinitialize time displays
@@ -2804,6 +3120,37 @@
 
                         console.log('✅ Timeline and time displays reinitialized with new video');
                     }, { once: true });
+                    }
+                }
+            } else if (mediaType === 'image') {
+                // Handle image replacement
+                const video = document.getElementById(`video-${sceneId}`);
+                const container = video ? video.closest('[data-scene-id]') : null;
+                
+                if (video && container) {
+                    // Convert video element to image display with exact server-side styling
+                    const image = document.createElement('img');
+                    image.id = `video-${sceneId}`;
+                    image.className = 'scene-video';
+                    image.src = newMediaUrl;
+                    image.alt = `Scene ${sceneId}`;
+                    image.style.cssText = 'width: 100%; height: 100%; object-fit: cover;';
+                    
+                    // Hide video controls, time displays, and timeline for images
+                    const controlsContainer = container.querySelector('.video-controls');
+                    const timeContainer = container.querySelector('.time-display');
+                    const timelineSection = container.querySelector('.video-timeline-section');
+                    const videoOverlay = container.querySelector('.video-overlay');
+                    
+                    if (controlsContainer) controlsContainer.style.display = 'none';
+                    if (timeContainer) timeContainer.style.display = 'none';
+                    if (timelineSection) timelineSection.style.display = 'none';
+                    if (videoOverlay) videoOverlay.style.display = 'none';
+                    
+                    // Replace video with image
+                    video.parentNode.replaceChild(image, video);
+                    
+                    console.log('✅ Video replaced with image, timeline and controls hidden');
                 }
             }
         }
@@ -3138,8 +3485,8 @@
                 }
             });
 
-            // Setup video upload functionality
-            setupVideoUpload();
+            // Setup media upload functionality
+            setupMediaUpload();
         });
 
 
@@ -4232,62 +4579,156 @@
                 return;
             }
 
-            // Find ONLY the specific video element for this scene
-            const videoSelectors = [
-                `#video-${sceneId}`, // Primary selector based on HTML structure
-                `[data-scene-id="${sceneId}"] video` // Backup selector with scene ID
-            ];
+            // Find the media element for this scene (could be video or image)
+            const mediaElement = document.getElementById(`video-${sceneId}`);
+            
+            if (!mediaElement) {
+                console.error(`❌ Media element not found for scene ${sceneId}`);
+                return;
+            }
 
-            let videoFound = false;
+            console.log(`🎥 Found media element:`, mediaElement.tagName);
 
-            videoSelectors.forEach(selector => {
-                const videoElements = document.querySelectorAll(selector); // Use querySelectorAll to see all matches
-                console.log(`🔍 Selector "${selector}" found ${videoElements.length} elements`);
-
-                videoElements.forEach((videoElement, index) => {
-                    const elementId = videoElement.id || 'no-id';
-                    const parentSceneId = videoElement.closest('[data-scene-id]')?.getAttribute('data-scene-id') || 'no-parent-scene';
-
-                    console.log(`🎥 Element ${index + 1}: ID="${elementId}", Parent Scene="${parentSceneId}"`);
-
-                    // Only update if this is actually the target scene
-                    if (elementId === `video-${sceneId}` || parentSceneId === sceneId) {
-                        videoFound = true;
-                        console.log(`✅ MATCH! Updating video for scene ${sceneId}`);
-                        console.log(`🎥 Old URL: ${videoElement.src}`);
-
-                        // Pause the video first
-                        videoElement.pause();
+            // Check if it's a video or image element
+            if (mediaElement.tagName === 'VIDEO') {
+                console.log(`🎥 Updating video element for scene ${sceneId}`);
+                
+                // Pause the video first (only if it's a video element)
+                if (typeof mediaElement.pause === 'function') {
+                    mediaElement.pause();
+                }
 
                         // Update the src attribute
-                        videoElement.src = newVideoUrl;
+                mediaElement.src = newVideoUrl;
 
                         // Update any source elements inside the video
-                        const sourceElements = videoElement.querySelectorAll('source');
+                const sourceElements = mediaElement.querySelectorAll('source');
                         sourceElements.forEach(source => {
                             source.src = newVideoUrl;
                         });
 
                         // Force reload the video element
-                        videoElement.load();
+                mediaElement.load();
 
-                        // Update any data attributes that might store the URL
-                        videoElement.setAttribute('data-video-url', newVideoUrl);
+                // Show video controls and timeline
+                const container = mediaElement.closest('[data-scene-id]');
+                if (container) {
+                    const timelineSection = container.querySelector('.video-timeline-section');
+                    const videoOverlay = container.querySelector('.video-overlay');
+                    const timeDisplay = container.querySelector('.video-time-display');
+                    
+                    if (timelineSection) timelineSection.style.display = 'block';
+                    if (videoOverlay) videoOverlay.style.display = 'block';
+                    if (timeDisplay) timeDisplay.style.display = 'block';
+                }
 
-                        console.log(`✅ Updated video element: ${selector} (${elementId})`);
-                    } else {
-                        console.log(`❌ SKIP! Element ${elementId} doesn't match target scene ${sceneId}`);
+            } else if (mediaElement.tagName === 'IMG') {
+                console.log(`🖼️ Converting image to video element for scene ${sceneId}`);
+                
+                // Convert image element back to video element
+                const container = mediaElement.closest('[data-scene-id]');
+                if (container) {
+                    // Create new video element with exact server-side structure and styling
+                    const videoElement = document.createElement('video');
+                    videoElement.id = `video-${sceneId}`;
+                    videoElement.className = 'scene-video';
+                    videoElement.preload = 'metadata';
+                    videoElement.muted = true;
+                    
+                    // Apply the same styling as server-side CSS
+                    videoElement.style.width = '100%';
+                    videoElement.style.height = '280px';
+                    videoElement.style.objectFit = 'contain';
+                    
+                    // Ensure proper responsive behavior
+                    if (window.innerWidth <= 768) {
+                        videoElement.style.height = '220px';
                     }
-                });
-            });
-
-            if (!videoFound) {
-                console.error(`❌ No video element found for scene ${sceneId}`);
-                console.log('Available video elements:', document.querySelectorAll('video'));
+                    
+                    // Add source element (exactly like server-side)
+                    const sourceElement = document.createElement('source');
+                    sourceElement.src = newVideoUrl;
+                    sourceElement.type = 'video/mp4';
+                    videoElement.appendChild(sourceElement);
+                    
+                    // Add fallback text (exactly like server-side)
+                    videoElement.appendChild(document.createTextNode('Your browser does not support the video tag.'));
+                    
+                    // Replace image with video
+                    mediaElement.parentNode.replaceChild(videoElement, mediaElement);
+                    
+                    // Show video controls and timeline
+                    const timelineSection = container.querySelector('.video-timeline-section');
+                    const videoOverlay = container.querySelector('.video-overlay');
+                    const timeDisplay = container.querySelector('.video-time-display');
+                    
+                    if (timelineSection) timelineSection.style.display = 'block';
+                    if (videoOverlay) videoOverlay.style.display = 'block';
+                    if (timeDisplay) timeDisplay.style.display = 'block';
+                    
+                    // Initialize the video element properly
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        console.log(`🎥 Video metadata loaded for scene ${sceneId}`);
+                        
+                        // Initialize timeline if it exists
+                        const timeline = window[`timeline_${sceneId}`];
+                        if (timeline) {
+                            console.log(`🔄 Initializing timeline for scene ${sceneId}`);
+                            timeline.initializeTimeline();
+                            timeline.updateTimeDisplays();
+                        }
+                        
+                        // Update time displays
+                        const currentTimeEl = container.querySelector('.current-time');
+                        const totalTimeEl = container.querySelector('.total-time');
+                        
+                        if (currentTimeEl && totalTimeEl) {
+                            currentTimeEl.textContent = '0:00';
+                            totalTimeEl.textContent = formatTime(videoElement.duration);
+                        }
+                        
+                        console.log(`✅ Video fully initialized for scene ${sceneId}`);
+                    }, { once: true });
+                    
+                    // Force load the video
+                    videoElement.load();
+                    
+                    // Add play button functionality
+                    const playBtn = container.querySelector('.play-btn');
+                    if (playBtn) {
+                        playBtn.addEventListener('click', () => {
+                            if (videoElement.paused) {
+                                videoElement.play();
+                                playBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+                    } else {
+                                videoElement.pause();
+                                playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
+                            }
+                        });
+                    }
+                    
+                    // Add time update listener
+                    videoElement.addEventListener('timeupdate', () => {
+                        const currentTimeEl = container.querySelector('.current-time');
+                        if (currentTimeEl) {
+                            currentTimeEl.textContent = formatTime(videoElement.currentTime);
+                        }
+                    });
+                    
+                    console.log(`✅ Image converted to video element for scene ${sceneId}`);
+                }
+            } else {
+                console.error(`❌ Unknown media element type: ${mediaElement.tagName}`);
+                return;
             }
 
-            // Reinitialize the timeline for this scene after video update
-            if (videoFound) {
+            // Update any data attributes that might store the URL
+            mediaElement.setAttribute('data-video-url', newVideoUrl);
+
+            console.log(`✅ Updated media element for scene ${sceneId}`);
+
+            // Reinitialize the timeline for this scene after video update (only for videos)
+            if (mediaElement.tagName === 'VIDEO') {
                 setTimeout(() => {
                     const timeline = window[`timeline_${sceneId}`];
                     if (timeline) {
@@ -4539,13 +4980,81 @@
                     containerDataDuration: videoContainer?.getAttribute('data-duration') || 'No data-duration'
                 });
 
-                if (!timeline || !timeline.video) {
-                    invalidScenes.push(`Scene ${sceneId}: No timeline or video found`);
-                    console.error(`❌ Scene ${sceneId}: Missing timeline or video`);
-                    return;
+                // Check if this is an image scene by looking at the DOM element
+                const mediaElement = document.getElementById(`video-${sceneId}`);
+                const isImageScene = mediaElement && mediaElement.tagName === 'IMG';
+                
+                if (isImageScene) {
+                    console.log(`🖼️ Scene ${sceneId} is an image scene - using database duration`);
+                    
+                    // For image scenes, get the URL from the DOM element and use scene duration from data attribute
+                    const videoUrl = mediaElement?.src || mediaElement?.getAttribute('src') || '';
+                    const sceneDuration = parseFloat(sceneContainer?.getAttribute('data-duration')) || 0;
+                    
+                    console.log(`🖼️ Image scene ${sceneId} details:`, {
+                        sceneId: sceneId,
+                        sceneContainer: sceneContainer,
+                        mediaElement: mediaElement?.tagName,
+                        src: videoUrl,
+                        sceneDuration: sceneDuration,
+                        dataDuration: sceneContainer?.getAttribute('data-duration'),
+                        dataDurationRaw: sceneContainer?.getAttribute('data-duration'),
+                        parseFloatResult: parseFloat(sceneContainer?.getAttribute('data-duration')),
+                        isNaN: isNaN(parseFloat(sceneContainer?.getAttribute('data-duration')))
+                    });
+                    
+                    // Check if image URL is valid
+                    if (!videoUrl || videoUrl.trim() === '' || videoUrl === 'about:blank') {
+                        invalidScenes.push(`Scene ${sceneId}: Empty or invalid image URL`);
+                        console.error(`❌ Scene ${sceneId}: Invalid image URL`);
+                        return;
+                    }
+                    
+                    // Check if scene duration is valid, with fallback to a default duration
+                    if (!sceneDuration || isNaN(sceneDuration) || sceneDuration <= 0) {
+                        console.warn(`⚠️ Scene ${sceneId}: Invalid scene duration (${sceneDuration}), using fallback duration`);
+                        // Use a fallback duration for image scenes (5 seconds default)
+                        const fallbackDuration = 5.0;
+                        console.log(`🔄 Using fallback duration: ${fallbackDuration}s for scene ${sceneId}`);
+                        
+                        scenesData.push({
+                            scene_id: parseInt(sceneId),
+                            video_url: videoUrl,
+                            duration: fallbackDuration, // Use 'duration' field for validation
+                            start_time: 0,
+                            end_time: fallbackDuration,
+                            trimmed_duration: fallbackDuration,
+                            type: 'image'
+                        });
+                        
+                        return; // Skip the rest of the processing
+                    }
+                    
+                    // For image scenes, use the scene duration as both start and end time
+                    const startTime = 0;
+                    const endTime = sceneDuration;
+                    const trimmedDuration = sceneDuration;
+                    
+                    console.log(`🖼️ Image scene ${sceneId} timing:`, {
+                        startTime: startTime,
+                        endTime: endTime,
+                        trimmedDuration: trimmedDuration
+                    });
+                    
+                    scenesData.push({
+                        scene_id: parseInt(sceneId),
+                        video_url: videoUrl,
+                        duration: sceneDuration, // Use 'duration' field for validation
+                        start_time: startTime,
+                        end_time: endTime,
+                        trimmed_duration: trimmedDuration,
+                        type: 'image'
+                    });
+                    
+                    return; // Skip the rest of the video processing
                 }
 
-                // Use currentSrc if src is empty (this handles <source> elements)
+                // For video scenes, use timeline data
                 const videoUrl = timeline.video.src || timeline.video.currentSrc;
                 const videoDuration = timeline.video.duration;
 
@@ -4613,7 +5122,8 @@
                     trimmed_duration: trimmedDuration,
                     start_time: startTime,
                     end_time: endTime,
-                    overlays: overlays
+                    overlays: overlays,
+                    type: 'video'
                 });
 
                 console.log(`📊 Scene ${sceneId} data:`, {

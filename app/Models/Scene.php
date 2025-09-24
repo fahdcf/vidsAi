@@ -26,7 +26,8 @@ class Scene extends Model
         'prompt',
         'status',
         'job_id',
-        'approved'
+        'approved',
+        'type'
     ];
 
     protected $casts = [

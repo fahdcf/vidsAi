@@ -160,7 +160,8 @@ class ProjectController extends Controller
             // Update the scene
             $scene->update([
                 'video_url' => $request->video_url,
-                'keywords' => $request->keywords
+                'keywords' => $request->keywords,
+                'type' => 'video' // Ensure type is video when updating video_url
             ]);
 
             logger()->info('✅ Scene updated successfully', [
@@ -274,7 +275,8 @@ class ProjectController extends Controller
                     // Update the scene - ALWAYS update even if keywords are the same
                     $updateData = [
                         'video_url' => $responseData['new_video_url'],
-                        'keywords' => $finalKeywords
+                        'keywords' => $finalKeywords,
+                        'type' => 'video' // Always set type back to video when regenerating
                     ];
 
                     // Add prompt if available
@@ -1032,8 +1034,9 @@ class ProjectController extends Controller
             return response()->json(['success' => false, 'message' => 'Scene not found'], 404);
         }
 
-        // Check if this is the new video upload format or old format
+        // Check if this is the new media upload format (video or image)
         $isNewVideoUpload = $request->hasFile('custom_video');
+        $isNewImageUpload = $request->hasFile('custom_image');
 
         if ($isNewVideoUpload) {
             // New video upload format - upload to 0x0.st
@@ -1061,7 +1064,8 @@ class ProjectController extends Controller
                 $scene->update([
                     'video_url' => $downloadableUrl,
                     'video_path' => null, // Clear local path since we're using external URL
-                    'status' => 'completed' // Mark as completed since user uploaded custom video
+                    'status' => 'completed', // Mark as completed since user uploaded custom video
+                    'type' => 'video' // Ensure type is set to video
                 ]);
 
                 logger()->info('Video uploaded successfully', [
@@ -1072,11 +1076,65 @@ class ProjectController extends Controller
                 return response()->json([
                     'success' => true,
                     'message' => 'Video uploaded successfully',
-                    'video_url' => $downloadableUrl
+                    'video_url' => $downloadableUrl,
+                    'type' => 'video'
                 ]);
 
             } catch (\Exception $e) {
                 logger()->error('Video upload failed', [
+                    'scene_id' => $scene->id,
+                    'error' => $e->getMessage()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Upload failed: ' . $e->getMessage()
+                ], 500);
+            }
+        } elseif ($isNewImageUpload) {
+            // New image upload format - upload to 0x0.st
+            logger()->info('New image upload started', [
+                'project_id' => $project->id,
+                'scene_id' => $scene->id,
+                'file_size' => $request->file('custom_image') ? $request->file('custom_image')->getSize() : 'no file'
+            ]);
+
+            $request->validate([
+                'custom_image' => 'required|file|mimes:jpg,jpeg,png,gif,webp|max:51200' // 50MB in KB
+            ]);
+
+            try {
+                $file = $request->file('custom_image');
+
+                // Upload image to 0x0.st to get downloadable URL
+                $downloadableUrl = $this->uploadToFileHost($file);
+
+                if (!$downloadableUrl) {
+                    throw new \Exception('Failed to upload image to file hosting service');
+                }
+
+                // Update the scene with the new image URL
+                $scene->update([
+                    'video_url' => $downloadableUrl, // Store image URL in video_url field for compatibility
+                    'video_path' => null, // Clear local path since we're using external URL
+                    'status' => 'completed', // Mark as completed since user uploaded custom image
+                    'type' => 'image' // Set type to image
+                ]);
+
+                logger()->info('Image uploaded successfully', [
+                    'scene_id' => $scene->id,
+                    'image_url' => $downloadableUrl
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Image uploaded successfully',
+                    'video_url' => $downloadableUrl, // Return as video_url for frontend compatibility
+                    'type' => 'image'
+                ]);
+
+            } catch (\Exception $e) {
+                logger()->error('Image upload failed', [
                     'scene_id' => $scene->id,
                     'error' => $e->getMessage()
                 ]);
@@ -1105,12 +1163,16 @@ class ProjectController extends Controller
                     $scene->update([
                         'video_path' => $path,
                         'video_url' => Storage::url($path),
+                        'type' => 'video',
+                        'status' => 'completed'
                     ]);
                 } else {
-                    // It's an image - you might want to handle this differently
+                    // It's an image
                     $scene->update([
                         'video_path' => $path,
                         'video_url' => Storage::url($path),
+                        'type' => 'image',
+                        'status' => 'completed'
                     ]);
                 }
 
@@ -3118,7 +3180,8 @@ class ProjectController extends Controller
                     $scene->update([
                         'start_time' => $startTime,
                         'end_time' => $endTime,
-                        'trimmed_duration' => $trimmedDuration
+                        'trimmed_duration' => $trimmedDuration,
+                        'type' => 'video' // Ensure type stays as video when trimming
                     ]);
                 }
             }

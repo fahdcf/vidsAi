@@ -49,7 +49,7 @@ return [
 
     // New services for workflow implementation
     'gemini' => [
-        'api_key' => env('GEMINI_API_KEY', 'AIzaSyDO6P2zGiIEhg2zhoKr1b_gMnOXH-CgL9k'),
+        'api_key' => env('GEMINI_API_KEY'),
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent'),
     ],
 
