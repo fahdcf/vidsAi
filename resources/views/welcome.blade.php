@@ -490,7 +490,7 @@
                         </div>
                     </div>
                     
-                    <div class="d-flex align-items-center gap-4 text-muted mt-4">
+                    <div class="d-flex align-items-center gap-4 mt-4" style="color: var(--dark-text-secondary);">
                         <div class="d-flex align-items-center">
                             <i class="bi bi-check-circle-fill text-success me-2"></i>
                             <small>No credit card required</small>
@@ -659,15 +659,15 @@
             <div class="row">
                 <div class="col-md-6">
                     <h5 class="fw-bold mb-3">VidsAI</h5>
-                    <p class="text-muted">Create amazing AI-generated video ads in minutes.</p>
+                    <p style="color: var(--dark-text-secondary);">Create amazing AI-generated video ads in minutes.</p>
                 </div>
                 <div class="col-md-6 text-md-end">
                     <div class="d-flex justify-content-md-end gap-3 mb-3">
-                        <a href="#" class="text-muted">Privacy Policy</a>
-                        <a href="#" class="text-muted">Terms of Service</a>
-                        <a href="#" class="text-muted">Contact</a>
+                        <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Privacy Policy</a>
+                        <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Terms of Service</a>
+                        <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Contact</a>
                     </div>
-                    <p class="text-muted mb-0">&copy; {{ date('Y') }} VidsAI. All rights reserved.</p>
+                    <p style="color: var(--dark-text-secondary);" class="mb-0">&copy; {{ date('Y') }} VidsAI. All rights reserved.</p>
                 </div>
             </div>
         </div>
