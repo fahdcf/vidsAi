@@ -98,13 +98,13 @@
             <div class="navbar-brand d-flex align-items-center">
                 <div class="me-2">
                     <i class="bi bi-camera-video-fill text-primary" style="font-size: 1.5rem;"></i>
-                </div>
+                        </div>
                 <span class="fw-bold fs-4">VidsAI</span>
-            </div>
+                </div>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
                 <span class="navbar-toggler-icon"></span>
-            </button>
+                            </button>
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
@@ -141,9 +141,9 @@
                                 <li><hr class="dropdown-divider"></li>
                                 <li>
                                     <form method="POST" action="{{ route('logout') }}" class="d-inline">
-                                        @csrf
+                            @csrf
                                         <button type="submit" class="dropdown-item">Logout</button>
-                                    </form>
+                        </form>
                                 </li>
                             </ul>
                         </li>
@@ -153,26 +153,26 @@
         </div>
     </nav>
 
-    <!-- Hero Section -->
+        <!-- Hero Section -->
     <section class="hero-gradient py-5" style="margin-top: 80px;">
         <div class="container">
             <div class="text-center mb-5">
                 <h1 class="display-4 fw-bold mb-4">
-                    Simple, Transparent
+                        Simple, Transparent
                     <span class="gradient-text">Pricing</span>
-                </h1>
+                    </h1>
                 <p class="lead" style="color: var(--dark-text-secondary);">
-                    Choose the perfect plan for your video creation needs. Start free and scale as you grow.
-                </p>
+                        Choose the perfect plan for your video creation needs. Start free and scale as you grow.
+                    </p>
+                </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- Pricing Cards -->
+        <!-- Pricing Cards -->
     <section class="py-5">
         <div class="container">
             <div class="row g-4 justify-content-center">
-                <!-- Free Plan -->
+                    <!-- Free Plan -->
                 <div class="col-lg-4 col-md-6">
                     <div class="pricing-card h-100">
                         <div class="text-center mb-4">
@@ -199,6 +199,10 @@
                                 <span>3 formats (Reel, Square, YouTube)</span>
                             </li>
                             <li class="mb-3 d-flex align-items-center">
+                                <i class="bi bi-check-circle-fill text-success me-3"></i>
+                                <span>Basic saved generation settings</span>
+                            </li>
+                            <li class="mb-3 d-flex align-items-center">
                                 <i class="bi bi-x-circle-fill text-danger me-3"></i>
                                 <span style="color: var(--dark-text-secondary);">Custom voiceover</span>
                             </li>
@@ -218,9 +222,9 @@
                             </a>
                         @endauth
                     </div>
-                </div>
+                    </div>
 
-                <!-- Basic Plan -->
+                    <!-- Basic Plan -->
                 <div class="col-lg-4 col-md-6">
                     <div class="pricing-card featured h-100">
                         <div class="text-center mb-4">
@@ -249,6 +253,10 @@
                             </li>
                             <li class="mb-3 d-flex align-items-center">
                                 <i class="bi bi-check-circle-fill text-success me-3"></i>
+                                <span>Advanced saved generation settings</span>
+                            </li>
+                            <li class="mb-3 d-flex align-items-center">
+                                <i class="bi bi-check-circle-fill text-success me-3"></i>
                                 <span>AI voiceover</span>
                             </li>
                             <li class="mb-3 d-flex align-items-center">
@@ -261,9 +269,9 @@
                             Choose Basic
                         </a>
                     </div>
-                </div>
+                    </div>
 
-                <!-- Pro Plan -->
+                    <!-- Pro Plan -->
                 <div class="col-lg-4 col-md-6">
                     <div class="pricing-card h-100">
                         <div class="text-center mb-4">
@@ -291,6 +299,10 @@
                             </li>
                             <li class="mb-3 d-flex align-items-center">
                                 <i class="bi bi-check-circle-fill text-success me-3"></i>
+                                <span>Premium saved generation settings</span>
+                            </li>
+                            <li class="mb-3 d-flex align-items-center">
+                                <i class="bi bi-check-circle-fill text-success me-3"></i>
                                 <span>Custom voiceover upload</span>
                             </li>
                             <li class="mb-3 d-flex align-items-center">
@@ -302,28 +314,28 @@
                         <a href="{{ route('register') }}" class="btn btn-outline-primary w-100">
                             Choose Pro
                         </a>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- CTA Section -->
+        <!-- CTA Section -->
     <section class="py-5 bg-primary bg-opacity-10">
         <div class="container text-center">
             <h2 class="display-5 fw-bold mb-4">Ready to Create Amazing Videos?</h2>
-            <p class="lead mb-5" style="color: var(--dark-text-secondary);">Join thousands of creators who are already using VidsAI to produce stunning content</p>
+            <p class="lead mb-5" style="color: var(--dark-text-secondary);">Join thousands of creators who are already using VidsAI to produce stunning content with saved generation settings for instant high-quality videos</p>
             
-            @auth
+                        @auth
                 <a href="{{ route('projects.create') }}" class="btn btn-primary-dark btn-lg px-5 py-3">
                     <i class="bi bi-play-circle me-2"></i>Start Creating Now
-                </a>
-            @else
+                            </a>
+                        @else
                 <a href="{{ route('register') }}" class="btn btn-primary-dark btn-lg px-5 py-3">
                     <i class="bi bi-play-circle me-2"></i>Get Started Free
-                </a>
-            @endauth
-        </div>
+                            </a>
+                        @endauth
+                    </div>
     </section>
 
     <!-- Footer -->
@@ -333,17 +345,17 @@
                 <div class="col-md-6">
                     <h5 class="fw-bold mb-3">VidsAI</h5>
                     <p style="color: var(--dark-text-secondary);">Create amazing AI-generated video ads in minutes.</p>
-                </div>
+                        </div>
                 <div class="col-md-6 text-md-end">
                     <div class="d-flex justify-content-md-end gap-3 mb-3">
                         <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Privacy Policy</a>
                         <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Terms of Service</a>
                         <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Contact</a>
-                    </div>
+                        </div>
                     <p style="color: var(--dark-text-secondary);" class="mb-0">&copy; {{ date('Y') }} VidsAI. All rights reserved.</p>
+                        </div>
+                    </div>
                 </div>
-            </div>
-        </div>
     </footer>
 
     <!-- Bootstrap JS -->

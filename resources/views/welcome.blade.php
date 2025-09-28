@@ -136,14 +136,33 @@
 
         /* Hero Section */
         .hero-enhanced {
-            background: linear-gradient(135deg, 
-                rgba(10, 14, 22, 0.9) 0%, 
-                rgba(21, 27, 38, 0.8) 50%, 
-                rgba(10, 14, 22, 0.9) 100%);
             position: relative;
             overflow: hidden;
             z-index: 1;
             padding-top: 100px;
+        }
+
+        .hero-video-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: -2;
+        }
+
+        .hero-video-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, 
+                rgba(10, 14, 22, 0.85) 0%, 
+                rgba(21, 27, 38, 0.75) 50%, 
+                rgba(10, 14, 22, 0.85) 100%);
+            z-index: -1;
         }
 
         .hero-enhanced::before {
@@ -164,7 +183,7 @@
 
         .hero-content {
             position: relative;
-            z-index: 2;
+            z-index: 3;
         }
 
         .gradient-text-enhanced {
@@ -237,51 +256,375 @@
         .feature-icon-5 { background: linear-gradient(135deg, var(--accent-blue), var(--accent-green)); }
         .feature-icon-6 { background: linear-gradient(135deg, var(--accent-purple), var(--accent-orange)); }
 
-        /* Demo Video Card */
-        .demo-card {
-            background: linear-gradient(145deg, var(--dark-surface), var(--dark-surface-2));
-            border: 1px solid var(--dark-border);
-            border-radius: 24px;
-            padding: 2rem;
-            position: relative;
-            overflow: hidden;
-            transform: rotate(3deg);
-            transition: all 0.4s ease;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        }
+         /* Demo Video Card */
+         .demo-card {
+             background: linear-gradient(145deg, var(--dark-surface), var(--dark-surface-2));
+             border: 1px solid var(--dark-border);
+             border-radius: 24px;
+             padding: 2rem;
+             position: relative;
+             overflow: hidden;
+             transform: rotate(3deg) scale(0.9);
+             transition: all 0.4s ease;
+             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+         }
 
-        .demo-card:hover {
-            transform: rotate(0deg) scale(1.05);
-        }
+         .demo-card:hover {
+             transform: rotate(0deg) scale(0.945);
+         }
 
-        .demo-video {
-            background: linear-gradient(135deg, #1a202c, #2d3748);
-            border-radius: 16px;
-            aspect-ratio: 16/9;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            position: relative;
-            overflow: hidden;
-        }
+         /* Interactive Scene Card Demo Styles */
+         .demo-scene-card {
+             background: linear-gradient(145deg, var(--dark-surface-2), var(--dark-surface));
+             border: 1px solid var(--dark-border);
+             border-radius: 16px;
+             overflow: hidden;
+             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+             transition: all 0.3s ease;
+         }
 
-        .play-button {
-            width: 80px;
-            height: 80px;
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: all 0.3s ease;
-            cursor: pointer;
-            border: none;
-        }
+         .demo-scene-card:hover {
+             transform: translateY(-2px);
+             box-shadow: 0 12px 32px rgba(66, 153, 225, 0.2);
+             border-color: rgba(66, 153, 225, 0.3);
+         }
 
-        .play-button:hover {
-            transform: scale(1.1);
-            box-shadow: 0 0 30px rgba(66, 153, 225, 0.5);
-        }
+         .scene-card-header-demo {
+             background: linear-gradient(145deg, var(--dark-surface), var(--dark-surface-2));
+             padding: 1rem;
+             border-bottom: 1px solid var(--dark-border);
+         }
+
+         .scene-number-demo {
+             font-size: 1rem;
+             font-weight: 600;
+             color: var(--dark-text);
+         }
+
+         .demo-controls .demo-play-btn {
+             width: 32px;
+             height: 32px;
+             border-radius: 50%;
+             border: 1px solid var(--accent-blue);
+             background: transparent;
+             color: var(--accent-blue);
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             transition: all 0.3s ease;
+         }
+
+         .demo-controls .demo-play-btn:hover {
+             background: var(--accent-blue);
+             color: white;
+             transform: scale(1.1);
+         }
+
+         .demo-script-section {
+             padding: 1rem;
+             border-bottom: 1px solid var(--dark-border);
+         }
+
+         .demo-script-text {
+             color: var(--dark-text-secondary);
+             font-size: 0.875rem;
+             margin-bottom: 0;
+             line-height: 1.4;
+         }
+
+         .demo-video-preview {
+             padding: 1rem;
+             border-bottom: 1px solid var(--dark-border);
+         }
+
+         .demo-video-container {
+             position: relative;
+             border-radius: 12px;
+             aspect-ratio: 16/9;
+             overflow: hidden;
+             cursor: pointer;
+             transition: all 0.3s ease;
+             background: var(--dark-surface);
+         }
+
+         .demo-video-container:hover {
+             transform: scale(1.02);
+         }
+
+         .demo-video {
+             width: 100%;
+             height: 100%;
+             object-fit: cover;
+             border-radius: 12px;
+         }
+
+         .demo-video-loading {
+             position: absolute;
+             top: 0;
+             left: 0;
+             right: 0;
+             bottom: 0;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             background: rgba(0, 0, 0, 0.7);
+             z-index: 3;
+         }
+
+         .demo-video-controls {
+             position: absolute;
+             top: 0;
+             left: 0;
+             right: 0;
+             bottom: 0;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             background: rgba(0, 0, 0, 0.3);
+             opacity: 0;
+             transition: opacity 0.3s ease;
+             z-index: 2;
+         }
+
+         .demo-video-controls.show-when-paused {
+             opacity: 1;
+         }
+
+         .demo-video-container:hover .demo-video-controls {
+             opacity: 1;
+         }
+
+         .demo-play-btn {
+             background: rgba(66, 153, 225, 0.9);
+             border: none;
+             border-radius: 50%;
+             width: 60px;
+             height: 60px;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             color: white;
+             font-size: 1.5rem;
+             cursor: pointer;
+             transition: all 0.3s ease;
+             backdrop-filter: blur(10px);
+         }
+
+         .demo-play-btn:hover {
+             background: var(--accent-blue);
+             transform: scale(1.1);
+         }
+
+         .demo-play-btn:active {
+             transform: scale(0.95);
+         }
+
+         .demo-volume-btn {
+             position: absolute;
+             top: 12px;
+             right: 12px;
+             background: rgba(0, 0, 0, 0.7);
+             border: none;
+             border-radius: 50%;
+             width: 36px;
+             height: 36px;
+             display: flex;
+             align-items: center;
+             justify-content: center;
+             color: white;
+             font-size: 1rem;
+             cursor: pointer;
+             transition: all 0.3s ease;
+             backdrop-filter: blur(10px);
+             z-index: 4;
+         }
+
+         .demo-volume-btn:hover {
+             background: rgba(66, 153, 225, 0.9);
+             transform: scale(1.1);
+         }
+
+         .demo-volume-btn:active {
+             transform: scale(0.95);
+         }
+
+         /* Show controls on mobile/touch devices */
+         @media (max-width: 768px) {
+             .demo-video-controls {
+                 opacity: 1;
+                 background: rgba(0, 0, 0, 0.5);
+             }
+             
+             .demo-play-btn {
+                 width: 50px;
+                 height: 50px;
+                 font-size: 1.2rem;
+             }
+
+             .demo-volume-btn {
+                 width: 32px;
+                 height: 32px;
+                 font-size: 0.9rem;
+                 top: 8px;
+                 right: 8px;
+             }
+         }
+
+         .demo-video-info {
+             position: absolute;
+             bottom: 8px;
+             right: 8px;
+             background: rgba(0, 0, 0, 0.7);
+             color: white;
+             padding: 4px 8px;
+             border-radius: 6px;
+             font-size: 0.75rem;
+             font-weight: 500;
+         }
+
+         .demo-duration {
+             color: var(--accent-blue);
+         }
+
+         .demo-timeline-section {
+             padding: 1rem;
+         }
+
+         .demo-timeline-header {
+             display: flex;
+             align-items: center;
+             gap: 0.5rem;
+             margin-bottom: 0.75rem;
+             font-size: 0.875rem;
+             color: var(--dark-text);
+         }
+
+         .demo-timeline-text {
+             font-weight: 500;
+         }
+
+         .demo-timeline {
+             position: relative;
+             height: 40px;
+             background: var(--dark-surface);
+             border-radius: 8px;
+             overflow: hidden;
+             border: 1px solid var(--dark-border);
+         }
+
+         .demo-timeline-track {
+             width: 100%;
+             height: 100%;
+             background: linear-gradient(90deg, var(--dark-surface) 0%, var(--dark-surface-2) 100%);
+         }
+
+         .demo-progress-bar {
+             position: absolute;
+             top: 0;
+             left: 0;
+             width: 0%;
+             height: 100%;
+             background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+             border-radius: 6px;
+             transition: width 0.1s ease;
+         }
+
+         .demo-playhead {
+             position: absolute;
+             top: 0;
+             left: 0%;
+             width: 2px;
+             height: 100%;
+             background: var(--accent-green);
+             transition: left 0.1s ease;
+         }
+
+         .demo-playhead::before {
+             content: '';
+             position: absolute;
+             top: -6px;
+             left: -4px;
+             width: 10px;
+             height: 10px;
+             background: var(--accent-green);
+             border-radius: 50%;
+             border: 2px solid var(--dark-surface);
+         }
+
+         /* Dynamic Floating Badges */
+         .floating-badge {
+             animation: floatBadge 3s ease-in-out infinite;
+             cursor: pointer;
+             z-index: 10;
+         }
+
+         .floating-badge-1 {
+             animation-delay: 0s;
+         }
+
+         .floating-badge-2 {
+             animation-delay: 1.5s;
+         }
+
+         .badge-content {
+             padding: 12px 16px;
+             border-radius: 25px;
+             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
+             transition: all 0.3s ease;
+             position: relative;
+             overflow: hidden;
+             border: 2px solid rgba(255, 255, 255, 0.2);
+         }
+
+         .badge-content::before {
+             content: '';
+             position: absolute;
+             top: 0;
+             left: -100%;
+             width: 100%;
+             height: 100%;
+             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+             transition: left 0.5s;
+         }
+
+         .floating-badge:hover .badge-content {
+             transform: scale(1.1) rotate(-2deg);
+             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+         }
+
+         .floating-badge:hover .badge-content::before {
+             left: 100%;
+         }
+
+         .floating-badge:active .badge-content {
+             transform: scale(0.95);
+         }
+
+         @keyframes floatBadge {
+             0%, 100% { 
+                 transform: translateY(0px) rotate(0deg);
+             }
+             25% { 
+                 transform: translateY(-8px) rotate(1deg);
+             }
+             50% { 
+                 transform: translateY(-4px) rotate(-1deg);
+             }
+             75% { 
+                 transform: translateY(-6px) rotate(0.5deg);
+             }
+         }
+
+         /* Pulse effect on click */
+         @keyframes badgePulse {
+             0% { transform: scale(1); }
+             50% { transform: scale(1.2); }
+             100% { transform: scale(1); }
+         }
+
+         .floating-badge.pulse .badge-content {
+             animation: badgePulse 0.4s ease;
+         }
 
         /* Stats Counter */
         .stats-item {
@@ -351,10 +694,6 @@
             position: relative;
             z-index: 2;
         }
-        
-        .section-spacer {
-            padding: 4rem 0;
-        }
 
         /* Responsive */
         @media (max-width: 768px) {
@@ -366,8 +705,18 @@
                 font-size: 2.5rem;
             }
             
-            .section-spacer {
-                padding: 2rem 0;
+
+            .hero-video-background {
+                /* On mobile, ensure video covers properly */
+                object-position: center;
+            }
+
+            .hero-video-overlay {
+                /* Stronger overlay on mobile for better text readability */
+                background: linear-gradient(135deg, 
+                    rgba(10, 14, 22, 0.9) 0%, 
+                    rgba(21, 27, 38, 0.85) 50%, 
+                    rgba(10, 14, 22, 0.9) 100%);
             }
         }
     </style>
@@ -434,6 +783,15 @@
 
     <!-- Hero Section -->
     <section class="hero-enhanced min-vh-100 d-flex align-items-center">
+        <!-- Video Background -->
+        <video class="hero-video-background" autoplay muted loop playsinline>
+            <source src="{{ asset('storage/videos/This_is_a_202509261539.mp4') }}" type="video/mp4">
+            <!-- Fallback for browsers that don't support video -->
+        </video>
+        
+        <!-- Video Overlay -->
+        <div class="hero-video-overlay"></div>
+        
         <div class="container hero-content">
             <div class="row align-items-center">
                 <div class="col-lg-6 fade-in-left">
@@ -450,7 +808,7 @@
                     
                     <p class="lead mb-5" style="color: var(--dark-text-secondary); font-size: 1.25rem;">
                         Transform your ideas into professional video advertisements with AI. 
-                        Control every scene, transition, subtitle style, and music choice—no editing experience required.
+                        Save your generation settings once and create high-quality videos in minutes with your preferred parameters—no editing experience required.
                     </p>
                     
                     <div class="d-flex flex-column flex-sm-row gap-4 mb-5">
@@ -466,6 +824,18 @@
                         <a href="{{ route('pricing') }}" class="btn btn-outline-enhanced btn-lg">
                             View Pricing <i class="bi bi-arrow-right ms-2"></i>
                         </a>
+                    </div>
+                    
+                    <!-- Trust Signals -->
+                    <div class="d-flex align-items-center gap-4 mb-5" style="color: var(--dark-text-secondary);">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            <small>No credit card required</small>
+                        </div>
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-check-circle-fill text-success me-2"></i>
+                            <small>Free trial included</small>
+                        </div>
                     </div>
                     
                     <!-- Stats -->
@@ -489,64 +859,87 @@
                             </div>
                         </div>
                     </div>
-                    
-                    <div class="d-flex align-items-center gap-4 mt-4" style="color: var(--dark-text-secondary);">
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-check-circle-fill text-success me-2"></i>
-                            <small>No credit card required</small>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-check-circle-fill text-success me-2"></i>
-                            <small>Free trial included</small>
-                        </div>
-                    </div>
                 </div>
                 
                 <div class="col-lg-6 text-center fade-in-right">
                     <div class="position-relative">
                         <div class="demo-card">
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div class="d-flex align-items-center">
-                                    <div class="bg-success rounded-circle me-2" style="width: 8px; height: 8px;"></div>
-                                    <small style="color: var(--dark-text-secondary);">Live Demo</small>
-                                </div>
-                                <div class="text-end">
-                                    <small style="color: var(--dark-text-secondary);">Click to play</small>
-                                </div>
-                            </div>
+                             <div class="d-flex justify-content-between align-items-center mb-3">
+                                 <div class="d-flex align-items-center">
+                                     <div class="bg-success rounded-circle me-2" style="width: 8px; height: 8px;"></div>
+                                     <small style="color: var(--dark-text-secondary);">Live Demo</small>
+                                 </div>
+                             </div>
                             
-                            <div class="demo-video mb-3">
-                                <button class="play-button" onclick="playDemo()">
-                                    <i class="bi bi-play-fill text-white" style="font-size: 2rem; margin-left: 4px;"></i>
-                                </button>
-                            </div>
-                            
-                            <div class="d-flex justify-content-between align-items-center">
-                                <small style="color: var(--dark-text-secondary);">Creation Time: 2.7min</small>
-                                <span class="badge" style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue)); color: white;">AI Generated</span>
-                            </div>
+                             <!-- Interactive Scene Card Demo -->
+                             <div class="demo-scene-card mb-3">
+                                 <div class="demo-script-section">
+                                     <p class="demo-script-text mb-0">
+                                         <span class="fw-bold" style="font-size: 0.9rem;">Script:</span>
+                                         Create stunning video ads with AI technology in just minutes
+                                     </p>
+                                 </div>
+
+                                 <!-- Mini Video Preview -->
+                                 <div class="demo-video-preview">
+                                    <div class="demo-video-container">
+                                        <video class="demo-video" id="demoVideo" preload="auto">
+                                            <source src="https://0x0.st/KBsY.mp4" type="video/mp4">
+                                            Your browser does not support the video tag.
+                                        </video>
+                                        <div class="demo-video-loading" id="demoVideoLoading">
+                                            <div class="spinner-border text-primary" role="status">
+                                                <span class="visually-hidden">Loading...</span>
+                                         </div>
+                                        </div>
+                                        <button class="demo-volume-btn" id="demoVolumeBtn">
+                                            <i class="bi bi-volume-up-fill" id="demoVolumeIcon"></i>
+                                        </button>
+                                        <div class="demo-video-controls show-when-paused" id="demoVideoControls">
+                                            <button class="demo-play-btn" id="demoPlayBtn">
+                                                <i class="bi bi-play-fill" id="demoPlayIcon"></i>
+                                            </button>
+                                         <div class="demo-video-info">
+                                                <span class="demo-duration" id="demoDuration">0:00</span>
+                                            </div>
+                                         </div>
+                                     </div>
+                                 </div>
+
+                                 <!-- Timeline Demo -->
+                                 <div class="demo-timeline-section">
+                                     <div class="demo-timeline-header">
+                                         <i class="bi bi-scissors text-primary"></i>
+                                        <span class="demo-timeline-text">Video Progress: <span class="text-primary" id="demoProgress">0:00</span> / <span class="text-primary" id="demoTotalDuration">0:00</span></span>
+                                     </div>
+                                    <div class="demo-timeline" id="demoTimeline">
+                                         <div class="demo-timeline-track"></div>
+                                        <div class="demo-progress-bar" id="demoProgressBar"></div>
+                                        <div class="demo-playhead" id="demoPlayhead"></div>
+                                     </div>
+                                 </div>
+                             </div>
                         </div>
                         
-                        <!-- Floating badges -->
-                        <div class="position-absolute top-0 end-0 translate-middle">
-                            <div style="background: linear-gradient(135deg, var(--accent-orange), var(--accent-purple)); color: white;" class="px-3 py-2 rounded-pill">
-                                <small class="fw-bold">300% Faster</small>
-                            </div>
-                        </div>
-                        
-                        <div class="position-absolute bottom-0 start-0 translate-middle">
-                            <div style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue)); color: white;" class="px-3 py-2 rounded-pill">
-                                <small class="fw-bold">No Skills Required</small>
-                            </div>
-                        </div>
+                         <!-- Dynamic Floating badges -->
+                         <div class="floating-badge floating-badge-1 position-absolute" style="top: 10%; right: -5%;">
+                             <div class="badge-content" style="background: linear-gradient(135deg, var(--accent-orange), var(--accent-purple)); color: white;">
+                                 <i class="bi bi-lightning-fill me-1"></i>
+                                 <small class="fw-bold">300% Faster</small>
+                             </div>
+                         </div>
+                         
+                         <div class="floating-badge floating-badge-2 position-absolute" style="bottom: 0%; left: -5%;">
+                             <div class="badge-content" style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue)); color: white;">
+                                 <i class="bi bi-star-fill me-1"></i>
+                                 <small class="fw-bold">No Skills Required</small>
+                             </div>
+                         </div>
                     </div>
                 </div>
             </div>
         </div>
     </section>
-
-    <!-- Section Spacer -->
-    <div class="section-spacer"></div>
 
     <!-- Features Section -->
     <section id="features" class="py-5" style="position: relative; z-index: 2; background: var(--dark-bg);">
@@ -619,6 +1012,16 @@
                         </div>
                         <h4 class="fw-bold mb-3">Precise Trimming</h4>
                         <p style="color: var(--dark-text-secondary);">Timeline-based video editing with exact start and end time controls.</p>
+                    </div>
+                </div>
+                
+                <div class="col-md-6 col-lg-4 fade-in-up">
+                    <div class="feature-card-enhanced h-100">
+                        <div class="feature-icon" style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));">
+                            <i class="bi bi-bookmark-heart text-white" style="font-size: 1.5rem;"></i>
+                        </div>
+                        <h4 class="fw-bold mb-3">Saved Generation Settings</h4>
+                        <p style="color: var(--dark-text-secondary);">Save your preferred video generation parameters and create high-quality videos instantly with consistent settings across all projects.</p>
                     </div>
                 </div>
             </div>
@@ -742,51 +1145,235 @@
                 });
             });
 
-            // Feature cards interactive effects
-            document.querySelectorAll('.feature-card-enhanced').forEach(card => {
-                card.addEventListener('mouseenter', function() {
-                    const icon = this.querySelector('.feature-icon');
-                    if (icon) {
-                        icon.style.transform = 'scale(1.1) rotate(5deg)';
-                    }
-                });
-                
-                card.addEventListener('mouseleave', function() {
-                    const icon = this.querySelector('.feature-icon');
-                    if (icon) {
-                        icon.style.transform = 'scale(1) rotate(0deg)';
-                    }
-                });
-            });
-        });
+             // Feature cards interactive effects
+             document.querySelectorAll('.feature-card-enhanced').forEach(card => {
+                 card.addEventListener('mouseenter', function() {
+                     const icon = this.querySelector('.feature-icon');
+                     if (icon) {
+                         icon.style.transform = 'scale(1.1) rotate(5deg)';
+                     }
+                 });
+                 
+                 card.addEventListener('mouseleave', function() {
+                     const icon = this.querySelector('.feature-icon');
+                     if (icon) {
+                         icon.style.transform = 'scale(1) rotate(0deg)';
+                     }
+                 });
+             });
 
-        // Demo video interaction
-        function playDemo() {
-            const button = document.querySelector('.play-button');
-            const video = document.querySelector('.demo-video');
-            
-            // Add loading state
-            button.innerHTML = '<i class="bi bi-hourglass-split text-white" style="font-size: 2rem;"></i>';
-            button.style.transform = 'scale(0.9)';
-            
-            // Simulate video loading
-            setTimeout(() => {
-                video.style.background = 'linear-gradient(135deg, #2d3748, #4a5568)';
-                button.innerHTML = '<i class="bi bi-check-circle-fill text-white" style="font-size: 2rem;"></i>';
-                
-                // Show success message
-                setTimeout(() => {
-                    alert('Demo video would play here! This showcases the interactive elements of your VidsAI platform.');
-                    
-                    // Reset button
-                    setTimeout(() => {
-                        button.innerHTML = '<i class="bi bi-play-fill text-white" style="font-size: 2rem; margin-left: 4px;"></i>';
-                        button.style.transform = 'scale(1)';
-                        video.style.background = 'linear-gradient(135deg, #1a202c, #2d3748)';
-                    }, 1000);
-                }, 500);
-            }, 1500);
-        }
+             // Interactive Demo Video
+             const demoVideo = document.getElementById('demoVideo');
+             const demoPlayBtn = document.getElementById('demoPlayBtn');
+             const demoPlayIcon = document.getElementById('demoPlayIcon');
+             const demoVolumeBtn = document.getElementById('demoVolumeBtn');
+             const demoVolumeIcon = document.getElementById('demoVolumeIcon');
+             const demoDuration = document.getElementById('demoDuration');
+             const demoProgress = document.getElementById('demoProgress');
+             const demoTotalDuration = document.getElementById('demoTotalDuration');
+             const demoProgressBar = document.getElementById('demoProgressBar');
+             const demoPlayhead = document.getElementById('demoPlayhead');
+             const demoTimeline = document.getElementById('demoTimeline');
+             const demoVideoLoading = document.getElementById('demoVideoLoading');
+             const demoVideoControls = document.getElementById('demoVideoControls');
+
+             // Format time helper function
+             function formatTime(seconds) {
+                 const mins = Math.floor(seconds / 60);
+                 const secs = Math.floor(seconds % 60);
+                 return `${mins}:${secs.toString().padStart(2, '0')}`;
+             }
+
+             // Function to update controls visibility
+             function updateControlsVisibility() {
+                 if (demoVideo && demoVideoControls) {
+                     if (demoVideo.paused) {
+                         demoVideoControls.classList.add('show-when-paused');
+                     } else {
+                         demoVideoControls.classList.remove('show-when-paused');
+                     }
+                 }
+             }
+
+             // Initialize video when metadata is loaded
+             if (demoVideo) {
+                 // Hide loading spinner when video can play
+                 demoVideo.addEventListener('canplay', function() {
+                     if (demoVideoLoading) {
+                         demoVideoLoading.style.display = 'none';
+                     }
+                     // Show controls initially since video is paused
+                     updateControlsVisibility();
+                 });
+
+                 demoVideo.addEventListener('loadedmetadata', function() {
+                     const duration = demoVideo.duration;
+                     if (duration && !isNaN(duration) && isFinite(duration)) {
+                         demoTotalDuration.textContent = formatTime(duration);
+                         demoDuration.textContent = formatTime(duration);
+                     }
+                     
+                     // Set video to 1 second to avoid black screen preview
+                     demoVideo.currentTime = 1;
+                 });
+
+                 // When video data is loaded, ensure we're at 1 second for preview
+                 demoVideo.addEventListener('loadeddata', function() {
+                     if (demoVideo.paused && demoVideo.currentTime === 0) {
+                         demoVideo.currentTime = 1;
+                     }
+                     updateControlsVisibility();
+                 });
+
+                 // Update controls visibility when play/pause state changes
+                 demoVideo.addEventListener('play', updateControlsVisibility);
+                 demoVideo.addEventListener('pause', updateControlsVisibility);
+
+                 // Additional fallback for duration
+                 demoVideo.addEventListener('durationchange', function() {
+                     const duration = demoVideo.duration;
+                     if (duration && !isNaN(duration) && isFinite(duration)) {
+                         demoTotalDuration.textContent = formatTime(duration);
+                         demoDuration.textContent = formatTime(duration);
+                     }
+                 });
+
+                 // Update progress during playback
+                 demoVideo.addEventListener('timeupdate', function() {
+                     const currentTime = demoVideo.currentTime;
+                     const duration = demoVideo.duration;
+                     
+                     // Update duration display if it wasn't set before
+                     if (duration && !isNaN(duration) && isFinite(duration)) {
+                         if (demoTotalDuration.textContent === '0:00') {
+                             demoTotalDuration.textContent = formatTime(duration);
+                             demoDuration.textContent = formatTime(duration);
+                         }
+                         
+                         const percentage = (currentTime / duration) * 100;
+                         demoProgressBar.style.width = percentage + '%';
+                         demoPlayhead.style.left = percentage + '%';
+                         demoProgress.textContent = formatTime(currentTime);
+                     }
+                 });
+
+                 // Handle play/pause button
+                 demoPlayBtn.addEventListener('click', function(e) {
+                     e.stopPropagation();
+                     
+                     if (demoVideo.paused) {
+                         // If we're at the preview position (1 second), start from beginning
+                         if (Math.abs(demoVideo.currentTime - 1) < 0.1) {
+                             demoVideo.currentTime = 0;
+                         }
+                         demoVideo.play();
+                         demoPlayIcon.className = 'bi bi-pause-fill';
+                     } else {
+                         demoVideo.pause();
+                         demoPlayIcon.className = 'bi bi-play-fill';
+                     }
+                 });
+
+                 // Handle volume button
+                 demoVolumeBtn.addEventListener('click', function(e) {
+                     e.stopPropagation();
+                     
+                     if (demoVideo.muted) {
+                         demoVideo.muted = false;
+                         demoVolumeIcon.className = 'bi bi-volume-up-fill';
+                     } else {
+                         demoVideo.muted = true;
+                         demoVolumeIcon.className = 'bi bi-volume-mute-fill';
+                     }
+                 });
+
+                 // Handle video end
+                 demoVideo.addEventListener('ended', function() {
+                     demoPlayIcon.className = 'bi bi-play-fill';
+                     demoVideo.currentTime = 1; // Return to preview frame instead of black screen
+                 });
+
+                 // Handle timeline clicks for seeking
+                 demoTimeline.addEventListener('click', function(e) {
+                     const rect = this.getBoundingClientRect();
+                     const clickX = e.clientX - rect.left;
+                     const percentage = (clickX / rect.width) * 100;
+                     const newTime = (percentage / 100) * demoVideo.duration;
+                     
+                     if (demoVideo.duration > 0) {
+                         demoVideo.currentTime = newTime;
+                     }
+                 });
+
+                 // Handle video container click to play/pause
+                 const demoVideoContainer = document.querySelector('.demo-video-container');
+                 if (demoVideoContainer) {
+                     demoVideoContainer.addEventListener('click', function(e) {
+                         if (e.target === demoVideo || e.target === demoVideoContainer) {
+                             // If we're at the preview position (1 second), start from beginning
+                             if (demoVideo.paused && Math.abs(demoVideo.currentTime - 1) < 0.1) {
+                                 demoVideo.currentTime = 0;
+                             }
+                             demoPlayBtn.click();
+                         }
+                     });
+                 }
+             }
+
+             // Interactive Floating Badges
+             document.querySelectorAll('.floating-badge').forEach(badge => {
+                 badge.addEventListener('click', function() {
+                     // Add pulse effect
+                     this.classList.add('pulse');
+                     
+                     // Create ripple effect
+                     const ripple = document.createElement('div');
+                     ripple.style.cssText = `
+                         position: absolute;
+                         border-radius: 50%;
+                         background: rgba(255, 255, 255, 0.3);
+                         transform: scale(0);
+                         animation: ripple 0.6s linear;
+                         pointer-events: none;
+                         width: 20px;
+                         height: 20px;
+                         left: 50%;
+                         top: 50%;
+                         margin-left: -10px;
+                         margin-top: -10px;
+                     `;
+                     
+                     const badgeContent = this.querySelector('.badge-content');
+                     badgeContent.style.position = 'relative';
+                     badgeContent.appendChild(ripple);
+                     
+                     // Remove pulse class and ripple after animation
+                     setTimeout(() => {
+                         this.classList.remove('pulse');
+                         ripple.remove();
+                     }, 600);
+                 });
+
+                 // Add random slight movement on page load
+                 setTimeout(() => {
+                     const randomDelay = Math.random() * 2000;
+                     badge.style.animationDelay = randomDelay + 'ms';
+                 }, 100);
+             });
+
+             // Add CSS for ripple animation
+             const style = document.createElement('style');
+             style.textContent = `
+                 @keyframes ripple {
+                     to {
+                         transform: scale(4);
+                         opacity: 0;
+                     }
+                 }
+             `;
+             document.head.appendChild(style);
+         });
+
 
         // Add dynamic navigation background on scroll
         window.addEventListener('scroll', function() {
