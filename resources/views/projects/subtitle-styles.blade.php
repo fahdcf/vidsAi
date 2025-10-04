@@ -232,6 +232,94 @@
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
     }
 
+    /* Position Selector Styles */
+    .position-selector-section {
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+        border-radius: 15px;
+        padding: 1.5rem;
+        margin-bottom: 2rem;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    }
+
+    .position-options {
+        display: flex;
+        justify-content: center;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+    }
+
+    .position-option {
+        cursor: pointer;
+        text-align: center;
+        transition: all 0.3s ease;
+        padding: 0.5rem;
+        border-radius: 10px;
+    }
+
+    .position-option:hover {
+        transform: translateY(-2px);
+    }
+
+    .position-option.selected {
+        background: rgba(59, 130, 246, 0.1);
+        border: 2px solid #3b82f6;
+    }
+
+    .position-preview {
+        width: 80px;
+        height: 60px;
+        background: #1f2937;
+        border-radius: 8px;
+        position: relative;
+        margin: 0 auto 0.5rem;
+        border: 2px solid transparent;
+        transition: all 0.3s ease;
+    }
+
+    .position-option.selected .position-preview {
+        border-color: #3b82f6;
+        box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .position-indicator {
+        position: absolute;
+        background: #3b82f6;
+        color: white;
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+        white-space: nowrap;
+    }
+
+    .position-bottom .position-indicator {
+        bottom: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .position-center .position-indicator {
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+    }
+
+    .position-top .position-indicator {
+        top: 5px;
+        left: 50%;
+        transform: translateX(-50%);
+    }
+
+    .position-name {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #374151;
+    }
+
+    .position-option.selected .position-name {
+        color: #3b82f6;
+    }
+
     /* Modern Music Selection Styles */
     .music-selection-section {
         background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
@@ -2248,6 +2336,40 @@
             </div>
         </div>
         
+        <!-- Subtitle Position Selector -->
+        <div class="position-selector-section mb-4">
+            <div class="music-header">
+                <div class="music-title-section">
+                    <h3 class="music-main-title" style="font-size: 1.25rem;">
+                        <i class="bi bi-arrows-move"></i>
+                        Subtitle Position
+                    </h3>
+                    <p class="music-subtitle">Choose where to display subtitles on the video</p>
+                </div>
+            </div>
+            
+            <div class="position-options d-flex justify-content-center gap-3">
+                <div class="position-option" data-position="bottom">
+                    <div class="position-preview position-bottom">
+                        <div class="position-indicator">Bottom</div>
+                    </div>
+                    <div class="position-name">Bottom</div>
+                </div>
+                <div class="position-option" data-position="center">
+                    <div class="position-preview position-center">
+                        <div class="position-indicator">Center</div>
+                    </div>
+                    <div class="position-name">Center</div>
+                </div>
+                <div class="position-option" data-position="top">
+                    <div class="position-preview position-top">
+                        <div class="position-indicator">Top</div>
+                    </div>
+                    <div class="position-name">Top</div>
+                </div>
+            </div>
+        </div>
+
         <div class="style-categories" id="styleCategories">
             <!-- TikTok Trending Style -->
             <div class="style-category" data-style="tiktok_trending">
@@ -2404,6 +2526,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let currentStyleConfig = null; // Current style configuration - will be set after styleConfigs is defined
     let selectedMusicTrack = null; // Selected music track
     let selectedTransition = 'fade'; // Default transition
+    let selectedPosition = 'bottom'; // Default position
 
     // Project scene videos data
     const projectSceneVideos = @json($sceneVideos);
@@ -2731,7 +2854,7 @@ document.addEventListener('DOMContentLoaded', function() {
         tiktok_trending: {
             style: "tiktok_trending",
             fontFamily: "Roboto", // Roboto, Segoe UI, Arial, sans-serif
-            position: "bottom", // Always bottom
+            position: "bottom", // Will be updated dynamically
             backgroundColor: "#ff8800", // Optional background
             topTextColor: "#ffffff", // White top line
             bottomTextColor: "#ffe600" // Yellow bottom line
@@ -2741,7 +2864,7 @@ document.addEventListener('DOMContentLoaded', function() {
             style: "progressive_highlight",
             backgroundColor: "#007acc", // Blue highlight color
             fontFamily: "Roboto", // Roboto, Segoe UI, Arial, sans-serif for English; Cairo, Noto Sans Arabic for Arabic
-            position: "bottom", // Always bottom
+            position: "bottom", // Will be updated dynamically
             borderRadius: "1px", // 1px border radius
             textColor: "#ffffff"
             // 1px border radius, scale(1.05) on highlight, ONE word at a time
@@ -2751,7 +2874,7 @@ document.addEventListener('DOMContentLoaded', function() {
             backgroundColor: "#dc2626", // Cool red background
             textColor: "#ffffff",
             fontFamily: "Roboto", // Roboto, Arial, sans-serif
-            position: "bottom", // Changed from center to bottom
+            position: "bottom", // Will be updated dynamically
             borderRadius: "0px" // Sharp corners, no border radius
             // Sharp corners, no border radius, one line
         },
@@ -2759,7 +2882,7 @@ document.addEventListener('DOMContentLoaded', function() {
             style: "rounded_progressive",
             backgroundColor: "#8b5cf6", // Cool purple highlight color
             fontFamily: "Roboto", // Roboto, Segoe UI, Arial, sans-serif for English; Cairo, Noto Sans Arabic for Arabic
-            position: "bottom", // Always bottom
+            position: "bottom", // Will be updated dynamically
             borderRadius: "8px", // 8px border radius
             textColor: "#ffffff"
             // 8px border radius, scale(1.05) on highlight, ONE word at a time
@@ -2768,7 +2891,7 @@ document.addEventListener('DOMContentLoaded', function() {
             style: "arabic_banner",
             backgroundColor: "#ff8800", // First banner color (orange)
             fontFamily: "Cairo", // Cairo, Noto Sans Arabic, sans-serif
-            position: "bottom", // Changed from center to bottom
+            position: "bottom", // Will be updated dynamically
             borderRadius: "32px", // 32px border radius (rounded corners)
             firstBannerBg: "#ff8800", // Orange background
             firstBannerText: "#ffffff", // White text
@@ -2782,7 +2905,7 @@ document.addEventListener('DOMContentLoaded', function() {
             style: "rectangular_banner",
             backgroundColor: "#10b981", // Cool green background
             fontFamily: "Roboto", // Roboto, Arial, sans-serif
-            position: "bottom", // Always bottom
+            position: "bottom", // Will be updated dynamically
             borderRadius: "0px", // 0px border radius (sharp corners)
             firstBannerBg: "#10b981", // Green background
             firstBannerText: "#ffffff", // White text
@@ -2888,6 +3011,10 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('🔄 Initializing style selection...');
             initializeStyleSelection();
             console.log('✅ Style selection initialized');
+
+            console.log('🔄 Initializing position selection...');
+            initializePositionSelection();
+            console.log('✅ Position selection initialized');
 
             console.log('🔄 Initializing music selection...');
             initializeMusicSelection();
@@ -3233,6 +3360,44 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
+    function initializePositionSelection() {
+        console.log('📍 Initializing position selection...');
+        
+        // Set initial position (bottom is default)
+        const initialPosition = document.querySelector('.position-option[data-position="bottom"]');
+        if (initialPosition) {
+            initialPosition.classList.add('selected');
+        }
+        
+        // Add click event listeners to position options
+        const positionOptions = document.querySelectorAll('.position-option');
+        positionOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove selected class from all options
+                positionOptions.forEach(opt => opt.classList.remove('selected'));
+                
+                // Add selected class to clicked option
+                this.classList.add('selected');
+                
+                // Update selected position
+                selectedPosition = this.getAttribute('data-position');
+                console.log('📍 Selected position:', selectedPosition);
+                
+                // Update all style configs with the new position
+                Object.keys(styleConfigs).forEach(styleKey => {
+                    styleConfigs[styleKey].position = selectedPosition;
+                });
+                
+                // Update current style config if it exists
+                if (currentStyleConfig) {
+                    currentStyleConfig.position = selectedPosition;
+                }
+                
+                console.log('📍 Updated all style configs with position:', selectedPosition);
+            });
+        });
+    }
+
     function generateSubtitles() {
         console.log('🚀 generateSubtitles function called');
         
@@ -3307,6 +3472,7 @@ document.addEventListener('DOMContentLoaded', function() {
             project_id: {{ $project->id }},
             style: selectedStyle,
             style_config: currentStyleConfig,
+            position: selectedPosition, // Include selected position
             videos: trimmedVideos,
             clips_duration: trimmedVideos.map(video => video.duration),
             animations: animations,

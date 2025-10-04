@@ -3224,162 +3224,9 @@
             }, 8000);
         }
 
-        function showDebugLog(message) {
-            try {
-                // Create a debug log panel that can be toggled
-                let debugPanel = document.getElementById('debug-log-panel');
-                let toggleBtn = document.getElementById('debug-toggle-btn');
-                
-                if (!debugPanel) {
-                    debugPanel = document.createElement('div');
-                    debugPanel.id = 'debug-log-panel';
-                    debugPanel.className = 'position-fixed';
-                    debugPanel.style.cssText = 'bottom: 20px; right: 20px; width: 400px; max-height: 300px; z-index: 9998; background: rgba(0,0,0,0.9); color: #fff; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 12px; overflow-y: auto; display: block; border: 2px solid #007bff;';
-                    
-                    // Add header
-                    const header = document.createElement('div');
-                    header.style.cssText = 'font-weight: bold; margin-bottom: 10px; color: #007bff; border-bottom: 1px solid #333; padding-bottom: 5px;';
-                    header.innerHTML = '🐛 AI Generation Debug Logs';
-                    debugPanel.appendChild(header);
-                    
-                    document.body.appendChild(debugPanel);
-                    console.log('🐛 Debug panel created successfully');
-                }
-                
-                if (!toggleBtn) {
-                    toggleBtn = document.createElement('button');
-                    toggleBtn.id = 'debug-toggle-btn';
-                    toggleBtn.innerHTML = '🐛 Debug Logs';
-                    toggleBtn.className = 'btn btn-sm btn-secondary position-fixed';
-                    toggleBtn.style.cssText = 'bottom: 20px; right: 440px; z-index: 9999;';
-                    toggleBtn.onclick = () => {
-                        debugPanel.style.display = debugPanel.style.display === 'none' ? 'block' : 'none';
-                    };
-                    document.body.appendChild(toggleBtn);
-                    console.log('🐛 Debug toggle button created successfully');
-                }
-                
-                const timestamp = new Date().toLocaleTimeString();
-                const logEntry = document.createElement('div');
-                logEntry.style.marginBottom = '8px';
-                logEntry.style.borderBottom = '1px solid #333';
-                logEntry.style.paddingBottom = '4px';
-                logEntry.innerHTML = `<span style="color: #888;">[${timestamp}]</span> ${message}`;
-                
-                debugPanel.appendChild(logEntry);
-                
-                // Keep only last 50 entries
-                const entries = debugPanel.querySelectorAll('div');
-                if (entries.length > 50) {
-                    entries[0].remove();
-                }
-                
-                // Auto-scroll to bottom
-                debugPanel.scrollTop = debugPanel.scrollHeight;
-                
-                // Also log to console for backup
-                console.log(`🐛 [${timestamp}] ${message}`);
-                
-                // Auto-hide after 10 seconds if no new entries
-                clearTimeout(debugPanel.autoHideTimer);
-                debugPanel.autoHideTimer = setTimeout(() => {
-                    if (debugPanel.style.display === 'block') {
-                        debugPanel.style.display = 'none';
-                    }
-                }, 10000);
-            } catch (error) {
-                console.error('🐛 Error in showDebugLog:', error);
-                console.log(`🐛 [${new Date().toLocaleTimeString()}] ${message}`);
-            }
-        }
 
-        // Test function to simulate image-to-video generation
-        function testImageToVideoGeneration() {
-            showDebugLog('🧪 Starting Image-to-Video Generation Test');
-            showDebugLog('📋 Test Parameters:');
-            showDebugLog('- Scene ID: 329 (test scene)');
-            showDebugLog('- Model: wan2.2-i2v-flash');
-            showDebugLog('- Resolution: 832*480');
-            showDebugLog('- Generation Type: image-to-video');
-            showDebugLog('- Image: test-image.jpg (simulated)');
-            showDebugLog('- Prompt: "A beautiful sunset over mountains with birds flying"');
-            
-            showDebugLog('🔄 Simulating request data preparation...');
-            const testRequestData = {
-                regeneration_option: 'ai',
-                ai_model: 'wan2.2-i2v-flash',
-                ai_resolution: '832*480',
-                keywords: 'A beautiful sunset over mountains with birds flying',
-                ai_prompt: 'A beautiful sunset over mountains with birds flying',
-                generation_type: 'image-to-video',
-                image_url: 'https://0x0.st/test-image.jpg'
-            };
-            
-            showDebugLog(`📤 Test Request Data: ${JSON.stringify(testRequestData, null, 2)}`);
-            showDebugLog('🌐 Test URL: /scenes/329/regenerate-proxy');
-            
-            showDebugLog('📡 Simulating API response...');
-            setTimeout(() => {
-                showDebugLog('✅ API Response: {"success":true,"message":"AI video generation job queued successfully","status":"QUEUED","scene_id":329,"polling_required":true}');
-                showDebugLog('🔄 Starting polling simulation...');
-                
-                let pollCount = 0;
-                const maxPolls = 5;
-                
-                const pollInterval = setInterval(() => {
-                    pollCount++;
-                    showDebugLog(`🔍 Poll ${pollCount}/${maxPolls}: Checking AI status...`);
-                    
-                    if (pollCount === 3) {
-                        showDebugLog('✅ Status Response: {"success":true,"status":"SUCCEEDED","video_url":"https://0x0.st/generated-video.mp4","message":"AI video generation completed successfully"}');
-                        showDebugLog('🎉 Test completed successfully!');
-                        clearInterval(pollInterval);
-                    } else {
-                        showDebugLog(`🔄 Status Response: {"success":true,"status":"PENDING","message":"Video generation in progress","progress":${pollCount * 20}}`);
-                    }
-                }, 2000);
-                
-            }, 1000);
-        }
 
-        // Add test button to debug panel
-        function addTestButton() {
-            setTimeout(() => {
-                const debugPanel = document.getElementById('debug-log-panel');
-                if (debugPanel && !document.getElementById('test-btn')) {
-                    const testBtn = document.createElement('button');
-                    testBtn.id = 'test-btn';
-                    testBtn.innerHTML = '🧪 Test Image-to-Video';
-                    testBtn.className = 'btn btn-sm btn-primary mt-2';
-                    testBtn.style.cssText = 'margin-top: 10px; width: 100%;';
-                    testBtn.onclick = testImageToVideoGeneration;
-                    debugPanel.appendChild(testBtn);
-                }
-            }, 1000);
-        }
 
-        // Initialize test button when page loads
-        document.addEventListener('DOMContentLoaded', function() {
-            addTestButton();
-            // Test debug panel immediately
-            setTimeout(() => {
-                showDebugLog('🚀 Debug panel initialized successfully!');
-                showDebugLog('✅ Ready to track AI generation process');
-                console.log('🐛 Debug panel should be visible now');
-            }, 500);
-        });
-
-        // Also try to initialize immediately
-        setTimeout(() => {
-            showDebugLog('🚀 Page loaded - Debug panel ready!');
-            showDebugLog('🧪 Click the "Test Image-to-Video" button to test the debug panel');
-        }, 1000);
-
-        // Add a simple test function that can be called from console
-        window.testDebugPanel = function() {
-            showDebugLog('🧪 Manual test - Debug panel is working!');
-            showDebugLog('✅ If you can see this message, the debug panel is functioning correctly');
-        };
 
         function forceModalCleanup() {
             // Remove all modal backdrops
@@ -4005,8 +3852,8 @@
 
         async function uploadImageToServer(file) {
             try {
-                showDebugLog(`📤 Uploading image to server: ${file.name}`);
-                showDebugLog(`📊 File details: ${JSON.stringify({
+                console.log(`📤 Uploading image to server: ${file.name}`);
+                console.log(`📊 File details: ${JSON.stringify({
                     name: file.name,
                     size: file.size,
                     type: file.type,
@@ -4024,7 +3871,7 @@
                 const basePath = pathParts.slice(0, reviewIndex).join('/');
                 const uploadUrl = basePath + '/upload-image';
                 
-                showDebugLog(`🌐 Upload URL: ${uploadUrl}`);
+                console.log(`🌐 Upload URL: ${uploadUrl}`);
 
                 const response = await fetch(uploadUrl, {
                     method: 'POST',
@@ -4034,12 +3881,12 @@
                     }
                 });
                 
-                showDebugLog(`📡 Upload response status: ${response.status}`);
-                showDebugLog(`📡 Upload response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`);
+                console.log(`📡 Upload response status: ${response.status}`);
+                console.log(`📡 Upload response headers: ${JSON.stringify(Object.fromEntries(response.headers.entries()), null, 2)}`);
 
                 if (!response.ok) {
                     const errorText = await response.text();
-                    showDebugLog(`❌ Upload error response: ${errorText}`);
+                    console.log(`❌ Upload error response: ${errorText}`);
                     throw new Error(`Upload failed: ${response.status} - ${errorText}`);
                 }
 
@@ -4047,14 +3894,14 @@
                 
                 if (result.success && result.url) {
                     uploadedImageUrl = result.url;
-                    showDebugLog(`✅ Image uploaded to 0x0 successfully: ${uploadedImageUrl}`);
+                    console.log(`✅ Image uploaded to 0x0 successfully: ${uploadedImageUrl}`);
                     return result.url;
                 } else {
                     throw new Error('Invalid response from server: ' + JSON.stringify(result));
                 }
             } catch (error) {
-                showDebugLog(`❌ Image upload failed: ${error.message}`);
-                showDebugLog(`❌ Upload error details: ${JSON.stringify({
+                console.log(`❌ Image upload failed: ${error.message}`);
+                console.log(`❌ Upload error details: ${JSON.stringify({
                     name: error.name,
                     message: error.message,
                     stack: error.stack
@@ -4065,7 +3912,7 @@
         }
 
         async function regenerateWithAI() {
-            showDebugLog('🤖 Regenerate with AI button clicked');
+            console.log('🤖 Regenerate with AI button clicked');
 
             const modal = document.getElementById('regenerateModal');
             const generationType = document.querySelector('input[name="aiGenerationType"]:checked').value;
@@ -4112,14 +3959,14 @@
                 return;
             }
 
-            // Show debug log instead of console log to avoid console spam
-            showDebugLog(`🤖 Starting AI generation for scene ${sceneId}`);
-            showDebugLog(`Generation Type: ${generationType}`);
-            showDebugLog(`Model: ${aiModel}`);
-            showDebugLog(`Resolution: ${aiResolution}`);
-            showDebugLog(`Text Prompt: ${generationType === 'text-to-video' ? (aiPrompt ? aiPrompt.substring(0, 100) + '...' : 'N/A') : 'N/A'}`);
-            showDebugLog(`Image Prompt: ${generationType === 'image-to-video' ? (imagePrompt ? imagePrompt.substring(0, 100) + '...' : 'N/A') : 'N/A'}`);
-            showDebugLog(`Has Image: ${!!uploadedImageFile}`);
+            // Log AI generation details
+            console.log(`🤖 Starting AI generation for scene ${sceneId}`);
+            console.log(`Generation Type: ${generationType}`);
+            console.log(`Model: ${aiModel}`);
+            console.log(`Resolution: ${aiResolution}`);
+            console.log(`Text Prompt: ${generationType === 'text-to-video' ? (aiPrompt ? aiPrompt.substring(0, 100) + '...' : 'N/A') : 'N/A'}`);
+            console.log(`Image Prompt: ${generationType === 'image-to-video' ? (imagePrompt ? imagePrompt.substring(0, 100) + '...' : 'N/A') : 'N/A'}`);
+            console.log(`Has Image: ${!!uploadedImageFile}`);
 
             // Close modal
             const modalInstance = bootstrap.Modal.getInstance(modal);
@@ -4139,10 +3986,10 @@
             const reviewIndex = pathParts.findIndex(part => part === 'review');
             const basePath = pathParts.slice(0, reviewIndex).join('/');
             const regenerateUrl = basePath + '/scenes/' + sceneId + '/regenerate-proxy';
-            showDebugLog(`🌐 AI Regenerate URL: ${regenerateUrl}`);
-            showDebugLog(`📁 Current Path: ${currentPath}`);
-            showDebugLog(`📁 Base Path: ${basePath}`);
-            showDebugLog(`🔍 Scene ID: ${sceneId}`);
+            console.log(`🌐 AI Regenerate URL: ${regenerateUrl}`);
+            console.log(`📁 Current Path: ${currentPath}`);
+            console.log(`📁 Base Path: ${basePath}`);
+            console.log(`🔍 Scene ID: ${sceneId}`);
             
             // Prepare request data based on generation type
             let requestData = {
@@ -4169,8 +4016,8 @@
                 }
             }
             
-            showDebugLog(`📤 Request data: ${JSON.stringify(requestData, null, 2)}`);
-            showDebugLog(`🌐 Regenerate URL: ${regenerateUrl}`);
+            console.log(`📤 Request data: ${JSON.stringify(requestData, null, 2)}`);
+            console.log(`🌐 Regenerate URL: ${regenerateUrl}`);
             
             fetch(regenerateUrl, {
                 method: 'POST',
@@ -4201,12 +4048,12 @@
                 }
             })
             .then(data => {
-                showDebugLog(`🤖 AI generation response: ${JSON.stringify(data, null, 2)}`);
+                console.log(`🤖 AI generation response: ${JSON.stringify(data, null, 2)}`);
 
                 if (data.success) {
-                    showDebugLog(`✅ AI generation request successful`);
+                    console.log(`✅ AI generation request successful`);
                     if (data.polling_required) {
-                        showDebugLog(`🔄 Starting polling for scene ${sceneId}`);
+                        console.log(`🔄 Starting polling for scene ${sceneId}`);
                         // Start polling for completion
                         startAiGenerationPolling(sceneId);
                         showSuccessMessage('AI video generation job queued! This may take a few minutes...');
@@ -4215,13 +4062,13 @@
                         showProgressMessage('AI video generation job queued successfully', 5);
                     } else {
                         // Immediate success (shouldn't happen with AI)
-                        showDebugLog(`✅ Immediate success - reloading page`);
+                        console.log(`✅ Immediate success - reloading page`);
                         showSuccessMessage('AI video generation completed!');
                         location.reload();
                     }
                 } else {
-                    showDebugLog(`❌ AI generation failed: ${data.message}`);
-                    showDebugLog(`❌ Full error response: ${JSON.stringify(data, null, 2)}`);
+                    console.log(`❌ AI generation failed: ${data.message}`);
+                    console.log(`❌ Full error response: ${JSON.stringify(data, null, 2)}`);
                     showErrorMessage(`AI generation failed: ${data.message}`);
                     
                     // Reset button
@@ -4232,9 +4079,9 @@
                 }
             })
             .catch(error => {
-                showDebugLog(`❌ AI generation request failed: ${error.message}`);
-                showDebugLog(`❌ Error name: ${error.name}`);
-                showDebugLog(`❌ Error stack: ${error.stack}`);
+                console.log(`❌ AI generation request failed: ${error.message}`);
+                console.log(`❌ Error name: ${error.name}`);
+                console.log(`❌ Error stack: ${error.stack}`);
                 showErrorMessage(`Failed to start AI generation: ${error.message}`);
                 
                 // Reset button
@@ -4247,11 +4094,11 @@
 
         // AI Generation Polling
         function startAiGenerationPolling(sceneId) {
-            showDebugLog(`🔄 Starting AI generation polling for scene ${sceneId}`);
-            showDebugLog(`⏰ Polling interval: 10 seconds`);
+            console.log(`🔄 Starting AI generation polling for scene ${sceneId}`);
+            console.log(`⏰ Polling interval: 10 seconds`);
             
             const pollInterval = setInterval(() => {
-                showDebugLog(`🔍 Polling iteration for scene ${sceneId}`);
+                console.log(`🔍 Polling iteration for scene ${sceneId}`);
                 checkAiGenerationStatus(sceneId, pollInterval);
             }, 10000); // Poll every 10 seconds
         }
@@ -4263,10 +4110,10 @@
             const reviewIndex = pathParts.findIndex(part => part === 'review');
             const basePath = pathParts.slice(0, reviewIndex).join('/');
             const statusUrl = basePath + '/scenes/' + sceneId + '/ai-status';
-            showDebugLog(`🔍 Checking AI status: ${statusUrl}`);
-            showDebugLog(`📁 Current path: ${currentPath}`);
-            showDebugLog(`📁 Base path: ${basePath}`);
-            showDebugLog(`🔍 Scene ID: ${sceneId}`);
+            console.log(`🔍 Checking AI status: ${statusUrl}`);
+            console.log(`📁 Current path: ${currentPath}`);
+            console.log(`📁 Base path: ${basePath}`);
+            console.log(`🔍 Scene ID: ${sceneId}`);
             
             fetch(statusUrl, {
                 method: 'GET',
@@ -4276,17 +4123,17 @@
                 credentials: 'same-origin'
             })
             .then(response => {
-                showDebugLog(`🔍 Response status: ${response.status}`);
+                console.log(`🔍 Response status: ${response.status}`);
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 return response.json();
             })
             .then(data => {
-                showDebugLog(`🔍 AI generation status: ${JSON.stringify(data, null, 2)}`);
+                console.log(`🔍 AI generation status: ${JSON.stringify(data, null, 2)}`);
 
                 if (data.status === 'SUCCEEDED') {
-                    showDebugLog(`✅ AI generation completed successfully for scene ${sceneId}`);
+                    console.log(`✅ AI generation completed successfully for scene ${sceneId}`);
                     clearInterval(pollInterval);
                     hideProgressMessage();
                     showSuccessMessage('AI video generation completed successfully!');
@@ -4303,7 +4150,7 @@
                         location.reload();
                     }, 2000);
                 } else if (data.status === 'FAILED') {
-                    showDebugLog(`❌ AI generation failed for scene ${sceneId}: ${data.message}`);
+                    console.log(`❌ AI generation failed for scene ${sceneId}: ${data.message}`);
                     clearInterval(pollInterval);
                     hideProgressMessage();
                     
@@ -4326,7 +4173,7 @@
                         button.disabled = false;
                     }
                 } else if (data.status === 'NO_TASK') {
-                    showDebugLog(`⚠️ No AI generation task found for scene ${sceneId}`);
+                    console.log(`⚠️ No AI generation task found for scene ${sceneId}`);
                     clearInterval(pollInterval);
                     hideProgressMessage();
                     showWarningMessage('No AI generation task found. Please start a new generation.');
@@ -4339,7 +4186,7 @@
                     }
                 } else {
                     // Still processing - update button text with progress
-                    showDebugLog(`🔄 AI generation still processing for scene ${sceneId}: ${data.status}`);
+                    console.log(`🔄 AI generation still processing for scene ${sceneId}: ${data.status}`);
                     const button = document.querySelector(`button[onclick="regenerateScene(${sceneId})"]`);
                     if (button) {
                         const progressText = getProgressText(data.status, data.progress);
@@ -4353,8 +4200,8 @@
                 }
             })
             .catch(error => {
-                showDebugLog(`❌ AI status check failed for scene ${sceneId}: ${error.message}`);
-                showDebugLog(`❌ Error details: ${JSON.stringify({
+                console.log(`❌ AI status check failed for scene ${sceneId}: ${error.message}`);
+                console.log(`❌ Error details: ${JSON.stringify({
                     name: error.name,
                     message: error.message,
                     stack: error.stack
@@ -4568,6 +4415,96 @@
             }
         }
 
+        function reinitializeVideoControls(sceneId, videoElement) {
+            console.log(`🎮 Reinitializing video controls for scene ${sceneId}`);
+            
+            const container = videoElement.closest('[data-scene-id]');
+            if (!container) {
+                console.error(`❌ Container not found for scene ${sceneId}`);
+                return;
+            }
+
+            // Ensure video overlay is properly positioned
+            const videoOverlay = container.querySelector('.video-overlay');
+            if (videoOverlay) {
+                // Reset overlay positioning
+                videoOverlay.style.position = 'absolute';
+                videoOverlay.style.inset = '0';
+                videoOverlay.style.display = 'flex';
+                videoOverlay.style.alignItems = 'center';
+                videoOverlay.style.justifyContent = 'center';
+                videoOverlay.style.background = 'rgba(0, 0, 0, 0.3)';
+                videoOverlay.style.opacity = '0';
+                videoOverlay.style.transition = 'opacity 0.3s ease';
+                videoOverlay.style.backdropFilter = 'blur(2px)';
+                videoOverlay.style.zIndex = '10';
+            }
+
+            // Ensure play button is properly centered
+            const playBtn = container.querySelector('.play-btn');
+            if (playBtn) {
+                // Reset play button positioning
+                playBtn.style.position = 'relative';
+                playBtn.style.width = '80px';
+                playBtn.style.height = '80px';
+                playBtn.style.borderRadius = '50%';
+                playBtn.style.background = 'rgba(255, 255, 255, 0.95)';
+                playBtn.style.border = 'none';
+                playBtn.style.display = 'flex';
+                playBtn.style.alignItems = 'center';
+                playBtn.style.justifyContent = 'center';
+                playBtn.style.fontSize = '32px';
+                playBtn.style.color = '#1e293b';
+                playBtn.style.cursor = 'pointer';
+                playBtn.style.transition = 'all 0.3s ease';
+                playBtn.style.boxShadow = '0 8px 24px rgba(0, 0, 0, 0.2)';
+                playBtn.style.margin = '0';
+                playBtn.style.padding = '0';
+                
+                // Reset play button content
+                playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
+                
+                // Remove existing event listeners and add new one
+                const newPlayBtn = playBtn.cloneNode(true);
+                playBtn.parentNode.replaceChild(newPlayBtn, playBtn);
+                
+                newPlayBtn.addEventListener('click', () => {
+                    if (videoElement.paused) {
+                        videoElement.play();
+                        newPlayBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
+                    } else {
+                        videoElement.pause();
+                        newPlayBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
+                    }
+                });
+            }
+
+            // Ensure video wrapper has proper positioning
+            const videoWrapper = container.querySelector('.video-wrapper');
+            if (videoWrapper) {
+                videoWrapper.style.position = 'relative';
+                videoWrapper.style.background = '#000';
+            }
+
+            // Reinitialize video time displays
+            const currentTimeEl = container.querySelector('.current-time');
+            const totalTimeEl = container.querySelector('.total-time');
+            
+            if (currentTimeEl && totalTimeEl) {
+                currentTimeEl.textContent = '0:00';
+                totalTimeEl.textContent = videoElement.duration ? formatTime(videoElement.duration) : '0:00';
+            }
+
+            // Add loadedmetadata event listener
+            videoElement.addEventListener('loadedmetadata', () => {
+                if (totalTimeEl) {
+                    totalTimeEl.textContent = formatTime(videoElement.duration);
+                }
+            }, { once: true });
+
+            console.log(`✅ Video controls reinitialized for scene ${sceneId}`);
+        }
+
 
 
         function updateVideoElement(sceneId, newVideoUrl) {
@@ -4620,6 +4557,9 @@
                     if (timelineSection) timelineSection.style.display = 'block';
                     if (videoOverlay) videoOverlay.style.display = 'block';
                     if (timeDisplay) timeDisplay.style.display = 'block';
+                    
+                    // Reinitialize video controls and positioning
+                    reinitializeVideoControls(sceneId, mediaElement);
                 }
 
             } else if (mediaElement.tagName === 'IMG') {
@@ -4693,19 +4633,8 @@
                     // Force load the video
                     videoElement.load();
                     
-                    // Add play button functionality
-                    const playBtn = container.querySelector('.play-btn');
-                    if (playBtn) {
-                        playBtn.addEventListener('click', () => {
-                            if (videoElement.paused) {
-                                videoElement.play();
-                                playBtn.innerHTML = '<i class="bi bi-pause-fill"></i>';
-                    } else {
-                                videoElement.pause();
-                                playBtn.innerHTML = '<i class="bi bi-play-fill"></i>';
-                            }
-                        });
-                    }
+                    // Reinitialize video controls and positioning
+                    reinitializeVideoControls(sceneId, videoElement);
                     
                     // Add time update listener
                     videoElement.addEventListener('timeupdate', () => {

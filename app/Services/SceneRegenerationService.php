@@ -86,12 +86,12 @@ class SceneRegenerationService
 
             $response = Http::withHeaders([
                 'Authorization' => config('services.pexels.api_key')
-            ])->timeout(60) // 1 minute timeout
-            ->retry(3, 1000) // Retry 3 times with 1 second delay
+            ])->timeout(30) // Reduced timeout to 30 seconds
+            ->retry(2, 500) // Reduced retries to 2 with 500ms delay
             ->withoutVerifying() // Disable SSL verification for local development
             ->get(config('services.pexels.base_url'), [
                 'query' => $query,
-                'per_page' => 10,
+                'per_page' => 5, // Reduced from 10 to 5 for faster response
                 'orientation' => 'landscape'
             ]);
 
@@ -109,9 +109,9 @@ class SceneRegenerationService
                     if ($alt === '') { continue; }
                     $altResp = Http::withHeaders([
                         'Authorization' => config('services.pexels.api_key')
-                    ])->timeout(45)->retry(2, 800)->withoutVerifying()->get(config('services.pexels.base_url'), [
+                    ])->timeout(20)->retry(1, 500)->withoutVerifying()->get(config('services.pexels.base_url'), [
                         'query' => $alt,
-                        'per_page' => 10,
+                        'per_page' => 5, // Reduced from 10 to 5
                         'orientation' => 'landscape'
                     ]);
                     if ($altResp->successful()) {
@@ -129,8 +129,8 @@ class SceneRegenerationService
                 }
             }
 
-            // Limit to first 5 videos and randomly pick one
-            $topVideos = array_slice($videos, 0, 5);
+            // Limit to first 3 videos and randomly pick one (faster processing)
+            $topVideos = array_slice($videos, 0, 3);
             $randomVideoIndex = array_rand($topVideos);
             $video = $topVideos[$randomVideoIndex];
 
@@ -223,8 +223,8 @@ class SceneRegenerationService
                 }
             }
         }
-        // Limit to reasonable count for Pexels
-        return array_slice($clean, 0, 6);
+        // Limit to reasonable count for Pexels (reduced for faster processing)
+        return array_slice($clean, 0, 4);
     }
 
     /**
