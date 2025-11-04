@@ -686,24 +686,49 @@ You are given:
    - For lists (commas, \"and\"), split items individually.
    - Preserve exact wording.
 
-3. For each phrase:
-   - Generate **2–3 English keywords**.
-   - Align words to transcript:
-     - start_time = first matched word's start
-     - end_time = last matched word's end
+3. **CRITICAL: For each phrase, generate ONLY ONE PERFECT KEYWORD:**
+   - **ONE keyword only** - not 2-3 keywords
+   - This keyword will be used to search Pexels video database
+   - Choose the **most visual, cinematic, and searchable** keyword
+   - The keyword should represent the **main visual concept** of the phrase
+   - **Examples of good single keywords:**
+     - \"Discover EcoSip\" → \"water bottle\"
+     - \"made from sustainable materials\" → \"eco materials\"
+     - \"keeps drinks cold for 24 hours\" → \"insulated bottle\"
+     - \"perfect for daily adventures\" → \"outdoor lifestyle\"
+   - **Avoid generic keywords:** \"product\", \"item\", \"thing\", \"object\"
+   - **Choose specific, visual keywords** that will find relevant videos
+   - **Ensure visual consistency** - all keywords should work together for a cohesive video
+
+4. **Visual Cohesion Strategy:**
+   - Think of the **entire video as one cohesive story**
+   - Each scene should **visually flow** into the next
+   - Keywords should create a **consistent visual theme**
+   - Avoid jarring visual transitions between scenes
+   - Consider the **overall mood and style** of the video
+   - **Example for a water bottle ad:**
+     - Scene 1: \"water bottle\" (product focus)
+     - Scene 2: \"eco materials\" (sustainability focus)  
+     - Scene 3: \"insulated bottle\" (functionality focus)
+     - Scene 4: \"outdoor lifestyle\" (lifestyle focus)
+   - This creates a **smooth visual narrative** from product → materials → function → lifestyle
+
+5. Align words to transcript:
+   - start_time = first matched word's start
+   - end_time = last matched word's end
    - Adjust:
      - Extend each end_time up to the next start_time (include pauses).
      - First phrase: if start_time > 0, add that to duration_seconds (don't change start_time).
      - Last phrase: add exactly **2.0 seconds** to duration_seconds.
      - duration_seconds = end_time - start_time (+ adjustments), rounded to 1 decimal.
 
-4. Validation:
+6. Validation:
    - Sum(duration_seconds) ≈ last transcript word's end + 2 seconds.
 
-5. For each phrase:
+7. For each phrase:
    - Create a **prompt**: cinematic visual scene description (English).
 
-6. **Also generate subtitles_script:**
+8. **Also generate subtitles_script:**
    - A **global array** of short TikTok-style subtitle chunks.
    - Each chunk: **2–4 words**, meaningful, natural.
    - **CRITICAL for Arabic**: Split at semantic boundaries, NOT word boundaries!
@@ -724,7 +749,7 @@ You are given:
   \"phrases\": [
     {
       \"phrase\": \"Discover EcoSip\",
-      \"keywords\": [\"eco\", \"bottle\"],
+      \"keywords\": [\"water bottle\"],
       \"start_time\": 0.0,
       \"end_time\": 4.8,
       \"duration_seconds\": 4.8,
@@ -752,6 +777,7 @@ Transcript Words: {$transcriptWords}
 - Keep related words together (adjectives with nouns, prepositions with objects)
 - Respect Arabic sentence structure and meaning
 - Each subtitle chunk should be a complete, understandable phrase
+- **For keywords**: Use English keywords even for Arabic content (Pexels search works better with English)
 ";
     }
 
@@ -856,7 +882,13 @@ Transcript Words: {$transcriptWords}
     private function searchPexelsVideo(array $keywords): ?array
     {
         try {
-            $query = implode(' ', $keywords);
+            // Use only the first (and only) keyword for better search results
+            $query = $keywords[0] ?? '';
+            
+            if (empty($query)) {
+                Log::warning('No keyword provided for Pexels search');
+                return null;
+            }
 
             $response = Http::withHeaders([
                 'Authorization' => config('services.pexels.api_key')

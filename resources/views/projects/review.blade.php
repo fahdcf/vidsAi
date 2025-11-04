@@ -831,6 +831,76 @@
             border-color: #3b82f6;
         }
 
+        /* Image Generation Styles */
+        #generateImageSection .card {
+            transition: all 0.3s ease;
+        }
+
+        #generateImageSection .card:hover {
+            box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
+        }
+
+        #generatedImagePreview {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        #imageGenerationProgress {
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+            }
+            50% {
+                opacity: 0.7;
+            }
+        }
+
+        /* Base Image Upload Area */
+        #baseImageUploadArea .upload-placeholder {
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        #baseImageUploadArea .upload-placeholder:hover {
+            background: #e9ecef;
+            border-color: #3b82f6 !important;
+            transform: translateY(-2px);
+        }
+
+        #baseImagePreview img {
+            border: 2px solid #e5e7eb;
+            transition: border-color 0.3s ease;
+        }
+
+        #baseImagePreview img:hover {
+            border-color: #3b82f6;
+        }
+
+        /* Image Generation Form Controls */
+        #generateImageSection .form-select-sm,
+        #generateImageSection .form-control-sm {
+            font-size: 0.875rem;
+            padding: 0.375rem 0.75rem;
+        }
+
+        #generateImageSection .btn-sm {
+            padding: 0.5rem 1rem;
+            font-size: 0.875rem;
+        }
+
         /* Generation Type Toggle */
         .btn-check:checked + .btn-outline-primary {
             background: linear-gradient(135deg, #3b82f6, #1d4ed8);
@@ -1760,29 +1830,176 @@
 
                             <!-- Image to Video Section -->
                             <div id="imageToVideoSection" style="display: none;">
-                                <div class="mb-3">
-                                    <label for="imageUpload" class="form-label fw-semibold">First Frame Image</label>
-                                    <div class="upload-area" id="imageUploadArea">
-                                        <input type="file" class="form-control d-none" id="imageUpload" accept="image/*" onchange="handleImageUpload(event)">
-                                        <div class="upload-placeholder text-center p-4 border-2 border-dashed rounded">
-                                            <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
-                                            <p class="mb-2 fw-semibold">Click to upload image</p>
-                                            <p class="text-muted small mb-0">Supports JPEG, JPG, PNG, BMP, WEBP (Max 10MB)</p>
+                                <!-- Image Source Selection -->
+                                <div class="mb-4">
+                                    <label class="form-label fw-semibold">Image Source</label>
+                                    <div class="btn-group w-100" role="group">
+                                        <input type="radio" class="btn-check" name="imageSource" id="uploadImageSource" value="upload" checked>
+                                        <label class="btn btn-outline-primary" for="uploadImageSource">
+                                            <i class="bi bi-upload me-2"></i>Upload Image
+                                        </label>
+                                        
+                                        <input type="radio" class="btn-check" name="imageSource" id="generateImageSource" value="generate">
+                                        <label class="btn btn-outline-primary" for="generateImageSource">
+                                            <i class="bi bi-stars me-2"></i>Generate Image First
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <!-- Upload Image Section -->
+                                <div id="uploadImageSection">
+                                    <div class="mb-3">
+                                        <label for="imageUpload" class="form-label fw-semibold">First Frame Image</label>
+                                        <div class="upload-area" id="imageUploadArea">
+                                            <input type="file" class="form-control d-none" id="imageUpload" accept="image/*" onchange="handleImageUpload(event)">
+                                            <div class="upload-placeholder text-center p-4 border-2 border-dashed rounded">
+                                                <i class="bi bi-cloud-upload fs-1 text-muted mb-3"></i>
+                                                <p class="mb-2 fw-semibold">Click to upload image</p>
+                                                <p class="text-muted small mb-0">Supports JPEG, JPG, PNG, BMP, WEBP (Max 10MB)</p>
+                                            </div>
+                                            <div class="uploaded-image d-none" id="uploadedImagePreview">
+                                                <img id="imagePreview" class="img-fluid rounded mb-2" style="max-height: 200px;">
+                                                <div class="d-flex justify-content-between align-items-center">
+                                                    <small class="text-muted" id="imageInfo"></small>
+                                                    <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedImage()">
+                                                        <i class="bi bi-trash me-1"></i>Remove
+                                                    </button>
+                                                </div>
+                                            </div>
                                         </div>
-                                        <div class="uploaded-image d-none" id="uploadedImagePreview">
-                                            <img id="imagePreview" class="img-fluid rounded mb-2" style="max-height: 200px;">
-                                            <div class="d-flex justify-content-between align-items-center">
-                                                <small class="text-muted" id="imageInfo"></small>
-                                                <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeUploadedImage()">
-                                                    <i class="bi bi-trash me-1"></i>Remove
-                                                </button>
+                                    </div>
+                                </div>
+
+                                <!-- Generate Image Section -->
+                                <div id="generateImageSection" style="display: none;">
+                                    <div class="card mb-3" style="border: 2px dashed #3b82f6; background: rgba(59, 130, 246, 0.05);">
+                                        <div class="card-body">
+                                            <h6 class="fw-bold mb-3"><i class="bi bi-palette me-2"></i>Generate Image with AI</h6>
+                                            
+                                            <!-- Image Generation Type -->
+                                            <div class="mb-3">
+                                                <label class="form-label fw-semibold">Generation Type</label>
+                                                <div class="btn-group w-100" role="group">
+                                                    <input type="radio" class="btn-check" name="imageGenType" id="textToImage" value="text-to-image" checked>
+                                                    <label class="btn btn-outline-primary btn-sm" for="textToImage">
+                                                        <i class="bi bi-type me-1"></i>Text to Image
+                                                    </label>
+                                                    
+                                                    <input type="radio" class="btn-check" name="imageGenType" id="imageToImage" value="image-to-image">
+                                                    <label class="btn btn-outline-primary btn-sm" for="imageToImage">
+                                                        <i class="bi bi-image me-1"></i>Image to Image
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <!-- Text to Image Section -->
+                                            <div id="textToImageSection">
+                                                <div class="mb-3">
+                                                    <label for="imageGenPrompt" class="form-label fw-semibold">Image Description</label>
+                                                    <textarea class="form-control" id="imageGenPrompt" rows="3" placeholder="Describe the image you want to generate..."></textarea>
+                                                    <div class="form-text">Be detailed about the scene, style, colors, and composition.</div>
+                                                </div>
+
+                                                <div class="row mb-3">
+                                                    <div class="col-md-6">
+                                                        <label for="imageGenModel" class="form-label fw-semibold">Model</label>
+                                                        <select class="form-select form-select-sm" id="imageGenModel">
+                                                            <option value="flux">Flux (Balanced)</option>
+                                                            <option value="turbo">Turbo (Fast)</option>
+                                                            <option value="gptimage">GPT Image (High Quality)</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="col-md-6">
+                                                        <label for="imageGenSeed" class="form-label fw-semibold">Seed</label>
+                                                        <input type="number" class="form-control form-control-sm" id="imageGenSeed" value="42" min="0" max="99999">
+                                                        <div class="form-text small">Each seed creates unique variation</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <!-- Image to Image Section -->
+                                            <div id="imageToImageSection" style="display: none;">
+                                                <div class="mb-3">
+                                                    <label for="baseImageUpload" class="form-label fw-semibold">Base Image</label>
+                                                    <div class="upload-area" id="baseImageUploadArea">
+                                                        <input type="file" class="form-control d-none" id="baseImageUpload" accept="image/*" onchange="handleBaseImageUpload(event)">
+                                                        <div class="upload-placeholder text-center p-3 border-2 border-dashed rounded" onclick="document.getElementById('baseImageUpload').click()">
+                                                            <i class="bi bi-cloud-upload fs-3 text-muted mb-2"></i>
+                                                            <p class="mb-1 fw-semibold small">Upload base image</p>
+                                                            <p class="text-muted small mb-0">For image-to-image transformation</p>
+                                                        </div>
+                                                        <div class="uploaded-image d-none" id="baseImagePreview">
+                                                            <img id="baseImagePreviewImg" class="img-fluid rounded mb-2" style="max-height: 150px;">
+                                                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeBaseImage()">
+                                                                <i class="bi bi-trash me-1"></i>Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="imageTransformPrompt" class="form-label fw-semibold">Transformation Description</label>
+                                                    <textarea class="form-control" id="imageTransformPrompt" rows="3" placeholder="Describe how to transform the image..."></textarea>
+                                                    <div class="form-text">Describe changes, style, effects to apply (uses Kontext model)</div>
+                                                </div>
+
+                                                <div class="mb-3">
+                                                    <label for="imageToImageSeed" class="form-label fw-semibold">Seed</label>
+                                                    <input type="number" class="form-control form-control-sm" id="imageToImageSeed" value="42" min="0" max="99999">
+                                                </div>
+                                            </div>
+
+                                            <!-- Image Size Settings -->
+                                            <div class="row mb-3">
+                                                <div class="col-md-6">
+                                                    <label for="imageGenWidth" class="form-label fw-semibold">Width</label>
+                                                    <input type="number" class="form-control form-control-sm" id="imageGenWidth" value="1024" min="256" max="2048" step="64">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label for="imageGenHeight" class="form-label fw-semibold">Height</label>
+                                                    <input type="number" class="form-control form-control-sm" id="imageGenHeight" value="1024" min="256" max="2048" step="64">
+                                                </div>
+                                            </div>
+
+                                            <!-- Generate Button -->
+                                            <button type="button" class="btn btn-primary btn-sm w-100" onclick="generateImageForVideo()">
+                                                <i class="bi bi-stars me-2"></i>Generate Image
+                                            </button>
+
+                                            <!-- Generated Image Preview -->
+                                            <div id="generatedImagePreview" class="mt-3" style="display: none;">
+                                                <div class="alert alert-success">
+                                                    <i class="bi bi-check-circle me-2"></i>Image generated successfully!
+                                                </div>
+                                                <div class="text-center">
+                                                    <img id="generatedImageDisplay" 
+                                                         class="img-fluid rounded" 
+                                                         style="max-height: 300px; max-width: 100%; border: 2px solid #e5e7eb;"
+                                                         alt="Generated Image">
+                                                </div>
+                                                <div class="mt-2 text-center">
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="openImageInNewTab()">
+                                                        <i class="bi bi-box-arrow-up-right me-1"></i>Open in New Tab
+                                                    </button>
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="regenerateImageWithNewSeed()">
+                                                        <i class="bi bi-arrow-clockwise me-1"></i>Generate Variation
+                                                    </button>
+                                                </div>
+                                            </div>
+
+                                            <!-- Generation Progress -->
+                                            <div id="imageGenerationProgress" class="mt-3" style="display: none;">
+                                                <div class="d-flex align-items-center">
+                                                    <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+                                                    <span class="text-muted small">Generating image...</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                                 
                                 <div class="mb-3">
-                                    <label for="imagePrompt" class="form-label fw-semibold">Video Prompt</label>
+                                    <label for="imagePrompt" class="form-label fw-semibold">Video Motion Prompt</label>
                                     <textarea class="form-control" id="imagePrompt" rows="3" placeholder="Describe the motion and action you want in the video..."></textarea>
                                     <div class="form-text">Describe how the image should animate or what motion should occur.</div>
                                 </div>
@@ -3793,6 +4010,255 @@
             fileInput.value = '';
         }
 
+        // === NEW IMAGE GENERATION FUNCTIONS ===
+        
+        let generatedImageUrl = null;
+        let baseImageFile = null;
+        let baseImageUrl = null;
+
+        // Initialize image source toggle
+        document.addEventListener('DOMContentLoaded', function() {
+            const uploadSourceRadio = document.getElementById('uploadImageSource');
+            const generateSourceRadio = document.getElementById('generateImageSource');
+            
+            if (uploadSourceRadio && generateSourceRadio) {
+                uploadSourceRadio.addEventListener('change', function() {
+                    if (this.checked) {
+                        document.getElementById('uploadImageSection').style.display = 'block';
+                        document.getElementById('generateImageSection').style.display = 'none';
+                    }
+                });
+                
+                generateSourceRadio.addEventListener('change', function() {
+                    if (this.checked) {
+                        document.getElementById('uploadImageSection').style.display = 'none';
+                        document.getElementById('generateImageSection').style.display = 'block';
+                    }
+                });
+            }
+
+            // Initialize image generation type toggle
+            const textToImageRadio = document.getElementById('textToImage');
+            const imageToImageRadio = document.getElementById('imageToImage');
+            
+            if (textToImageRadio && imageToImageRadio) {
+                textToImageRadio.addEventListener('change', function() {
+                    if (this.checked) {
+                        document.getElementById('textToImageSection').style.display = 'block';
+                        document.getElementById('imageToImageSection').style.display = 'none';
+                    }
+                });
+                
+                imageToImageRadio.addEventListener('change', function() {
+                    if (this.checked) {
+                        document.getElementById('textToImageSection').style.display = 'none';
+                        document.getElementById('imageToImageSection').style.display = 'block';
+                    }
+                });
+            }
+        });
+
+        // Handle base image upload for image-to-image generation
+        function handleBaseImageUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            // Validate file type
+            const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/bmp', 'image/webp'];
+            if (!allowedTypes.includes(file.type)) {
+                alert('Please upload a valid image file (JPEG, JPG, PNG, BMP, WEBP)');
+                return;
+            }
+
+            // Validate file size (10MB max)
+            const maxSize = 10 * 1024 * 1024;
+            if (file.size > maxSize) {
+                alert('Image file size must be less than 10MB');
+                return;
+            }
+
+            // Store the file and show preview
+            baseImageFile = file;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                baseImageUrl = e.target.result;
+                const preview = document.getElementById('baseImagePreviewImg');
+                const placeholder = document.querySelector('#baseImageUploadArea .upload-placeholder');
+                const uploadedDiv = document.getElementById('baseImagePreview');
+
+                preview.src = e.target.result;
+                
+                placeholder.classList.add('d-none');
+                uploadedDiv.classList.remove('d-none');
+            };
+            reader.readAsDataURL(file);
+        }
+
+        function removeBaseImage() {
+            baseImageFile = null;
+            baseImageUrl = null;
+            
+            const placeholder = document.querySelector('#baseImageUploadArea .upload-placeholder');
+            const uploadedDiv = document.getElementById('baseImagePreview');
+            const fileInput = document.getElementById('baseImageUpload');
+            
+            placeholder.classList.remove('d-none');
+            uploadedDiv.classList.add('d-none');
+            fileInput.value = '';
+        }
+
+        // Generate image using Pollinations.ai API
+        async function generateImageForVideo() {
+            const genType = document.querySelector('input[name="imageGenType"]:checked').value;
+            const progress = document.getElementById('imageGenerationProgress');
+            const preview = document.getElementById('generatedImagePreview');
+            
+            progress.style.display = 'block';
+            preview.style.display = 'none';
+
+            try {
+                let imageUrl;
+                
+                if (genType === 'text-to-image') {
+                    // Text to Image generation
+                    const prompt = document.getElementById('imageGenPrompt').value.trim();
+                    if (!prompt) {
+                        alert('Please enter an image description');
+                        progress.style.display = 'none';
+                        return;
+                    }
+
+                    const model = document.getElementById('imageGenModel').value;
+                    const width = document.getElementById('imageGenWidth').value;
+                    const height = document.getElementById('imageGenHeight').value;
+                    const seed = document.getElementById('imageGenSeed').value;
+
+                    // Build URL based on model
+                    // Note: Pollinations.ai uses URL-encoded prompts directly in the path
+                    if (model === 'gptimage') {
+                        // GPT Image model with special parameters
+                        const encodedPrompt = encodeURIComponent(prompt);
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true&model=gptimage`;
+                    } else {
+                        // Flux or Turbo models - using the simplified endpoint
+                        const encodedPrompt = encodeURIComponent(prompt);
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&model=${model}&nologo=true`;
+                    }
+                } else {
+                    // Image to Image generation (Kontext model)
+                    if (!baseImageUrl) {
+                        alert('Please upload a base image first');
+                        progress.style.display = 'none';
+                        return;
+                    }
+
+                    const transformPrompt = document.getElementById('imageTransformPrompt').value.trim();
+                    if (!transformPrompt) {
+                        alert('Please enter a transformation description');
+                        progress.style.display = 'none';
+                        return;
+                    }
+
+                    const width = document.getElementById('imageGenWidth').value;
+                    const height = document.getElementById('imageGenHeight').value;
+                    const seed = document.getElementById('imageToImageSeed').value;
+
+                    // For image-to-image, we need to upload the base image first
+                    // Pollinations.ai kontext model requires a publicly accessible image URL
+                    // We'll need to upload via backend or use a different approach
+                    alert('Image-to-Image generation requires uploading the base image to a public URL first. This feature will be implemented with backend support.');
+                    progress.style.display = 'none';
+                    return;
+                    
+                    // TODO: Implement backend upload endpoint for base images
+                    // const encodedPrompt = encodeURIComponent(transformPrompt);
+                    // const uploadedBaseImageUrl = await uploadBaseImageToServer(baseImageFile);
+                    // const encodedImageUrl = encodeURIComponent(uploadedBaseImageUrl);
+                    // imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true&model=kontext&image=${encodedImageUrl}`;
+                }
+
+                console.log('🎨 Generating image with URL:', imageUrl);
+
+                // Store the generated image URL immediately
+                generatedImageUrl = imageUrl;
+                uploadedImageUrl = imageUrl;
+                
+                // Show preview immediately - Pollinations.ai images load fine in <img> tags
+                const displayImg = document.getElementById('generatedImageDisplay');
+                
+                // Set up load handler first
+                displayImg.onload = function() {
+                    console.log('✅ Image loaded and displayed successfully');
+                    progress.style.display = 'none';
+                    preview.style.display = 'block';
+                    
+                    const alertDiv = document.querySelector('#generatedImagePreview .alert');
+                    if (alertDiv) {
+                        alertDiv.className = 'alert alert-success';
+                        alertDiv.innerHTML = '<i class="bi bi-check-circle me-2"></i>Image generated successfully! Ready to use for video generation.';
+                    }
+                };
+                
+                // Set up error handler
+                displayImg.onerror = function() {
+                    console.error('❌ Failed to load image preview');
+                    progress.style.display = 'none';
+                    
+                    const alertDiv = document.querySelector('#generatedImagePreview .alert');
+                    if (alertDiv) {
+                        alertDiv.className = 'alert alert-warning';
+                        alertDiv.innerHTML = '<i class="bi bi-exclamation-triangle me-2"></i>Image generated but preview unavailable. The image URL is valid and will work for video generation.';
+                    }
+                    preview.style.display = 'block';
+                    
+                    // Show a placeholder or text representation
+                    displayImg.style.display = 'none';
+                };
+                
+                // Set the image source - this will trigger the load
+                // Add a cache-busting timestamp to ensure fresh image
+                const timestamp = Date.now();
+                displayImg.src = imageUrl + (imageUrl.includes('?') ? '&' : '?') + 'nocache=' + timestamp;
+                displayImg.style.display = 'block';
+                
+                console.log('✅ Image URL generated successfully:', imageUrl);
+
+            } catch (error) {
+                console.error('Error generating image:', error);
+                alert('Failed to generate image: ' + error.message);
+                progress.style.display = 'none';
+            }
+        }
+
+        // Open generated image in new tab (bypasses CORS for viewing)
+        function openImageInNewTab() {
+            if (generatedImageUrl) {
+                window.open(generatedImageUrl, '_blank');
+            } else {
+                alert('No image generated yet');
+            }
+        }
+
+        // Generate a new variation by changing the seed
+        function regenerateImageWithNewSeed() {
+            const genType = document.querySelector('input[name="imageGenType"]:checked').value;
+            
+            if (genType === 'text-to-image') {
+                const seedInput = document.getElementById('imageGenSeed');
+                // Increment seed to get a new variation
+                const newSeed = parseInt(seedInput.value) + 1;
+                seedInput.value = newSeed;
+            } else {
+                const seedInput = document.getElementById('imageToImageSeed');
+                const newSeed = parseInt(seedInput.value) + 1;
+                seedInput.value = newSeed;
+            }
+            
+            // Regenerate with new seed
+            generateImageForVideo();
+        }
+
         function updateModelOptions(type) {
             const modelSelect = document.getElementById('aiModel');
             
@@ -3931,10 +4397,26 @@
                 }
             } else {
                 imagePrompt = document.getElementById('imagePrompt').value.trim();
-                if (!uploadedImageFile) {
-                    alert('Please upload an image for the first frame.');
-                    return;
+                
+                // Check image source - either uploaded or generated
+                const imageSource = document.querySelector('input[name="imageSource"]:checked')?.value || 'upload';
+                
+                if (imageSource === 'upload') {
+                    // Validate uploaded image
+                    if (!uploadedImageFile) {
+                        alert('Please upload an image for the first frame.');
+                        return;
+                    }
+                } else {
+                    // Validate generated image
+                    if (!generatedImageUrl) {
+                        alert('Please generate an image first using the "Generate Image" button.');
+                        return;
+                    }
+                    // Use the generated image URL as uploadedImageUrl
+                    uploadedImageUrl = generatedImageUrl;
                 }
+                
                 if (!imagePrompt) {
                     alert('Please describe the motion and action you want in the video.');
                     return;

@@ -98,6 +98,16 @@ return [
         'api_key' => env('IMGBB_API_KEY'),
     ],
 
+    'pollinations' => [
+        'base_url' => env('POLLINATIONS_BASE_URL', 'https://pollinations.ai/p'),
+        'models' => [
+            'flux' => 'Flux (Balanced)',
+            'turbo' => 'Turbo (Fast)',
+            'gptimage' => 'GPT Image (High Quality)',
+            'kontext' => 'Kontext (Image to Image)'
+        ]
+    ],
+
     'wan_ai' => [
         'api_key' => env('WAN_AI_API_KEY'),
         'base_url' => env('WAN_AI_BASE_URL', 'https://dashscope-intl.aliyuncs.com/api/v1/services/aigc/video-generation/video-synthesis'),

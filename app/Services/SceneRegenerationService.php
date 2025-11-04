@@ -41,7 +41,7 @@ class SceneRegenerationService
     }
 
     /**
-     * Extract keywords from script text
+     * Extract the best single keyword from script text
      */
     private function extractKeywordsFromScript(string $scriptText): array
     {
@@ -67,8 +67,8 @@ class SceneRegenerationService
             if (!in_array($k, $unique, true)) { $unique[] = $k; }
         }
 
-        // Return up to 4
-        return array_slice($unique, 0, 4);
+        // Return only the first (best) keyword for better Pexels search results
+        return array_slice($unique, 0, 1);
     }
 
     /**
@@ -82,7 +82,12 @@ class SceneRegenerationService
                 'keywords' => $keywords
             ]);
 
-            $query = implode(' ', $keywords);
+            // Use only the first (and only) keyword for better search results
+            $query = $keywords[0] ?? '';
+            
+            if (empty($query)) {
+                throw new \Exception('No keyword provided for Pexels search');
+            }
 
             $response = Http::withHeaders([
                 'Authorization' => config('services.pexels.api_key')
@@ -207,7 +212,7 @@ class SceneRegenerationService
     }
 
     /**
-     * Normalize provided keywords array: trim, dedupe, drop empties
+     * Normalize provided keywords array: trim, dedupe, drop empties, return only the best one
      */
     private function normalizeKeywords(array $keywords): array
     {
@@ -223,8 +228,8 @@ class SceneRegenerationService
                 }
             }
         }
-        // Limit to reasonable count for Pexels (reduced for faster processing)
-        return array_slice($clean, 0, 4);
+        // Return only the first (best) keyword for better Pexels search results
+        return array_slice($clean, 0, 1);
     }
 
     /**
