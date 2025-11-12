@@ -59,6 +59,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/scenes/{scene}/regenerate-proxy', [ProjectController::class, 'regenerateSceneProxy'])->name('scenes.regenerate-proxy');
     Route::get('/scenes/{scene}/ai-status', [ProjectController::class, 'checkAiGenerationStatus'])->name('scenes.ai-status');
     Route::post('/upload-image', [ProjectController::class, 'uploadImage'])->name('upload-image');
+    Route::post('/upload-image-to-hosting', [ProjectController::class, 'uploadImageToHosting'])->name('upload-image-to-hosting');
 
 
 

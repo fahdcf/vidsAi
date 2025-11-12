@@ -3242,4 +3242,66 @@ class ProjectController extends Controller
         }
     }
 
+    /**
+     * Upload image to hosting service (0x0.st) through backend to bypass CORS
+     */
+    public function uploadImageToHosting(Request $request)
+    {
+        try {
+            $request->validate([
+                'image' => 'required|image|max:10240' // Max 10MB
+            ]);
+
+            $image = $request->file('image');
+            
+            logger()->info('📤 Uploading image to 0x0.st via backend', [
+                'filename' => $image->getClientOriginalName(),
+                'size' => $image->getSize(),
+                'mime' => $image->getMimeType()
+            ]);
+
+            // Upload to 0x0.st using Laravel HTTP client
+            $response = Http::attach(
+                'file',
+                file_get_contents($image->getPathname()),
+                $image->getClientOriginalName()
+            )->post('https://0x0.st');
+
+            if ($response->successful()) {
+                $imageUrl = trim($response->body());
+                
+                logger()->info('✅ Image uploaded successfully', [
+                    'url' => $imageUrl
+                ]);
+
+                return response()->json([
+                    'success' => true,
+                    'url' => $imageUrl,
+                    'message' => 'Image uploaded successfully'
+                ]);
+            } else {
+                logger()->error('❌ Failed to upload image to 0x0.st', [
+                    'status' => $response->status(),
+                    'body' => $response->body()
+                ]);
+
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to upload image to hosting service'
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            logger()->error('❌ Image upload exception', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Upload failed: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
 }

@@ -4112,10 +4112,15 @@
         async function generateImageForVideo() {
             const genType = document.querySelector('input[name="imageGenType"]:checked').value;
             const progress = document.getElementById('imageGenerationProgress');
+            const progressText = progress.querySelector('span');
             const preview = document.getElementById('generatedImagePreview');
             
             progress.style.display = 'block';
             preview.style.display = 'none';
+            
+            if (progressText) {
+                progressText.textContent = 'Generating image...';
+            }
 
             try {
                 let imageUrl;
@@ -4164,18 +4169,34 @@
                     const height = document.getElementById('imageGenHeight').value;
                     const seed = document.getElementById('imageToImageSeed').value;
 
-                    // For image-to-image, we need to upload the base image first
-                    // Pollinations.ai kontext model requires a publicly accessible image URL
-                    // We'll need to upload via backend or use a different approach
-                    alert('Image-to-Image generation requires uploading the base image to a public URL first. This feature will be implemented with backend support.');
-                    progress.style.display = 'none';
-                    return;
+                    // Upload base image to 0x0.st (free image hosting service)
+                    console.log('📤 Uploading base image to get public URL...');
+                    if (progressText) {
+                        progressText.textContent = 'Uploading base image...';
+                    }
                     
-                    // TODO: Implement backend upload endpoint for base images
-                    // const encodedPrompt = encodeURIComponent(transformPrompt);
-                    // const uploadedBaseImageUrl = await uploadBaseImageToServer(baseImageFile);
-                    // const encodedImageUrl = encodeURIComponent(uploadedBaseImageUrl);
-                    // imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&enhance=true&nologo=true&model=kontext&image=${encodedImageUrl}`;
+                    try {
+                        const uploadedBaseImageUrl = await uploadImageTo0x0st(baseImageFile);
+                        console.log('✅ Base image uploaded:', uploadedBaseImageUrl);
+                        
+                        if (progressText) {
+                            progressText.textContent = 'Generating transformed image...';
+                        }
+                        
+                        // Now construct the image-to-image URL with Pollinations
+                        const encodedPrompt = encodeURIComponent(transformPrompt);
+                        const encodedImageUrl = encodeURIComponent(uploadedBaseImageUrl);
+                        
+                        // Using Pollinations.ai image endpoint with reference image
+                        imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=${width}&height=${height}&seed=${seed}&model=flux&nologo=true&refImage=${encodedImageUrl}`;
+                        
+                        console.log('🎨 Image-to-image URL constructed:', imageUrl);
+                    } catch (uploadError) {
+                        console.error('❌ Failed to upload base image:', uploadError);
+                        alert('Failed to upload base image. Please try again or use a smaller image.');
+                        progress.style.display = 'none';
+                        return;
+                    }
                 }
 
                 console.log('🎨 Generating image with URL:', imageUrl);
@@ -4229,6 +4250,36 @@
                 alert('Failed to generate image: ' + error.message);
                 progress.style.display = 'none';
             }
+        }
+
+        // Upload image through backend to bypass CORS
+        async function uploadImageTo0x0st(imageFile) {
+            return new Promise((resolve, reject) => {
+                const formData = new FormData();
+                formData.append('image', imageFile);
+                
+                // Upload through our backend endpoint
+                fetch('/upload-image-to-hosting', {
+                    method: 'POST',
+                    headers: {
+                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                    },
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.url) {
+                        console.log('✅ Image uploaded via backend:', data.url);
+                        resolve(data.url);
+                    } else {
+                        reject(new Error(data.message || 'Upload failed'));
+                    }
+                })
+                .catch(error => {
+                    console.error('Upload error:', error);
+                    reject(error);
+                });
+            });
         }
 
         // Open generated image in new tab (bypasses CORS for viewing)
