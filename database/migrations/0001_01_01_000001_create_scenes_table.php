@@ -15,7 +15,7 @@ return new class extends Migration
             $table->text('script_text');
             $table->string('video_path')->nullable();
             $table->string('thumbnail_path')->nullable();
-            $table->enum('status', ['pending', 'processing', 'completed', 'regenerating'])->default('pending');
+            $table->enum('status', ['pending', 'processing', 'completed', 'regenerating', 'failed'])->default('pending');
             $table->boolean('approved')->default(false);
             $table->timestamps();
         });

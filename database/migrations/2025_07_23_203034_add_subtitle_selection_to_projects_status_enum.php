@@ -12,7 +12,10 @@ return new class extends Migration
      */
     public function up(): void
     {
-        // For MySQL, we need to modify the enum column to include the new value
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("ALTER TABLE projects MODIFY COLUMN status ENUM('pending', 'processing', 'reviewing', 'subtitle_selection', 'completed', 'failed') DEFAULT 'pending'");
     }
 
@@ -21,7 +24,10 @@ return new class extends Migration
      */
     public function down(): void
     {
-        // Remove the subtitle_selection status and revert to original enum
+        if (DB::getDriverName() !== 'mysql') {
+            return;
+        }
+
         DB::statement("ALTER TABLE projects MODIFY COLUMN status ENUM('pending', 'processing', 'reviewing', 'completed', 'failed') DEFAULT 'pending'");
     }
 };

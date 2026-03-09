@@ -1,64 +1,163 @@
-@extends('layouts.app')
-
-@section('title', 'Review Scenes - ' . $project->name)
-
-@push('styles')
-<meta name="csrf-token" content="{{ csrf_token() }}">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+    <title>Review Scenes - {{ $project->name }} - VidsAI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
-        /* Modern Scene Page Styling */
-        .scene-page {
-            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-            min-height: 100vh;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
+        :root {
+            --navy-900: #0f1419;
+            --navy-800: #1a1f2e;
+            --navy-700: #252b3b;
+            --navy-600: #2d3548;
+            --gray-400: #94a3b8;
+            --gray-300: #cbd5e1;
+            --blue-500: #3b82f6;
+            --purple-500: #8b5cf6;
+            --green-500: #10b981;
+            --orange-500: #f59e0b;
+            --red-500: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--navy-900);
+            color: #e2e8f0;
+            min-height: 100vh;
+        }
+
+        /* Sidebar Navigation */
+        .sidebar {
+            position: fixed;
+            left: 0;
+            top: 0;
+            width: 280px;
+            height: 100vh;
+            background: var(--navy-800);
+            border-right: 1px solid var(--navy-700);
+            display: flex;
+            flex-direction: column;
+            z-index: 1000;
+        }
+
+        .sidebar-header {
+            padding: 2rem 1.5rem;
+            border-bottom: 1px solid var(--navy-700);
+        }
+
+        .logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 1.5rem 0;
+            overflow-y: auto;
+        }
+
+        .nav-item {
+            margin-bottom: 0.5rem;
+        }
+
+        .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.875rem 1.5rem;
+            color: var(--gray-400);
+            text-decoration: none;
+            transition: all 0.2s;
+            font-size: 0.9375rem;
+        }
+
+        .nav-link:hover {
+            background: var(--navy-700);
+            color: #fff;
+        }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
+            color: #fff;
+        }
+
+        .nav-link i {
+            font-size: 1.25rem;
+            width: 24px;
+        }
+
+        /* Main Content Area */
+        .main-content {
+            margin-left: 280px;
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        /* Container */
         .container {
             max-width: 1400px;
+            margin: 0 auto;
         }
 
-        /* Header Styling */
+        /* Container */
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Page Header */
         .page-header {
-            background: white;
+            background: var(--navy-800);
             border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
             padding: 2rem;
             margin-bottom: 2rem;
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            border: 1px solid var(--navy-700);
         }
 
         .page-title {
-            font-size: 2.5rem;
+            font-size: 2rem;
             font-weight: 700;
-            color: #1e293b;
+            color: #fff;
             margin-bottom: 0.5rem;
         }
 
         .page-subtitle {
-            color: #64748b;
-            font-size: 1.1rem;
+            color: var(--gray-400);
+            font-size: 1rem;
             margin-bottom: 1rem;
         }
 
         .format-badge {
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-            color: white;
-            padding: 0.5rem 1rem;
-            border-radius: 8px;
-            font-size: 0.875rem;
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
+            color: #fff;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 500;
         }
 
         /* Progress Indicator */
         .progress-card {
-            background: white;
+            background: var(--navy-800);
             border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            padding: 2rem;
             margin-bottom: 2rem;
+            border: 1px solid var(--navy-700);
         }
 
         .progress-step {
@@ -74,35 +173,220 @@
         }
 
         .progress-step.completed {
-            background: linear-gradient(135deg, #10b981, #059669);
+            background: linear-gradient(135deg, var(--green-500), #059669);
             color: white;
             box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
 
         .progress-step.active {
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
             color: white;
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
         .progress-step:not(.completed):not(.active) {
-            background: #f1f5f9;
-            color: #94a3b8;
+            background: var(--navy-700);
+            color: var(--gray-400);
         }
 
         .progress-connector {
             width: 60px;
             height: 2px;
-            background: #e2e8f0;
+            background: var(--navy-700);
             margin: 0 1rem;
+        }
+
+        /* Utility Classes */
+        .d-flex {
+            display: flex;
+        }
+
+        .flex-column {
+            flex-direction: column;
+        }
+
+        .flex-lg-row {
+            flex-direction: row;
+        }
+
+        .justify-content-between {
+            justify-content: space-between;
+        }
+
+        .justify-content-center {
+            justify-content: center;
+        }
+
+        .align-items-start {
+            align-items: flex-start;
+        }
+
+        .align-items-center {
+            align-items: center;
+        }
+
+        .align-items-lg-center {
+            align-items: center;
+        }
+
+        .gap-2 {
+            gap: 0.5rem;
+        }
+
+        .gap-3 {
+            gap: 0.75rem;
+        }
+
+        .gap-4 {
+            gap: 1rem;
+        }
+
+        .mb-0 {
+            margin-bottom: 0;
+        }
+
+        .mb-2 {
+            margin-bottom: 0.5rem;
+        }
+
+        .mb-3 {
+            margin-bottom: 0.75rem;
+        }
+
+        .mb-4 {
+            margin-bottom: 1rem;
+        }
+
+        .mt-2 {
+            margin-top: 0.5rem;
+        }
+
+        .mt-3 {
+            margin-top: 0.75rem;
+        }
+
+        .ms-2 {
+            margin-left: 0.5rem;
+        }
+
+        .ms-3 {
+            margin-left: 0.75rem;
+        }
+
+        .me-1 {
+            margin-right: 0.25rem;
+        }
+
+        .me-2 {
+            margin-right: 0.5rem;
+        }
+
+        .p-3 {
+            padding: 0.75rem;
+        }
+
+        .p-4 {
+            padding: 1rem;
+        }
+
+        .fw-bold {
+            font-weight: 700;
+        }
+
+        .fw-semibold {
+            font-weight: 600;
+        }
+
+        .fw-medium {
+            font-weight: 500;
+        }
+
+        .text-center {
+            text-align: center;
+        }
+
+        .text-muted {
+            color: var(--gray-400);
+        }
+
+        .text-primary {
+            color: var(--blue-500);
+        }
+
+        .w-100 {
+            width: 100%;
+        }
+
+        .row {
+            display: flex;
+            flex-wrap: wrap;
+            margin: 0 -0.75rem;
+        }
+
+        .col-lg-6 {
+            flex: 0 0 50%;
+            max-width: 50%;
+            padding: 0 0.75rem;
+        }
+
+        .col-md-4 {
+            flex: 0 0 33.333333%;
+            max-width: 33.333333%;
+            padding: 0 0.75rem;
+        }
+
+        .col-md-6 {
+            flex: 0 0 50%;
+            max-width: 50%;
+            padding: 0 0.75rem;
+        }
+
+        .col-12 {
+            flex: 0 0 100%;
+            max-width: 100%;
+            padding: 0 0.75rem;
+        }
+
+        .flex-wrap {
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 992px) {
+            .col-lg-6 {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+
+            .flex-lg-row {
+                flex-direction: column;
+            }
+
+            .align-items-lg-center {
+                align-items: flex-start;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .col-md-4,
+            .col-md-6 {
+                flex: 0 0 100%;
+                max-width: 100%;
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .sidebar {
+                display: none;
+            }
         }
 
         /* Scene Cards */
         .scene-card {
-            background: white;
-            border: none;
+            background: var(--navy-800);
             border-radius: 20px;
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            border: 1px solid var(--navy-700);
             transition: all 0.3s ease;
             overflow: hidden;
             margin-bottom: 2rem;
@@ -110,24 +394,39 @@
 
         .scene-card:hover {
             transform: translateY(-4px);
-            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+            border-color: var(--navy-600);
         }
 
         .scene-card-header {
-            background: linear-gradient(135deg, #f8fafc, #e2e8f0);
+            background: var(--navy-700);
             padding: 1.5rem;
-            border-bottom: 1px solid #e2e8f0;
+            border-bottom: 1px solid var(--navy-600);
         }
 
         .scene-number {
             font-size: 1.25rem;
             font-weight: 700;
-            color: #1e293b;
+            color: #fff;
         }
 
-        .approval-checkbox {
-            transform: scale(1.2);
-            accent-color: #10b981;
+        .badge {
+            padding: 0.375rem 0.75rem;
+            border-radius: 6px;
+            font-size: 0.8125rem;
+            font-weight: 500;
+        }
+
+        .bg-success {
+            background: linear-gradient(135deg, var(--green-500), #059669);
+        }
+
+        .bg-primary {
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
+        }
+
+        .card-body {
+            padding: 1.5rem;
         }
 
         /* Video Player Container */
@@ -217,9 +516,9 @@
 
         /* Overlay Controls */
         .overlay-controls .card {
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--navy-600);
             border-radius: 12px;
-            background: #f8fafc;
+            background: var(--navy-700);
         }
 
         .btn-overlay {
@@ -293,11 +592,11 @@
 
         /* Timeline Section */
         .timeline-section {
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            background: var(--navy-700);
             border-radius: 16px;
             padding: 1.5rem;
             margin-top: 1rem;
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--navy-600);
         }
 
         .timeline-header {
@@ -328,10 +627,10 @@
         .video-timeline-section {
             margin-top: 20px;
             padding: 20px;
-            background: linear-gradient(135deg, #f8fafc, #f1f5f9);
+            background: var(--navy-700);
             border-radius: 16px;
-            border: 1px solid #e2e8f0;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--navy-600);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         .timeline-header {
@@ -356,13 +655,13 @@
         .professional-timeline {
             position: relative;
             height: 60px;
-            background: #ffffff;
+            background: var(--navy-600);
             border-radius: 12px;
-            border: 2px solid #e2e8f0;
+            border: 2px solid var(--navy-700);
             margin: 16px 0;
             cursor: pointer;
             overflow: hidden;
-            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+            box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
         }
 
         .timeline-track {
@@ -372,11 +671,11 @@
             right: 0;
             bottom: 0;
             background: linear-gradient(90deg,
-                #f1f5f9 0%,
-                #e2e8f0 25%,
-                #f1f5f9 50%,
-                #e2e8f0 75%,
-                #f1f5f9 100%);
+                var(--navy-600) 0%,
+                var(--navy-700) 25%,
+                var(--navy-600) 50%,
+                var(--navy-700) 75%,
+                var(--navy-600) 100%);
             background-size: 40px 100%;
         }
 
@@ -716,43 +1015,96 @@
         /* Action Buttons */
         .action-btn {
             border-radius: 10px;
-            padding: 0.5rem 1rem;
+            padding: 0.75rem 1.5rem;
             font-weight: 500;
             transition: all 0.3s ease;
-            border: 2px solid transparent;
+            border: none;
+            color: #fff;
+            cursor: pointer;
         }
 
         .action-btn:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
         }
 
         .btn-regenerate {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
-            color: white;
-            border-color: #f59e0b;
+            background: linear-gradient(135deg, var(--orange-500), #d97706);
         }
 
         .btn-regenerate:hover {
             background: linear-gradient(135deg, #d97706, #b45309);
         }
 
-        /* Regenerate Modal Styles */
-        #regenerateModal .modal-content {
-            border: none;
-            border-radius: 16px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15);
+        .btn-upload {
+            background: linear-gradient(135deg, #06b6d4, #0891b2);
         }
 
-        #regenerateModal .nav-pills .nav-link {
+        .btn-upload:hover {
+            background: linear-gradient(135deg, #0891b2, #0e7490);
+        }
+
+        .btn-overlay {
+            background: linear-gradient(135deg, var(--purple-500), #7c3aed);
+        }
+
+        .btn-overlay:hover {
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+        }
+
+        .btn-outline-secondary {
+            background: transparent;
+            border: 2px solid var(--navy-600);
+            color: var(--gray-400);
+        }
+
+        .btn-outline-secondary:hover {
+            background: var(--navy-700);
+            color: #fff;
+            border-color: var(--navy-600);
+        }
+
+        /* Regenerate Modal Styles */
+        .modal-content {
+            background: var(--navy-800);
+            border: 1px solid var(--navy-700);
+            border-radius: 16px;
+            color: #e2e8f0;
+        }
+
+        .modal-header {
+            border-bottom: 1px solid var(--navy-700);
+        }
+
+        .modal-body {
+            color: #e2e8f0;
+        }
+
+        .modal-footer {
+            border-top: 1px solid var(--navy-700);
+        }
+
+        .modal-title {
+            color: #fff;
+        }
+
+        .btn-close {
+            filter: invert(1);
+        }
+
+        .nav-pills .nav-link {
             border-radius: 12px;
             font-weight: 500;
             padding: 12px 20px;
             transition: all 0.3s ease;
+            color: var(--gray-400);
+            background: transparent;
+            border: none;
         }
 
-        #regenerateModal .nav-pills .nav-link.active {
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+        .nav-pills .nav-link.active {
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
+            color: #fff;
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
 
@@ -762,9 +1114,9 @@
             gap: 8px;
             min-height: 40px;
             padding: 12px;
-            border: 2px dashed #e5e7eb;
+            border: 2px dashed var(--navy-600);
             border-radius: 8px;
-            background: #f9fafb;
+            background: var(--navy-700);
         }
 
         .keyword-tag {
@@ -772,7 +1124,7 @@
             align-items: center;
             gap: 6px;
             padding: 6px 12px;
-            background: linear-gradient(135deg, #3b82f6, #1d4ed8);
+            background: linear-gradient(135deg, var(--blue-500), var(--purple-500));
             color: white;
             border-radius: 20px;
             font-size: 0.875rem;
@@ -1075,14 +1427,13 @@
 
         /* Final Approval Section */
         .approval-card {
-            background: linear-gradient(135deg, #ecfdf5, #d1fae5);
-            border: 2px solid #10b981;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(5, 150, 105, 0.05));
+            border: 2px solid var(--green-500);
             border-radius: 16px;
-            box-shadow: 0 4px 20px rgba(16, 185, 129, 0.1);
         }
 
         .btn-confirm {
-            background: linear-gradient(135deg, #10b981, #059669);
+            background: linear-gradient(135deg, var(--green-500), #059669);
             color: white;
             border: none;
             padding: 1rem 2rem;
@@ -1090,12 +1441,57 @@
             font-size: 1.1rem;
             font-weight: 600;
             transition: all 0.3s ease;
+            cursor: pointer;
         }
 
         .btn-confirm:hover {
             background: linear-gradient(135deg, #059669, #047857);
             transform: translateY(-2px);
             box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+        }
+
+        /* Form Controls */
+        .form-control,
+        .form-select {
+            background: var(--navy-700);
+            border: 1px solid var(--navy-600);
+            color: #e2e8f0;
+            border-radius: 8px;
+            padding: 0.5rem 0.75rem;
+        }
+
+        .form-control:focus,
+        .form-select:focus {
+            background: var(--navy-600);
+            border-color: var(--blue-500);
+            color: #fff;
+            outline: none;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .form-label {
+            color: #e2e8f0;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+        }
+
+        .form-text {
+            color: var(--gray-400);
+            font-size: 0.875rem;
+        }
+
+        .form-check-input {
+            background: var(--navy-600);
+            border: 1px solid var(--navy-500);
+        }
+
+        .form-check-input:checked {
+            background: var(--blue-500);
+            border-color: var(--blue-500);
+        }
+
+        .form-check-label {
+            color: #e2e8f0;
         }
 
         /* Video Placeholder */
@@ -1276,11 +1672,51 @@
             }
         }
     </style>
-@endpush
+    </style>
+</head>
+<body>
+    <!-- Sidebar Navigation -->
+    <div class="sidebar">
+        <div class="sidebar-header">
+            <div class="logo">VidsAI</div>
+        </div>
+        <nav class="sidebar-nav">
+            <div class="nav-item">
+                <a href="{{ route('dashboard') }}" class="nav-link">
+                    <i class="bi bi-grid"></i>
+                    <span>Dashboard</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="{{ route('projects.create') }}" class="nav-link active">
+                    <i class="bi bi-folder"></i>
+                    <span>Projects</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="#" class="nav-link">
+                    <i class="bi bi-file-earmark"></i>
+                    <span>Templates</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="#" class="nav-link">
+                    <i class="bi bi-bar-chart"></i>
+                    <span>Analytics</span>
+                </a>
+            </div>
+            <div class="nav-item">
+                <a href="#" class="nav-link">
+                    <i class="bi bi-gear"></i>
+                    <span>Settings</span>
+                </a>
+            </div>
+        </nav>
+    </div>
 
-@section('content')
-<div class="scene-page">
-    <div class="container py-5">
+    <!-- Main Content -->
+    <div class="main-content">
+        <div class="container">
         <!-- Header -->
         <div class="page-header">
             <div class="d-flex justify-content-between align-items-start">
@@ -1637,7 +2073,9 @@
             </div>
             </div>
         </div>
+        </div>
     </div>
+    <!-- End Main Content -->
 
     <!-- Upload Modals -->
     @foreach($scenes as $scene)
@@ -5785,8 +6223,6 @@
 
     </script>
 
-@push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-@endpush
-
-@endsection
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

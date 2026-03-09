@@ -11,8 +11,11 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         Schema::table('scenes', function (Blueprint $table) {
-            // Modify the status enum to include 'failed'
             $table->enum('status', ['pending', 'processing', 'completed', 'regenerating', 'failed'])->default('pending')->change();
         });
     }
@@ -22,8 +25,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (Schema::getConnection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         Schema::table('scenes', function (Blueprint $table) {
-            // Remove 'failed' from the enum
             $table->enum('status', ['pending', 'processing', 'completed', 'regenerating'])->default('pending')->change();
         });
     }

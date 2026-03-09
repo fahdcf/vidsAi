@@ -20,7 +20,7 @@ return new class extends Migration
             $table->text('custom_script')->nullable();
             $table->enum('voiceover_option', ['upload', 'ai', 'none']);
             $table->string('voiceover_file')->nullable();
-            $table->enum('status', ['pending', 'processing', 'reviewing', 'completed', 'failed'])->default('pending');
+            $table->enum('status', ['pending', 'processing', 'reviewing', 'subtitle_selection', 'subtitle_generating', 'completed', 'failed'])->default('pending');
             $table->string('job_id')->nullable();
             $table->string('final_video_path')->nullable();
             $table->json('scenes_data')->nullable();
