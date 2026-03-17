@@ -1,1390 +1,1529 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>VidsAI - AI-Powered Video Advertisement Generator</title>
-    
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Bootstrap Icons -->
+    <title>VidsAI — AI-Powered Video Ad Generator</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    
     <style>
-        /* Professional Dark Theme - Enhanced */
+        /* ============================================
+           VidsAI Design System
+           DNA: Linear.app / Vercel aesthetic
+           Base: #0F1117 | Blue: #2563EB | Amber: #F59E0B
+           ============================================ */
         :root {
-            --dark-bg: #0a0e16;
-            --dark-surface: #151b26;
-            --dark-surface-2: #1e2633;
-            --dark-border: #2d3748;
-            --dark-text: #f7fafc;
-            --dark-text-secondary: #a0aec0;
-            --accent-blue: #4299e1;
-            --accent-purple: #9f7aea;
-            --accent-green: #48bb78;
-            --accent-orange: #ed8936;
-            --glass-bg: rgba(255, 255, 255, 0.05);
-            --glass-border: rgba(255, 255, 255, 0.1);
+            --bg:          #0F1117;
+            --surface:     #161B27;
+            --surface-2:   #1C2233;
+            --border:      rgba(255,255,255,0.08);
+            --border-hover:rgba(255,255,255,0.14);
+            --blue:        #2563EB;
+            --blue-glow:   rgba(37,99,235,0.25);
+            --amber:       #F59E0B;
+            --amber-glow:  rgba(245,158,11,0.15);
+            --white:       #FFFFFF;
+            --white-60:    rgba(255,255,255,0.6);
+            --white-40:    rgba(255,255,255,0.4);
+            --white-08:    rgba(255,255,255,0.08);
+            --radius-sm:   8px;
+            --radius-md:   12px;
+            --radius-lg:   16px;
+            --radius-xl:   20px;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            background: linear-gradient(135deg, var(--dark-bg) 0%, #0f1419 50%, var(--dark-bg) 100%);
-            color: var(--dark-text);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--white);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
             line-height: 1.6;
             overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
         }
 
-        /* Animated Background */
-        body::before {
-            content: '';
+        /* Utility */
+        .container { max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+        .container-narrow { max-width: 800px; margin: 0 auto; padding: 0 24px; }
+
+        /* ============================================
+           SECTION 1: Navigation Bar
+           72px height, frosted glass, sticky
+           ============================================ */
+        .nav-bar {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
-            background: 
-                radial-gradient(circle at 20% 80%, rgba(66, 153, 225, 0.1) 0%, transparent 50%),
-                radial-gradient(circle at 80% 20%, rgba(159, 122, 234, 0.1) 0%, transparent 50%),
-                radial-gradient(circle at 40% 40%, rgba(72, 187, 120, 0.05) 0%, transparent 50%);
-            z-index: -1;
-            animation: backgroundShift 20s ease-in-out infinite;
-        }
-
-        @keyframes backgroundShift {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.7; }
-        }
-
-        /* Glass Navigation */
-        .glass-nav {
-            background: rgba(15, 20, 25, 0.8);
+            right: 0;
+            height: 72px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 40px;
+            background: rgba(15,17,23,0.7);
             backdrop-filter: blur(20px);
-            border-bottom: 1px solid var(--glass-border);
-            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border);
             z-index: 1000;
+            transition: background 0.3s ease;
+        }
+        .nav-bar.scrolled {
+            background: rgba(15,17,23,0.92);
         }
 
-        .navbar-brand {
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            color: var(--white);
+        }
+        .nav-logo-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--blue);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 16px;
+            color: var(--white);
+        }
+        .nav-logo-text {
+            font-size: 20px;
             font-weight: 700;
-            font-size: 1.5rem;
-            transition: all 0.3s ease;
+            letter-spacing: -0.02em;
         }
 
-        .navbar-brand:hover {
-            transform: scale(1.05);
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            list-style: none;
+        }
+        .nav-links a {
+            color: var(--white-60);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: color 0.2s ease;
+        }
+        .nav-links a:hover { color: var(--white); }
+
+        .nav-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
         }
 
-        /* Enhanced Buttons */
-        .btn-primary-enhanced {
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-            border: none;
-            color: white;
-            font-weight: 600;
-            padding: 12px 32px;
-            border-radius: 12px;
-            position: relative;
-            overflow: hidden;
-            transition: all 0.3s ease;
-            box-shadow: 0 4px 20px rgba(66, 153, 225, 0.3);
-        }
-
-        .btn-primary-enhanced::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: -100%;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-            transition: left 0.5s;
-        }
-
-        .btn-primary-enhanced:hover::before {
-            left: 100%;
-        }
-
-        .btn-primary-enhanced:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 30px rgba(66, 153, 225, 0.4);
-        }
-
-        .btn-outline-enhanced {
+        .btn-ghost {
             background: transparent;
-            border: 2px solid var(--glass-border);
-            color: var(--dark-text);
+            border: 1px solid var(--border);
+            color: var(--white-60);
+            padding: 8px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+        }
+        .btn-ghost:hover {
+            color: var(--white);
+            border-color: var(--border-hover);
+            background: var(--white-08);
+        }
+
+        .btn-primary {
+            background: var(--blue);
+            border: none;
+            color: var(--white);
+            padding: 8px 20px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
             font-weight: 600;
-            padding: 12px 32px;
-            border-radius: 12px;
-            backdrop-filter: blur(10px);
-            transition: all 0.3s ease;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            box-shadow: 0 0 20px var(--blue-glow);
+        }
+        .btn-primary:hover {
+            background: #3B82F6;
+            box-shadow: 0 0 30px rgba(37,99,235,0.35);
+            transform: translateY(-1px);
         }
 
-        .btn-outline-enhanced:hover {
-            background: var(--glass-bg);
-            border-color: var(--accent-blue);
-            color: var(--accent-blue);
-            transform: translateY(-2px);
+        .btn-primary-lg {
+            padding: 14px 32px;
+            font-size: 15px;
+            border-radius: var(--radius-md);
         }
 
-        /* Hero Section */
-        .hero-enhanced {
+        .btn-outline-lg {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--white);
+            padding: 14px 32px;
+            border-radius: var(--radius-md);
+            font-size: 15px;
+            font-weight: 500;
+            font-family: inherit;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-outline-lg:hover {
+            border-color: var(--border-hover);
+            background: var(--white-08);
+        }
+
+        /* ============================================
+           SECTION 2: Hero Section
+           Full viewport, centered, gradient orb
+           ============================================ */
+        .hero {
             position: relative;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 72px 24px 80px;
             overflow: hidden;
-            z-index: 1;
-            padding-top: 100px;
         }
 
-        .hero-video-background {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            z-index: -2;
-        }
-
-        .hero-video-overlay {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, 
-                rgba(10, 14, 22, 0.85) 0%, 
-                rgba(21, 27, 38, 0.75) 50%, 
-                rgba(10, 14, 22, 0.85) 100%);
-            z-index: -1;
-        }
-
-        .hero-enhanced::before {
+        /* Studio lighting gradient orb — top-left directional */
+        .hero::before {
             content: '';
             position: absolute;
-            top: -50%;
-            left: -50%;
-            width: 200%;
-            height: 200%;
-            background: conic-gradient(from 0deg, transparent, rgba(66, 153, 225, 0.03), transparent);
-            animation: rotate 20s linear infinite;
+            top: -20%;
+            left: -10%;
+            width: 700px;
+            height: 700px;
+            background: radial-gradient(circle, var(--blue-glow) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: heroOrb 8s ease-in-out infinite;
         }
-
-        @keyframes rotate {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+        .hero::after {
+            content: '';
+            position: absolute;
+            bottom: -10%;
+            right: -5%;
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, var(--amber-glow) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+            animation: heroOrb 10s ease-in-out infinite reverse;
+        }
+        @keyframes heroOrb {
+            0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.6; }
+            50% { transform: translate(30px, -20px) scale(1.1); opacity: 1; }
         }
 
         .hero-content {
             position: relative;
-            z-index: 3;
+            z-index: 1;
+            max-width: 800px;
         }
 
-        .gradient-text-enhanced {
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple), var(--accent-green));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: gradientShift 3s ease-in-out infinite;
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--white-60);
+            margin-bottom: 32px;
+        }
+        .hero-badge-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--amber);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
         }
 
-        @keyframes gradientShift {
-            0%, 100% { filter: hue-rotate(0deg); }
-            50% { filter: hue-rotate(30deg); }
+        .hero h1 {
+            font-size: clamp(40px, 6vw, 72px);
+            font-weight: 800;
+            line-height: 1.05;
+            letter-spacing: -0.03em;
+            margin-bottom: 24px;
+        }
+        .hero h1 .text-blue {
+            color: var(--blue);
         }
 
-        /* Feature Cards Enhanced */
-        .feature-card-enhanced {
-            background: linear-gradient(145deg, var(--dark-surface), var(--dark-surface-2));
-            border: 1px solid var(--dark-border);
-            border-radius: 20px;
-            padding: 2.5rem;
+        .hero-sub {
+            font-size: 18px;
+            color: var(--white-60);
+            line-height: 1.7;
+            max-width: 560px;
+            margin: 0 auto 40px;
+        }
+
+        .hero-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-bottom: 48px;
+        }
+
+        .hero-visual {
+            position: relative;
+            margin-top: 20px;
+        }
+
+        /* Browser mockup frame */
+        .browser-frame {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.4), 0 0 60px var(--blue-glow);
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        .browser-frame-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 16px;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+        }
+        .browser-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: var(--white-08);
+        }
+        .browser-dot:nth-child(1) { background: #FF5F57; }
+        .browser-dot:nth-child(2) { background: #FEBC2E; }
+        .browser-dot:nth-child(3) { background: #28C840; }
+        .browser-frame-body {
+            padding: 32px;
+            min-height: 200px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .browser-frame-body img {
+            width: 100%;
+            height: auto;
+            border-radius: var(--radius-sm);
+        }
+        .browser-frame-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 16px;
+            color: var(--white-40);
+        }
+        .browser-frame-placeholder i {
+            font-size: 48px;
+            color: var(--blue);
+        }
+
+        /* ============================================
+           SECTION 10: CTA Banner + Footer
+           ============================================ */
+        .cta-section {
+            padding: 120px 0;
+            text-align: center;
             position: relative;
             overflow: hidden;
-            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-            backdrop-filter: blur(10px);
-            z-index: 3;
+        }
+        .cta-section::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, var(--blue-glow) 0%, transparent 70%);
+            border-radius: 50%;
+            pointer-events: none;
+        }
+        .cta-box {
+            position: relative;
+            z-index: 1;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+        .cta-box h2 {
+            font-size: clamp(28px, 4vw, 44px);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            margin-bottom: 16px;
+        }
+        .cta-box p {
+            font-size: 16px;
+            color: var(--white-60);
+            margin-bottom: 36px;
+            line-height: 1.7;
+        }
+        .cta-actions {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+        .cta-note {
+            font-size: 13px;
+            color: var(--white-40);
+            margin-top: 20px;
         }
 
-        .feature-card-enhanced::before {
+        /* Footer */
+        .footer {
+            border-top: 1px solid var(--border);
+            padding: 64px 0 32px;
+            background: var(--surface);
+        }
+        .footer-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr 1fr;
+            gap: 48px;
+            margin-bottom: 48px;
+        }
+        .footer-brand p {
+            font-size: 14px;
+            color: var(--white-40);
+            line-height: 1.7;
+            margin-top: 16px;
+            max-width: 280px;
+        }
+        .footer-col h4 {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--white-60);
+            margin-bottom: 16px;
+        }
+        .footer-col ul {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .footer-col a {
+            color: var(--white-40);
+            text-decoration: none;
+            font-size: 14px;
+            transition: color 0.2s;
+        }
+        .footer-col a:hover { color: var(--white); }
+        .footer-bottom {
+            border-top: 1px solid var(--border);
+            padding-top: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .footer-bottom span {
+            font-size: 13px;
+            color: var(--white-40);
+        }
+        .footer-socials {
+            display: flex;
+            gap: 16px;
+        }
+        .footer-socials a {
+            color: var(--white-40);
+            font-size: 18px;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .footer-socials a:hover { color: var(--white); }
+
+        /* ============================================
+           SECTION 9: Testimonials
+           3 quote cards, avatar, name, role, stars
+           ============================================ */
+        .testimonials {
+            padding: 120px 0;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .test-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .test-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            transition: border-color 0.3s ease;
+        }
+        .test-card:hover {
+            border-color: var(--border-hover);
+        }
+        .test-stars {
+            display: flex;
+            gap: 2px;
+            margin-bottom: 16px;
+        }
+        .test-stars i { color: var(--amber); font-size: 14px; }
+        .test-quote {
+            font-size: 15px;
+            color: var(--white-60);
+            line-height: 1.7;
+            margin-bottom: 24px;
+            font-style: italic;
+        }
+        .test-author {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .test-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--blue), #8B5CF6);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--white);
+            flex-shrink: 0;
+        }
+        .test-author-info h4 {
+            font-size: 14px;
+            font-weight: 600;
+        }
+        .test-author-info span {
+            font-size: 12px;
+            color: var(--white-40);
+        }
+
+        /* ============================================
+           SECTION 8: Use Cases — 3 Cards
+           Top accent border, icon, title, bullets
+           ============================================ */
+        .use-cases {
+            padding: 120px 0;
+        }
+        .uc-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+        .uc-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .uc-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 36px 28px;
+            position: relative;
+            overflow: hidden;
+            transition: border-color 0.3s ease, transform 0.3s ease;
+        }
+        .uc-card::before {
             content: '';
             position: absolute;
             top: 0;
             left: 0;
             right: 0;
-            height: 1px;
-            background: linear-gradient(90deg, transparent, var(--accent-blue), transparent);
-            opacity: 0;
-            transition: opacity 0.3s ease;
+            height: 3px;
         }
-
-        .feature-card-enhanced:hover::before {
-            opacity: 1;
+        .uc-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-4px);
         }
-
-        .feature-card-enhanced:hover {
-            transform: translateY(-8px) scale(1.02);
-            border-color: var(--accent-blue);
-            box-shadow: 
-                0 20px 40px rgba(66, 153, 225, 0.15),
-                0 0 0 1px rgba(66, 153, 225, 0.1);
-        }
-
-        .feature-icon {
-            width: 60px;
-            height: 60px;
-            border-radius: 16px;
+        .uc-card.uc-blue::before { background: var(--blue); }
+        .uc-card.uc-amber::before { background: var(--amber); }
+        .uc-card.uc-green::before { background: #34D399; }
+        .uc-card-icon {
+            width: 48px;
+            height: 48px;
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 1.5rem;
+            border-radius: var(--radius-md);
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+        .uc-card h3 {
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+        .uc-card p {
+            font-size: 14px;
+            color: var(--white-60);
+            line-height: 1.6;
+            margin-bottom: 16px;
+        }
+        .uc-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .uc-tag {
+            font-size: 12px;
+            font-weight: 500;
+            padding: 4px 12px;
+            border-radius: 100px;
+            border: 1px solid var(--border);
+            color: var(--white-40);
+            background: var(--surface-2);
+        }
+
+        /* ============================================
+           SECTION 7: How It Works — 4 Steps
+           Horizontal numbered steps with connecting line
+           ============================================ */
+        .how-it-works {
+            padding: 120px 0;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .hiw-header {
+            text-align: center;
+            margin-bottom: 72px;
+        }
+        .hiw-steps {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 32px;
             position: relative;
-            overflow: hidden;
+        }
+        /* Connecting line behind steps */
+        .hiw-steps::before {
+            content: '';
+            position: absolute;
+            top: 36px;
+            left: 10%;
+            right: 10%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--border), var(--blue), var(--border));
+            z-index: 0;
+        }
+        .hiw-step {
+            text-align: center;
+            position: relative;
+            z-index: 1;
+        }
+        .hiw-number {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            font-weight: 800;
+            margin: 0 auto 20px;
+            background: var(--bg);
+            border: 2px solid var(--border);
+            color: var(--white-60);
             transition: all 0.3s ease;
         }
-
-        .feature-icon-1 { background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple)); }
-        .feature-icon-2 { background: linear-gradient(135deg, var(--accent-purple), var(--accent-green)); }
-        .feature-icon-3 { background: linear-gradient(135deg, var(--accent-green), var(--accent-orange)); }
-        .feature-icon-4 { background: linear-gradient(135deg, var(--accent-orange), var(--accent-blue)); }
-        .feature-icon-5 { background: linear-gradient(135deg, var(--accent-blue), var(--accent-green)); }
-        .feature-icon-6 { background: linear-gradient(135deg, var(--accent-purple), var(--accent-orange)); }
-
-         /* Demo Video Card */
-         .demo-card {
-             background: linear-gradient(145deg, var(--dark-surface), var(--dark-surface-2));
-             border: 1px solid var(--dark-border);
-             border-radius: 24px;
-             padding: 2rem;
-             position: relative;
-             overflow: hidden;
-             transform: rotate(3deg) scale(0.9);
-             transition: all 0.4s ease;
-             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-         }
-
-         .demo-card:hover {
-             transform: rotate(0deg) scale(0.945);
-         }
-
-         /* Interactive Scene Card Demo Styles */
-         .demo-scene-card {
-             background: linear-gradient(145deg, var(--dark-surface-2), var(--dark-surface));
-             border: 1px solid var(--dark-border);
-             border-radius: 16px;
-             overflow: hidden;
-             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-             transition: all 0.3s ease;
-         }
-
-         .demo-scene-card:hover {
-             transform: translateY(-2px);
-             box-shadow: 0 12px 32px rgba(66, 153, 225, 0.2);
-             border-color: rgba(66, 153, 225, 0.3);
-         }
-
-         .scene-card-header-demo {
-             background: linear-gradient(145deg, var(--dark-surface), var(--dark-surface-2));
-             padding: 1rem;
-             border-bottom: 1px solid var(--dark-border);
-         }
-
-         .scene-number-demo {
-             font-size: 1rem;
-             font-weight: 600;
-             color: var(--dark-text);
-         }
-
-         .demo-controls .demo-play-btn {
-             width: 32px;
-             height: 32px;
-             border-radius: 50%;
-             border: 1px solid var(--accent-blue);
-             background: transparent;
-             color: var(--accent-blue);
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             transition: all 0.3s ease;
-         }
-
-         .demo-controls .demo-play-btn:hover {
-             background: var(--accent-blue);
-             color: white;
-             transform: scale(1.1);
-         }
-
-         .demo-script-section {
-             padding: 1rem;
-             border-bottom: 1px solid var(--dark-border);
-         }
-
-         .demo-script-text {
-             color: var(--dark-text-secondary);
-             font-size: 0.875rem;
-             margin-bottom: 0;
-             line-height: 1.4;
-         }
-
-         .demo-video-preview {
-             padding: 1rem;
-             border-bottom: 1px solid var(--dark-border);
-         }
-
-         .demo-video-container {
-             position: relative;
-             border-radius: 12px;
-             aspect-ratio: 16/9;
-             overflow: hidden;
-             cursor: pointer;
-             transition: all 0.3s ease;
-             background: var(--dark-surface);
-         }
-
-         .demo-video-container:hover {
-             transform: scale(1.02);
-         }
-
-         .demo-video {
-             width: 100%;
-             height: 100%;
-             object-fit: cover;
-             border-radius: 12px;
-         }
-
-         .demo-video-loading {
-             position: absolute;
-             top: 0;
-             left: 0;
-             right: 0;
-             bottom: 0;
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             background: rgba(0, 0, 0, 0.7);
-             z-index: 3;
-         }
-
-         .demo-video-controls {
-             position: absolute;
-             top: 0;
-             left: 0;
-             right: 0;
-             bottom: 0;
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             background: rgba(0, 0, 0, 0.3);
-             opacity: 0;
-             transition: opacity 0.3s ease;
-             z-index: 2;
-         }
-
-         .demo-video-controls.show-when-paused {
-             opacity: 1;
-         }
-
-         .demo-video-container:hover .demo-video-controls {
-             opacity: 1;
-         }
-
-         .demo-play-btn {
-             background: rgba(66, 153, 225, 0.9);
-             border: none;
-             border-radius: 50%;
-             width: 60px;
-             height: 60px;
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             color: white;
-             font-size: 1.5rem;
-             cursor: pointer;
-             transition: all 0.3s ease;
-             backdrop-filter: blur(10px);
-         }
-
-         .demo-play-btn:hover {
-             background: var(--accent-blue);
-             transform: scale(1.1);
-         }
-
-         .demo-play-btn:active {
-             transform: scale(0.95);
-         }
-
-         .demo-volume-btn {
-             position: absolute;
-             top: 12px;
-             right: 12px;
-             background: rgba(0, 0, 0, 0.7);
-             border: none;
-             border-radius: 50%;
-             width: 36px;
-             height: 36px;
-             display: flex;
-             align-items: center;
-             justify-content: center;
-             color: white;
-             font-size: 1rem;
-             cursor: pointer;
-             transition: all 0.3s ease;
-             backdrop-filter: blur(10px);
-             z-index: 4;
-         }
-
-         .demo-volume-btn:hover {
-             background: rgba(66, 153, 225, 0.9);
-             transform: scale(1.1);
-         }
-
-         .demo-volume-btn:active {
-             transform: scale(0.95);
-         }
-
-         /* Show controls on mobile/touch devices */
-         @media (max-width: 768px) {
-             .demo-video-controls {
-                 opacity: 1;
-                 background: rgba(0, 0, 0, 0.5);
-             }
-             
-             .demo-play-btn {
-                 width: 50px;
-                 height: 50px;
-                 font-size: 1.2rem;
-             }
-
-             .demo-volume-btn {
-                 width: 32px;
-                 height: 32px;
-                 font-size: 0.9rem;
-                 top: 8px;
-                 right: 8px;
-             }
-         }
-
-         .demo-video-info {
-             position: absolute;
-             bottom: 8px;
-             right: 8px;
-             background: rgba(0, 0, 0, 0.7);
-             color: white;
-             padding: 4px 8px;
-             border-radius: 6px;
-             font-size: 0.75rem;
-             font-weight: 500;
-         }
-
-         .demo-duration {
-             color: var(--accent-blue);
-         }
-
-         .demo-timeline-section {
-             padding: 1rem;
-         }
-
-         .demo-timeline-header {
-             display: flex;
-             align-items: center;
-             gap: 0.5rem;
-             margin-bottom: 0.75rem;
-             font-size: 0.875rem;
-             color: var(--dark-text);
-         }
-
-         .demo-timeline-text {
-             font-weight: 500;
-         }
-
-         .demo-timeline {
-             position: relative;
-             height: 40px;
-             background: var(--dark-surface);
-             border-radius: 8px;
-             overflow: hidden;
-             border: 1px solid var(--dark-border);
-         }
-
-         .demo-timeline-track {
-             width: 100%;
-             height: 100%;
-             background: linear-gradient(90deg, var(--dark-surface) 0%, var(--dark-surface-2) 100%);
-         }
-
-         .demo-progress-bar {
-             position: absolute;
-             top: 0;
-             left: 0;
-             width: 0%;
-             height: 100%;
-             background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-             border-radius: 6px;
-             transition: width 0.1s ease;
-         }
-
-         .demo-playhead {
-             position: absolute;
-             top: 0;
-             left: 0%;
-             width: 2px;
-             height: 100%;
-             background: var(--accent-green);
-             transition: left 0.1s ease;
-         }
-
-         .demo-playhead::before {
-             content: '';
-             position: absolute;
-             top: -6px;
-             left: -4px;
-             width: 10px;
-             height: 10px;
-             background: var(--accent-green);
-             border-radius: 50%;
-             border: 2px solid var(--dark-surface);
-         }
-
-         /* Dynamic Floating Badges */
-         .floating-badge {
-             animation: floatBadge 3s ease-in-out infinite;
-             cursor: pointer;
-             z-index: 10;
-         }
-
-         .floating-badge-1 {
-             animation-delay: 0s;
-         }
-
-         .floating-badge-2 {
-             animation-delay: 1.5s;
-         }
-
-         .badge-content {
-             padding: 12px 16px;
-             border-radius: 25px;
-             box-shadow: 0 8px 20px rgba(0, 0, 0, 0.3);
-             transition: all 0.3s ease;
-             position: relative;
-             overflow: hidden;
-             border: 2px solid rgba(255, 255, 255, 0.2);
-         }
-
-         .badge-content::before {
-             content: '';
-             position: absolute;
-             top: 0;
-             left: -100%;
-             width: 100%;
-             height: 100%;
-             background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
-             transition: left 0.5s;
-         }
-
-         .floating-badge:hover .badge-content {
-             transform: scale(1.1) rotate(-2deg);
-             box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
-         }
-
-         .floating-badge:hover .badge-content::before {
-             left: 100%;
-         }
-
-         .floating-badge:active .badge-content {
-             transform: scale(0.95);
-         }
-
-         @keyframes floatBadge {
-             0%, 100% { 
-                 transform: translateY(0px) rotate(0deg);
-             }
-             25% { 
-                 transform: translateY(-8px) rotate(1deg);
-             }
-             50% { 
-                 transform: translateY(-4px) rotate(-1deg);
-             }
-             75% { 
-                 transform: translateY(-6px) rotate(0.5deg);
-             }
-         }
-
-         /* Pulse effect on click */
-         @keyframes badgePulse {
-             0% { transform: scale(1); }
-             50% { transform: scale(1.2); }
-             100% { transform: scale(1); }
-         }
-
-         .floating-badge.pulse .badge-content {
-             animation: badgePulse 0.4s ease;
-         }
-
-        /* Stats Counter */
-        .stats-item {
-            text-align: center;
-            padding: 1.5rem;
+        .hiw-step:hover .hiw-number {
+            border-color: var(--blue);
+            color: var(--blue);
+            box-shadow: 0 0 30px var(--blue-glow);
         }
-
-        .stats-number {
-            font-size: 2.5rem;
+        .hiw-step h3 {
+            font-size: 16px;
             font-weight: 700;
-            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            margin-bottom: 8px;
+        }
+        .hiw-step p {
+            font-size: 14px;
+            color: var(--white-40);
+            line-height: 1.6;
+            max-width: 220px;
+            margin: 0 auto;
         }
 
-        /* Animations */
-        .fade-in-up {
-            opacity: 0;
-            transform: translateY(30px);
-            animation: fadeInUp 0.8s ease forwards;
-        }
-
-        .fade-in-left {
-            opacity: 0;
-            transform: translateX(-30px);
-            animation: fadeInLeft 0.8s ease forwards;
-        }
-
-        .fade-in-right {
-            opacity: 0;
-            transform: translateX(30px);
-            animation: fadeInRight 0.8s ease forwards;
-        }
-
-        @keyframes fadeInUp {
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-
-        @keyframes fadeInLeft {
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        @keyframes fadeInRight {
-            to {
-                opacity: 1;
-                transform: translateX(0);
-            }
-        }
-
-        /* Stagger animation delays */
-        .fade-in-up:nth-child(1) { animation-delay: 0.1s; }
-        .fade-in-up:nth-child(2) { animation-delay: 0.2s; }
-        .fade-in-up:nth-child(3) { animation-delay: 0.3s; }
-        .fade-in-up:nth-child(4) { animation-delay: 0.4s; }
-        .fade-in-up:nth-child(5) { animation-delay: 0.5s; }
-        .fade-in-up:nth-child(6) { animation-delay: 0.6s; }
-
-        /* Section Spacing */
-        section {
+        /* ============================================
+           SECTION 6: Product Showcase
+           Large centered mockup with floating cards
+           ============================================ */
+        .showcase {
+            padding: 120px 0;
             position: relative;
+            overflow: hidden;
+        }
+        .showcase-header {
+            text-align: center;
+            margin-bottom: 64px;
+        }
+        .showcase-frame {
+            position: relative;
+            max-width: 960px;
+            margin: 0 auto;
+        }
+        .showcase-screen {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            box-shadow: 0 60px 120px rgba(0,0,0,0.4), 0 0 80px var(--blue-glow);
+        }
+        .showcase-screen-bar {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 20px;
+            background: var(--surface-2);
+            border-bottom: 1px solid var(--border);
+        }
+        .showcase-screen-body {
+            padding: 40px;
+            min-height: 360px;
+            position: relative;
+        }
+        /* Pipeline visualization inside showcase */
+        .pipeline-visual {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+        .pipeline-step {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            text-align: center;
+        }
+        .pipeline-icon {
+            width: 64px;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-md);
+            font-size: 28px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            transition: all 0.3s ease;
+        }
+        .pipeline-icon.active {
+            border-color: var(--blue);
+            box-shadow: 0 0 20px var(--blue-glow);
+        }
+        .pipeline-step span {
+            font-size: 12px;
+            color: var(--white-40);
+            font-weight: 500;
+        }
+        .pipeline-arrow {
+            color: var(--white-40);
+            font-size: 20px;
+        }
+        /* Floating annotations */
+        .showcase-float {
+            position: absolute;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 14px 18px;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--white-60);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.3);
+            white-space: nowrap;
             z-index: 2;
         }
+        .showcase-float i { color: var(--blue); font-size: 18px; }
+        .sf-top-right { top: -20px; right: -40px; }
+        .sf-bottom-left { bottom: -20px; left: -40px; }
+        .sf-bottom-right { bottom: 40px; right: -60px; }
 
-        /* Responsive */
+        /* ============================================
+           SECTION 5: Feature Grid
+           3x2 frosted glass cards, icon+title+desc
+           ============================================ */
+        .features {
+            padding: 120px 0;
+            background: var(--surface);
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+        }
+        .section-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--blue);
+            margin-bottom: 16px;
+        }
+        .section-heading {
+            font-size: clamp(28px, 4vw, 40px);
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            line-height: 1.15;
+            margin-bottom: 16px;
+        }
+        .section-sub {
+            font-size: 16px;
+            color: var(--white-60);
+            max-width: 560px;
+            line-height: 1.7;
+            margin-bottom: 56px;
+        }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        .feature-card {
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            padding: 32px;
+            transition: border-color 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .feature-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-4px);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+        }
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: var(--radius-md);
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+        .fi-blue {
+            background: rgba(37,99,235,0.12);
+            color: var(--blue);
+        }
+        .fi-amber {
+            background: var(--amber-glow);
+            color: var(--amber);
+        }
+        .fi-green {
+            background: rgba(52,211,153,0.12);
+            color: #34D399;
+        }
+        .feature-card h3 {
+            font-size: 17px;
+            font-weight: 700;
+            margin-bottom: 8px;
+            letter-spacing: -0.01em;
+        }
+        .feature-card p {
+            font-size: 14px;
+            color: var(--white-60);
+            line-height: 1.6;
+        }
+
+        /* ============================================
+           SECTION 4: Problem / Solution
+           Two-column, pain vs. gain
+           ============================================ */
+        .problem-solution {
+            padding: 120px 0;
+        }
+        .ps-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 64px;
+            align-items: start;
+        }
+        .ps-column-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 24px;
+            padding: 6px 14px;
+            border-radius: 100px;
+        }
+        .ps-label-problem {
+            color: #F87171;
+            background: rgba(248,113,113,0.1);
+            border: 1px solid rgba(248,113,113,0.2);
+        }
+        .ps-label-solution {
+            color: #34D399;
+            background: rgba(52,211,153,0.1);
+            border: 1px solid rgba(52,211,153,0.2);
+        }
+        .ps-heading {
+            font-size: 32px;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            line-height: 1.2;
+            margin-bottom: 24px;
+        }
+        .ps-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .ps-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            font-size: 15px;
+            color: var(--white-60);
+            line-height: 1.6;
+        }
+        .ps-list li i {
+            font-size: 18px;
+            margin-top: 2px;
+            flex-shrink: 0;
+        }
+        .ps-list-problem li i { color: #F87171; }
+        .ps-list-solution li i { color: #34D399; }
+
+        /* ============================================
+           SECTION 3: Social Proof Metrics Strip
+           80px, border-top/bottom, 4 metrics
+           ============================================ */
+        .social-proof {
+            border-top: 1px solid var(--border);
+            border-bottom: 1px solid var(--border);
+            background: var(--surface);
+            padding: 24px 0;
+        }
+        .social-proof-inner {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 64px;
+            flex-wrap: wrap;
+        }
+        .proof-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .proof-number {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.02em;
+            color: var(--white);
+        }
+        .proof-number .accent { color: var(--blue); }
+        .proof-label {
+            font-size: 13px;
+            color: var(--white-40);
+            font-weight: 500;
+            line-height: 1.3;
+        }
+        .proof-divider {
+            width: 1px;
+            height: 32px;
+            background: var(--border);
+        }
+
+        /* ============================================
+           Responsive
+           ============================================ */
         @media (max-width: 768px) {
-            .demo-card {
-                transform: rotate(0deg);
-            }
-            
-            .hero-enhanced h1 {
-                font-size: 2.5rem;
-            }
-            
-
-            .hero-video-background {
-                /* On mobile, ensure video covers properly */
-                object-position: center;
-            }
-
-            .hero-video-overlay {
-                /* Stronger overlay on mobile for better text readability */
-                background: linear-gradient(135deg, 
-                    rgba(10, 14, 22, 0.9) 0%, 
-                    rgba(21, 27, 38, 0.85) 50%, 
-                    rgba(10, 14, 22, 0.9) 100%);
-            }
+            .nav-bar { padding: 0 20px; }
+            .nav-links { display: none; }
+            .hero { padding: 72px 16px 60px; }
+            .hero-actions { flex-direction: column; }
+            .browser-frame { max-width: 100%; }
+            .social-proof-inner { gap: 32px; }
+            .proof-divider { display: none; }
+            .ps-grid { grid-template-columns: 1fr; gap: 48px; }
+            .feature-grid { grid-template-columns: 1fr; }
+            .showcase-float { display: none; }
+            .pipeline-arrow { display: none; }
+            .pipeline-visual { gap: 16px; }
+            .hiw-steps { grid-template-columns: repeat(2, 1fr); }
+            .hiw-steps::before { display: none; }
+            .uc-grid { grid-template-columns: 1fr; }
+            .test-grid { grid-template-columns: 1fr; }
+            .cta-actions { flex-direction: column; }
+            .footer-grid { grid-template-columns: 1fr 1fr; }
         }
     </style>
 </head>
 <body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark glass-nav fixed-top">
-        <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="{{ route('home') }}">
-                <i class="bi bi-camera-video-fill text-primary me-2" style="font-size: 1.5rem;"></i>
-                <span class="fw-bold fs-4">VidsAI</span>
-            </a>
-            
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
-                    <li class="nav-item">
-                        <a class="nav-link active" href="{{ route('home') }}">Home</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="{{ route('pricing') }}">Pricing</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="#features">Features</a>
-                    </li>
-                </ul>
-                
-                <ul class="navbar-nav">
-                    @guest
-                        <li class="nav-item">
-                            <a class="nav-link" href="{{ route('login') }}">Login</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="btn btn-primary-enhanced ms-2" href="{{ route('register') }}">Sign Up</a>
-                        </li>
-                    @else
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" data-bs-toggle="dropdown">
-                                <div class="bg-primary rounded-circle me-2 d-flex align-items-center justify-content-center" style="width: 32px; height: 32px;">
-                                    <span class="text-white fw-bold">{{ substr(Auth::user()->name, 0, 1) }}</span>
-                                </div>
-                                {{ Auth::user()->name }}
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-dark">
-                                <li><a class="dropdown-item" href="{{ route('dashboard') }}">Dashboard</a></li>
-                                <li><a class="dropdown-item" href="{{ route('projects.create') }}">Create Project</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li>
-                                    <form method="POST" action="{{ route('logout') }}" class="d-inline">
-                                        @csrf
-                                        <button type="submit" class="dropdown-item">Logout</button>
-                                    </form>
-                                </li>
-                            </ul>
-                        </li>
-                    @endguest
-                </ul>
-            </div>
+
+    <!-- SECTION 1: Navigation -->
+    <nav class="nav-bar" id="navbar">
+        <a href="{{ route('home') }}" class="nav-logo">
+            <div class="nav-logo-icon">V</div>
+            <span class="nav-logo-text">VidsAI</span>
+        </a>
+
+        <ul class="nav-links">
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">How It Works</a></li>
+            <li><a href="#use-cases">Use Cases</a></li>
+            <li><a href="{{ route('pricing') }}">Pricing</a></li>
+        </ul>
+
+        <div class="nav-actions">
+            @auth
+                <a href="{{ route('dashboard') }}" class="btn-primary">Dashboard</a>
+            @else
+                <a href="{{ route('login') }}" class="btn-ghost">Log In</a>
+                <a href="{{ route('register') }}" class="btn-primary">Get Started</a>
+            @endauth
         </div>
     </nav>
 
-    <!-- Hero Section -->
-    <section class="hero-enhanced min-vh-100 d-flex align-items-center">
-        <!-- Video Background -->
-        <video class="hero-video-background" autoplay muted loop playsinline>
-            <source src="{{ asset('storage/videos/This_is_a_202509261539.mp4') }}" type="video/mp4">
-            <!-- Fallback for browsers that don't support video -->
-        </video>
-        
-        <!-- Video Overlay -->
-        <div class="hero-video-overlay"></div>
-        
-        <div class="container hero-content">
-            <div class="row align-items-center">
-                <div class="col-lg-6 fade-in-left">
-                    <div class="mb-4">
-                        <span class="badge bg-primary bg-opacity-20 text-primary px-4 py-2 rounded-pill">
-                            <i class="bi bi-lightning-fill me-2"></i>AI-Powered Video Creation
-                        </span>
-                    </div>
-                    
-                    <h1 class="display-3 fw-bold mb-4">
-                        Create Stunning Video Ads 
-                        <span class="gradient-text-enhanced">in Minutes</span>
-                    </h1>
-                    
-                    <p class="lead mb-5" style="color: var(--dark-text-secondary); font-size: 1.25rem;">
-                        Transform your ideas into professional video advertisements with AI. 
-                        Save your generation settings once and create high-quality videos in minutes with your preferred parameters—no editing experience required.
-                    </p>
-                    
-                    <div class="d-flex flex-column flex-sm-row gap-4 mb-5">
-                        @auth
-                            <a href="{{ route('projects.create') }}" class="btn btn-primary-enhanced btn-lg">
-                                <i class="bi bi-play-circle me-2"></i>Start Creating Now
-                            </a>
-                        @else
-                            <a href="{{ route('register') }}" class="btn btn-primary-enhanced btn-lg">
-                                <i class="bi bi-play-circle me-2"></i>Start Creating Now
-                            </a>
-                        @endauth
-                        <a href="{{ route('pricing') }}" class="btn btn-outline-enhanced btn-lg">
-                            View Pricing <i class="bi bi-arrow-right ms-2"></i>
-                        </a>
-                    </div>
-                    
-                    <!-- Trust Signals -->
-                    <div class="d-flex align-items-center gap-4 mb-5" style="color: var(--dark-text-secondary);">
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-check-circle-fill text-success me-2"></i>
-                            <small>No credit card required</small>
-                        </div>
-                        <div class="d-flex align-items-center">
-                            <i class="bi bi-check-circle-fill text-success me-2"></i>
-                            <small>Free trial included</small>
-                        </div>
-                    </div>
-                    
-                    <!-- Stats -->
-                    <div class="row text-center">
-                        <div class="col-4">
-                            <div class="stats-item">
-                                <div class="stats-number" data-count="10000">0</div>
-                                <small style="color: var(--dark-text-secondary);">Videos Created</small>
-                            </div>
-                        </div>
-                        <div class="col-4">
-                            <div class="stats-item">
-                                <div class="stats-number" data-count="1247">0</div>
-                                <small style="color: var(--dark-text-secondary);">Active Users</small>
-                            </div>
-                        </div>
-                        <div class="col-4">
-                            <div class="stats-item">
-                                <div class="stats-number">4.9</div>
-                                <small style="color: var(--dark-text-secondary);">Rating</small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="col-lg-6 text-center fade-in-right">
-                    <div class="position-relative">
-                        <div class="demo-card">
-                             <div class="d-flex justify-content-between align-items-center mb-3">
-                                 <div class="d-flex align-items-center">
-                                     <div class="bg-success rounded-circle me-2" style="width: 8px; height: 8px;"></div>
-                                     <small style="color: var(--dark-text-secondary);">Live Demo</small>
-                                 </div>
-                             </div>
-                            
-                             <!-- Interactive Scene Card Demo -->
-                             <div class="demo-scene-card mb-3">
-                                 <div class="demo-script-section">
-                                     <p class="demo-script-text mb-0">
-                                         <span class="fw-bold" style="font-size: 0.9rem;">Script:</span>
-                                         Create stunning video ads with AI technology in just minutes
-                                     </p>
-                                 </div>
-
-                                 <!-- Mini Video Preview -->
-                                 <div class="demo-video-preview">
-                                    <div class="demo-video-container">
-                                        <video class="demo-video" id="demoVideo" preload="auto">
-                                            <source src="https://0x0.st/KBsY.mp4" type="video/mp4">
-                                            Your browser does not support the video tag.
-                                        </video>
-                                        <div class="demo-video-loading" id="demoVideoLoading">
-                                            <div class="spinner-border text-primary" role="status">
-                                                <span class="visually-hidden">Loading...</span>
-                                         </div>
-                                        </div>
-                                        <button class="demo-volume-btn" id="demoVolumeBtn">
-                                            <i class="bi bi-volume-up-fill" id="demoVolumeIcon"></i>
-                                        </button>
-                                        <div class="demo-video-controls show-when-paused" id="demoVideoControls">
-                                            <button class="demo-play-btn" id="demoPlayBtn">
-                                                <i class="bi bi-play-fill" id="demoPlayIcon"></i>
-                                            </button>
-                                         <div class="demo-video-info">
-                                                <span class="demo-duration" id="demoDuration">0:00</span>
-                                            </div>
-                                         </div>
-                                     </div>
-                                 </div>
-
-                                 <!-- Timeline Demo -->
-                                 <div class="demo-timeline-section">
-                                     <div class="demo-timeline-header">
-                                         <i class="bi bi-scissors text-primary"></i>
-                                        <span class="demo-timeline-text">Video Progress: <span class="text-primary" id="demoProgress">0:00</span> / <span class="text-primary" id="demoTotalDuration">0:00</span></span>
-                                     </div>
-                                    <div class="demo-timeline" id="demoTimeline">
-                                         <div class="demo-timeline-track"></div>
-                                        <div class="demo-progress-bar" id="demoProgressBar"></div>
-                                        <div class="demo-playhead" id="demoPlayhead"></div>
-                                     </div>
-                                 </div>
-                             </div>
-                        </div>
-                        
-                         <!-- Dynamic Floating badges -->
-                         <div class="floating-badge floating-badge-1 position-absolute" style="top: 10%; right: -5%;">
-                             <div class="badge-content" style="background: linear-gradient(135deg, var(--accent-orange), var(--accent-purple)); color: white;">
-                                 <i class="bi bi-lightning-fill me-1"></i>
-                                 <small class="fw-bold">300% Faster</small>
-                             </div>
-                         </div>
-                         
-                         <div class="floating-badge floating-badge-2 position-absolute" style="bottom: 0%; left: -5%;">
-                             <div class="badge-content" style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue)); color: white;">
-                                 <i class="bi bi-star-fill me-1"></i>
-                                 <small class="fw-bold">No Skills Required</small>
-                             </div>
-                         </div>
-                    </div>
-                </div>
+    <!-- SECTION 2: Hero -->
+    <section class="hero">
+        <div class="hero-content">
+            <div class="hero-badge">
+                <span class="hero-badge-dot"></span>
+                Now with AI-powered scene generation
             </div>
-        </div>
-    </section>
 
-    <!-- Features Section -->
-    <section id="features" class="py-5" style="position: relative; z-index: 2; background: var(--dark-bg);">
-        <div class="container">
-            <div class="text-center mb-5 fade-in-up">
-                <div class="mb-4">
-                    <span class="badge bg-primary bg-opacity-20 text-primary px-4 py-2 rounded-pill">
-                        <i class="bi bi-stars me-2"></i>Powerful Features
-                    </span>
-                </div>
-                <h2 class="display-4 fw-bold mb-4">Everything You Need</h2>
-                <p class="lead" style="color: var(--dark-text-secondary);">Professional video creation tools powered by artificial intelligence</p>
-            </div>
-            
-            <div class="row g-4">
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon feature-icon-1">
-                            <i class="bi bi-robot text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">AI Scene Generation</h4>
-                        <p style="color: var(--dark-text-secondary);">Automatically creates video scenes from your text scripts using advanced AI technology.</p>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon feature-icon-2">
-                            <i class="bi bi-translate text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">Multi-Language Support</h4>
-                        <p style="color: var(--dark-text-secondary);">Supports English, Arabic, and various Arabic dialects with precise audio-text alignment.</p>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon feature-icon-3">
-                            <i class="bi bi-camera-video text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">Multiple Formats</h4>
-                        <p style="color: var(--dark-text-secondary);">Generate videos in 16:9, 1:1, 9:16 formats or all formats at once.</p>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon feature-icon-4">
-                            <i class="bi bi-fonts text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">Professional Subtitles</h4>
-                        <p style="color: var(--dark-text-secondary);">6 professional subtitle styles with automatic timing and customization options.</p>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon feature-icon-5">
-                            <i class="bi bi-music-note-beamed text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">Background Music</h4>
-                        <p style="color: var(--dark-text-secondary);">Professional music library with category filtering and preview functionality.</p>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon feature-icon-6">
-                            <i class="bi bi-scissors text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">Precise Trimming</h4>
-                        <p style="color: var(--dark-text-secondary);">Timeline-based video editing with exact start and end time controls.</p>
-                    </div>
-                </div>
-                
-                <div class="col-md-6 col-lg-4 fade-in-up">
-                    <div class="feature-card-enhanced h-100">
-                        <div class="feature-icon" style="background: linear-gradient(135deg, var(--accent-green), var(--accent-blue));">
-                            <i class="bi bi-bookmark-heart text-white" style="font-size: 1.5rem;"></i>
-                        </div>
-                        <h4 class="fw-bold mb-3">Saved Generation Settings</h4>
-                        <p style="color: var(--dark-text-secondary);">Save your preferred video generation parameters and create high-quality videos instantly with consistent settings across all projects.</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+            <h1>Create Stunning<br>Video Ads <span class="text-blue">in Minutes</span></h1>
 
-    <!-- CTA Section -->
-    <section class="py-5" style="background: linear-gradient(135deg, var(--dark-surface), var(--dark-surface-2)); margin-top: 2rem; position: relative; z-index: 2;">
-        <div class="container text-center">
-            <div class="fade-in-up">
-                <div class="mb-4">
-                    <span class="badge bg-primary bg-opacity-20 text-primary px-4 py-2 rounded-pill">
-                        <i class="bi bi-rocket-takeoff me-2"></i>Get Started Today
-                    </span>
-                </div>
-                <h2 class="display-4 fw-bold mb-4">Ready to Create Amazing Videos?</h2>
-                <p class="lead mb-5" style="color: var(--dark-text-secondary);">Join thousands of creators who are already using VidsAI to produce stunning content</p>
-                
+            <p class="hero-sub">
+                AI-generated scripts, voiceovers, and scenes — assembled into
+                professional video advertisements ready for every platform.
+            </p>
+
+            <div class="hero-actions">
                 @auth
-                    <a href="{{ route('projects.create') }}" class="btn btn-primary-enhanced btn-lg me-3">
-                        <i class="bi bi-play-circle me-2"></i>Start Creating Now
+                    <a href="{{ route('projects.create') }}" class="btn-primary btn-primary-lg">
+                        Start Creating
                     </a>
                 @else
-                    <a href="{{ route('register') }}" class="btn btn-primary-enhanced btn-lg me-3">
-                        <i class="bi bi-play-circle me-2"></i>Get Started Free
+                    <a href="{{ route('register') }}" class="btn-primary btn-primary-lg">
+                        Start Creating — Free
                     </a>
                 @endauth
-                <a href="{{ route('pricing') }}" class="btn btn-outline-enhanced btn-lg">
-                    View Pricing
+                <a href="#how-it-works" class="btn-outline-lg">
+                    <i class="bi bi-play-circle"></i>
+                    See How It Works
                 </a>
+            </div>
+
+            <div class="hero-visual">
+                <div class="browser-frame">
+                    <div class="browser-frame-bar">
+                        <span class="browser-dot"></span>
+                        <span class="browser-dot"></span>
+                        <span class="browser-dot"></span>
+                    </div>
+                    <div class="browser-frame-body">
+                        <div class="browser-frame-placeholder">
+                            <i class="bi bi-film"></i>
+                            <span>AI Video Generation Pipeline</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </section>
 
-    <!-- Footer -->
-    <footer class="py-5 border-top border-secondary">
+    <!-- SECTION 3: Social Proof Metrics Strip -->
+    <section class="social-proof">
         <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <h5 class="fw-bold mb-3">VidsAI</h5>
-                    <p style="color: var(--dark-text-secondary);">Create amazing AI-generated video ads in minutes.</p>
+            <div class="social-proof-inner">
+                <div class="proof-item">
+                    <span class="proof-number">10<span class="accent">K+</span></span>
+                    <span class="proof-label">Videos<br>Generated</span>
                 </div>
-                <div class="col-md-6 text-md-end">
-                    <div class="d-flex justify-content-md-end gap-3 mb-3">
-                        <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Privacy Policy</a>
-                        <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Terms of Service</a>
-                        <a href="#" style="color: var(--dark-text-secondary); text-decoration: none;">Contact</a>
+                <div class="proof-divider"></div>
+                <div class="proof-item">
+                    <span class="proof-number">2<span class="accent">K+</span></span>
+                    <span class="proof-label">Active<br>Creators</span>
+                </div>
+                <div class="proof-divider"></div>
+                <div class="proof-item">
+                    <span class="proof-number">50<span class="accent">+</span></span>
+                    <span class="proof-label">Languages<br>Supported</span>
+                </div>
+                <div class="proof-divider"></div>
+                <div class="proof-item">
+                    <span class="proof-number">4.9<span class="accent">★</span></span>
+                    <span class="proof-label">Average<br>Rating</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 4: Problem / Solution -->
+    <section class="problem-solution">
+        <div class="container">
+            <div class="ps-grid">
+                <!-- Problem Column -->
+                <div>
+                    <div class="ps-label-problem ps-column-label">
+                        <i class="bi bi-x-circle-fill"></i> The Old Way
                     </div>
-                    <p style="color: var(--dark-text-secondary);" class="mb-0">&copy; {{ date('Y') }} VidsAI. All rights reserved.</p>
+                    <h2 class="ps-heading">Video production is slow, expensive, and complex</h2>
+                    <ul class="ps-list ps-list-problem">
+                        <li>
+                            <i class="bi bi-x-lg"></i>
+                            Hiring videographers, editors, and voiceover artists costs thousands per video
+                        </li>
+                        <li>
+                            <i class="bi bi-x-lg"></i>
+                            Weeks of back-and-forth revisions before a single ad goes live
+                        </li>
+                        <li>
+                            <i class="bi bi-x-lg"></i>
+                            Managing multiple tools for script, audio, subtitles, and editing
+                        </li>
+                        <li>
+                            <i class="bi bi-x-lg"></i>
+                            Scaling content across languages and platforms is nearly impossible
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- Solution Column -->
+                <div>
+                    <div class="ps-label-solution ps-column-label">
+                        <i class="bi bi-check-circle-fill"></i> The VidsAI Way
+                    </div>
+                    <h2 class="ps-heading">One prompt. Professional video. Every platform.</h2>
+                    <ul class="ps-list ps-list-solution">
+                        <li>
+                            <i class="bi bi-check-lg"></i>
+                            AI generates scripts, voiceovers, and scenes — all from a single brief
+                        </li>
+                        <li>
+                            <i class="bi bi-check-lg"></i>
+                            Go from idea to finished video ad in under 10 minutes
+                        </li>
+                        <li>
+                            <i class="bi bi-check-lg"></i>
+                            One integrated pipeline: script → voice → scenes → subtitles → export
+                        </li>
+                        <li>
+                            <i class="bi bi-check-lg"></i>
+                            50+ languages with dialect-aware voiceover and subtitle alignment
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 5: Feature Grid -->
+    <section class="features" id="features">
+        <div class="container">
+            <div class="section-label">
+                <i class="bi bi-grid-3x3-gap-fill"></i> Core Features
+            </div>
+            <h2 class="section-heading">Everything you need<br>to create video ads</h2>
+            <p class="section-sub">
+                A complete AI pipeline that handles every step — from the first word of your script to the final rendered export.
+            </p>
+
+            <div class="feature-grid">
+                <div class="feature-card">
+                    <div class="feature-icon fi-blue"><i class="bi bi-pencil-square"></i></div>
+                    <h3>AI Script Generation</h3>
+                    <p>Gemini-powered scripts tailored to your product, audience, and platform with keyword optimization built in.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon fi-amber"><i class="bi bi-mic-fill"></i></div>
+                    <h3>Natural Voiceovers</h3>
+                    <p>ElevenLabs & Google TTS voices in 50+ languages — including Arabic dialect-aware synthesis.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon fi-green"><i class="bi bi-images"></i></div>
+                    <h3>Smart Scene Builder</h3>
+                    <p>AI analyzes your script to generate scene-by-scene visuals via Pexels, Pixabay, or custom uploads.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon fi-blue"><i class="bi bi-badge-cc-fill"></i></div>
+                    <h3>Auto Subtitles</h3>
+                    <p>Deepgram-powered word-level timing with multiple styles — pop-up, karaoke, highlight, and more.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon fi-amber"><i class="bi bi-music-note-beamed"></i></div>
+                    <h3>Background Music</h3>
+                    <p>Curated music library with intelligent volume ducking to match voiceover energy and pacing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon fi-green"><i class="bi bi-download"></i></div>
+                    <h3>One-Click Export</h3>
+                    <p>Render in 1080p with FFmpeg — optimized for YouTube, TikTok, Instagram Reels, and Facebook Ads.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 6: Product Showcase -->
+    <section class="showcase">
+        <div class="container">
+            <div class="showcase-header">
+                <div class="section-label">
+                    <i class="bi bi-rocket-takeoff-fill"></i> The Pipeline
+                </div>
+                <h2 class="section-heading">See the full AI workflow</h2>
+                <p class="section-sub" style="margin: 0 auto 0;">
+                    From a single product brief to a ready-to-publish video — every step handled automatically.
+                </p>
+            </div>
+
+            <div class="showcase-frame">
+                <!-- Floating annotations -->
+                <div class="showcase-float sf-top-right">
+                    <i class="bi bi-lightning-charge-fill"></i> ~3 min generation
+                </div>
+                <div class="showcase-float sf-bottom-left">
+                    <i class="bi bi-translate"></i> 50+ languages
+                </div>
+                <div class="showcase-float sf-bottom-right">
+                    <i class="bi bi-film"></i> 1080p export
+                </div>
+
+                <div class="showcase-screen">
+                    <div class="showcase-screen-bar">
+                        <span class="browser-dot"></span>
+                        <span class="browser-dot"></span>
+                        <span class="browser-dot"></span>
+                    </div>
+                    <div class="showcase-screen-body">
+                        <div class="pipeline-visual">
+                            <div class="pipeline-step">
+                                <div class="pipeline-icon active"><i class="bi bi-chat-text-fill"></i></div>
+                                <span>Brief</span>
+                            </div>
+                            <div class="pipeline-arrow">→</div>
+                            <div class="pipeline-step">
+                                <div class="pipeline-icon"><i class="bi bi-pencil-fill"></i></div>
+                                <span>Script</span>
+                            </div>
+                            <div class="pipeline-arrow">→</div>
+                            <div class="pipeline-step">
+                                <div class="pipeline-icon"><i class="bi bi-mic-fill"></i></div>
+                                <span>Voiceover</span>
+                            </div>
+                            <div class="pipeline-arrow">→</div>
+                            <div class="pipeline-step">
+                                <div class="pipeline-icon"><i class="bi bi-images"></i></div>
+                                <span>Scenes</span>
+                            </div>
+                            <div class="pipeline-arrow">→</div>
+                            <div class="pipeline-step">
+                                <div class="pipeline-icon"><i class="bi bi-badge-cc-fill"></i></div>
+                                <span>Subtitles</span>
+                            </div>
+                            <div class="pipeline-arrow">→</div>
+                            <div class="pipeline-step">
+                                <div class="pipeline-icon active"><i class="bi bi-play-btn-fill"></i></div>
+                                <span>Video</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 7: How It Works -->
+    <section class="how-it-works" id="how-it-works">
+        <div class="container">
+            <div class="hiw-header">
+                <div class="section-label">
+                    <i class="bi bi-signpost-split-fill"></i> How It Works
+                </div>
+                <h2 class="section-heading">Four steps to your first video</h2>
+                <p class="section-sub" style="margin: 0 auto;">
+                    No editing skills required. Just describe what you want and let VidsAI handle the rest.
+                </p>
+            </div>
+
+            <div class="hiw-steps">
+                <div class="hiw-step">
+                    <div class="hiw-number">1</div>
+                    <h3>Describe Your Ad</h3>
+                    <p>Enter your product name, target audience, platform, and preferred tone or language.</p>
+                </div>
+                <div class="hiw-step">
+                    <div class="hiw-number">2</div>
+                    <h3>AI Generates Content</h3>
+                    <p>Our AI writes the script, generates voiceover, and selects matching scenes automatically.</p>
+                </div>
+                <div class="hiw-step">
+                    <div class="hiw-number">3</div>
+                    <h3>Review &amp; Customize</h3>
+                    <p>Preview every scene, swap visuals, adjust subtitles, trim clips, and add overlays or music.</p>
+                </div>
+                <div class="hiw-step">
+                    <div class="hiw-number">4</div>
+                    <h3>Export &amp; Publish</h3>
+                    <p>Render in 1080p and download — ready for YouTube, TikTok, Instagram, or Facebook Ads.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 8: Use Cases -->
+    <section class="use-cases" id="use-cases">
+        <div class="container">
+            <div class="uc-header">
+                <div class="section-label">
+                    <i class="bi bi-bullseye"></i> Use Cases
+                </div>
+                <h2 class="section-heading">Built for every content format</h2>
+                <p class="section-sub" style="margin: 0 auto;">
+                    Whether you're running paid ads, growing social channels, or selling products — VidsAI adapts.
+                </p>
+            </div>
+
+            <div class="uc-grid">
+                <div class="uc-card uc-blue">
+                    <div class="uc-card-icon fi-blue"><i class="bi bi-youtube"></i></div>
+                    <h3>YouTube & Facebook Ads</h3>
+                    <p>Generate high-converting video ads with AI scripts optimized for attention hooks and CTAs.</p>
+                    <div class="uc-tags">
+                        <span class="uc-tag">Pre-roll</span>
+                        <span class="uc-tag">In-feed</span>
+                        <span class="uc-tag">Discovery</span>
+                    </div>
+                </div>
+
+                <div class="uc-card uc-amber">
+                    <div class="uc-card-icon fi-amber"><i class="bi bi-phone"></i></div>
+                    <h3>Social Media Reels</h3>
+                    <p>Vertical-first content for TikTok, Instagram Reels, and YouTube Shorts with trending formats.</p>
+                    <div class="uc-tags">
+                        <span class="uc-tag">TikTok</span>
+                        <span class="uc-tag">Reels</span>
+                        <span class="uc-tag">Shorts</span>
+                    </div>
+                </div>
+
+                <div class="uc-card uc-green">
+                    <div class="uc-card-icon fi-green"><i class="bi bi-shop"></i></div>
+                    <h3>E-Commerce Product Videos</h3>
+                    <p>Showcase products with dynamic scenes, voiceover descriptions, and auto-generated subtitles.</p>
+                    <div class="uc-tags">
+                        <span class="uc-tag">Shopify</span>
+                        <span class="uc-tag">Amazon</span>
+                        <span class="uc-tag">Landing pages</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 9: Testimonials -->
+    <section class="testimonials">
+        <div class="container">
+            <div class="test-header">
+                <div class="section-label">
+                    <i class="bi bi-chat-quote-fill"></i> Testimonials
+                </div>
+                <h2 class="section-heading">Loved by creators worldwide</h2>
+                <p class="section-sub" style="margin: 0 auto;">
+                    See what content creators and marketers are saying about VidsAI.
+                </p>
+            </div>
+
+            <div class="test-grid">
+                <div class="test-card">
+                    <div class="test-stars">
+                        <i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i>
+                    </div>
+                    <p class="test-quote">"I used to spend $2K per video ad. VidsAI does it in minutes for a fraction of the cost. The Arabic voiceover quality is incredible."</p>
+                    <div class="test-author">
+                        <div class="test-avatar">A</div>
+                        <div class="test-author-info">
+                            <h4>Ahmed K.</h4>
+                            <span>E-Commerce Founder</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="test-card">
+                    <div class="test-stars">
+                        <i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i>
+                    </div>
+                    <p class="test-quote">"The AI-generated scripts are surprisingly good. I just tweak a few lines and export — the whole workflow feels like magic."</p>
+                    <div class="test-author">
+                        <div class="test-avatar">S</div>
+                        <div class="test-author-info">
+                            <h4>Sarah M.</h4>
+                            <span>Social Media Manager</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="test-card">
+                    <div class="test-stars">
+                        <i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i><i class="bi bi-star-fill"></i>
+                    </div>
+                    <p class="test-quote">"We scaled our YouTube ad output from 2 videos/month to 20. The subtitle alignment and scene matching are top-tier."</p>
+                    <div class="test-author">
+                        <div class="test-avatar">R</div>
+                        <div class="test-author-info">
+                            <h4>Ryan L.</h4>
+                            <span>Performance Marketer</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- SECTION 10: CTA + Footer -->
+    <section class="cta-section">
+        <div class="container">
+            <div class="cta-box">
+                <h2>Ready to create your<br>first video ad?</h2>
+                <p>Join thousands of creators using AI to produce professional video advertisements in minutes, not weeks.</p>
+                <div class="cta-actions">
+                    @auth
+                        <a href="{{ route('projects.create') }}" class="btn-primary btn-primary-lg">
+                            Create Your First Video
+                        </a>
+                    @else
+                        <a href="{{ route('register') }}" class="btn-primary btn-primary-lg">
+                            Get Started — It's Free
+                        </a>
+                    @endauth
+                    <a href="{{ route('pricing') }}" class="btn-outline-lg">View Pricing</a>
+                </div>
+                <p class="cta-note">No credit card required &bull; Free tier available</p>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <a href="{{ route('home') }}" class="nav-logo" style="margin-bottom: 0;">
+                        <div class="nav-logo-icon">V</div>
+                        <span class="nav-logo-text">VidsAI</span>
+                    </a>
+                    <p>AI-powered video advertisement generator. From script to screen in minutes.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>Product</h4>
+                    <ul>
+                        <li><a href="#features">Features</a></li>
+                        <li><a href="#how-it-works">How It Works</a></li>
+                        <li><a href="#use-cases">Use Cases</a></li>
+                        <li><a href="{{ route('pricing') }}">Pricing</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">API Reference</a></li>
+                        <li><a href="#">Changelog</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Contact</a></li>
+                        <li><a href="#">Privacy</a></li>
+                        <li><a href="#">Terms</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>&copy; {{ date('Y') }} VidsAI. All rights reserved.</span>
+                <div class="footer-socials">
+                    <a href="#"><i class="bi bi-twitter-x"></i></a>
+                    <a href="#"><i class="bi bi-github"></i></a>
+                    <a href="#"><i class="bi bi-youtube"></i></a>
                 </div>
             </div>
         </div>
     </footer>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
     <script>
-        // Enhanced Interactivity
-        document.addEventListener('DOMContentLoaded', function() {
-            // Animate stats counter
-            function animateCounter(element, target) {
-                let current = 0;
-                const increment = target / 100;
-                const timer = setInterval(() => {
-                    current += increment;
-                    if (current >= target) {
-                        current = target;
-                        clearInterval(timer);
-                    }
-                    element.textContent = Math.floor(current).toLocaleString();
-                }, 20);
-            }
+        // Navbar scroll effect
+        window.addEventListener('scroll', () => {
+            const nav = document.getElementById('navbar');
+            nav.classList.toggle('scrolled', window.scrollY > 20);
+        });
 
-            // Start counter animation when visible
-            const observerOptions = {
-                threshold: 0.5,
-                rootMargin: '0px 0px -100px 0px'
-            };
-
-            const observer = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        const counters = entry.target.querySelectorAll('[data-count]');
-                        counters.forEach(counter => {
-                            const target = parseInt(counter.getAttribute('data-count'));
-                            animateCounter(counter, target);
-                        });
-                        observer.unobserve(entry.target);
-                    }
-                });
-            }, observerOptions);
-
-            const statsSection = document.querySelector('.stats-item');
-            if (statsSection) {
-                const statsContainer = statsSection.closest('.row');
-                if (statsContainer) observer.observe(statsContainer);
-            }
-
-            // Smooth reveal animations
-            const revealElements = document.querySelectorAll('.fade-in-up, .fade-in-left, .fade-in-right');
-            const revealObserver = new IntersectionObserver((entries) => {
-                entries.forEach(entry => {
-                    if (entry.isIntersecting) {
-                        entry.target.style.opacity = '1';
-                        entry.target.style.transform = 'translateY(0) translateX(0)';
-                    }
-                });
-            }, { threshold: 0.1 });
-
-            revealElements.forEach(el => revealObserver.observe(el));
-
-            // Interactive button hover effects
-            document.querySelectorAll('.btn-primary-enhanced, .btn-outline-enhanced').forEach(btn => {
-                btn.addEventListener('mouseenter', function() {
-                    this.style.transform = 'translateY(-3px) scale(1.02)';
-                });
-                
-                btn.addEventListener('mouseleave', function() {
-                    this.style.transform = 'translateY(0) scale(1)';
-                });
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
             });
+        });
 
-             // Feature cards interactive effects
-             document.querySelectorAll('.feature-card-enhanced').forEach(card => {
-                 card.addEventListener('mouseenter', function() {
-                     const icon = this.querySelector('.feature-icon');
-                     if (icon) {
-                         icon.style.transform = 'scale(1.1) rotate(5deg)';
-                     }
-                 });
-                 
-                 card.addEventListener('mouseleave', function() {
-                     const icon = this.querySelector('.feature-icon');
-                     if (icon) {
-                         icon.style.transform = 'scale(1) rotate(0deg)';
-                     }
-                 });
-             });
+        // Intersection Observer for fade-in animations
+        const observerOptions = { threshold: 0.1, rootMargin: '0px 0px -40px 0px' };
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.opacity = '1';
+                    entry.target.style.transform = 'translateY(0)';
+                }
+            });
+        }, observerOptions);
 
-             // Interactive Demo Video
-             const demoVideo = document.getElementById('demoVideo');
-             const demoPlayBtn = document.getElementById('demoPlayBtn');
-             const demoPlayIcon = document.getElementById('demoPlayIcon');
-             const demoVolumeBtn = document.getElementById('demoVolumeBtn');
-             const demoVolumeIcon = document.getElementById('demoVolumeIcon');
-             const demoDuration = document.getElementById('demoDuration');
-             const demoProgress = document.getElementById('demoProgress');
-             const demoTotalDuration = document.getElementById('demoTotalDuration');
-             const demoProgressBar = document.getElementById('demoProgressBar');
-             const demoPlayhead = document.getElementById('demoPlayhead');
-             const demoTimeline = document.getElementById('demoTimeline');
-             const demoVideoLoading = document.getElementById('demoVideoLoading');
-             const demoVideoControls = document.getElementById('demoVideoControls');
-
-             // Format time helper function
-             function formatTime(seconds) {
-                 const mins = Math.floor(seconds / 60);
-                 const secs = Math.floor(seconds % 60);
-                 return `${mins}:${secs.toString().padStart(2, '0')}`;
-             }
-
-             // Function to update controls visibility
-             function updateControlsVisibility() {
-                 if (demoVideo && demoVideoControls) {
-                     if (demoVideo.paused) {
-                         demoVideoControls.classList.add('show-when-paused');
-                     } else {
-                         demoVideoControls.classList.remove('show-when-paused');
-                     }
-                 }
-             }
-
-             // Initialize video when metadata is loaded
-             if (demoVideo) {
-                 // Hide loading spinner when video can play
-                 demoVideo.addEventListener('canplay', function() {
-                     if (demoVideoLoading) {
-                         demoVideoLoading.style.display = 'none';
-                     }
-                     // Show controls initially since video is paused
-                     updateControlsVisibility();
-                 });
-
-                 demoVideo.addEventListener('loadedmetadata', function() {
-                     const duration = demoVideo.duration;
-                     if (duration && !isNaN(duration) && isFinite(duration)) {
-                         demoTotalDuration.textContent = formatTime(duration);
-                         demoDuration.textContent = formatTime(duration);
-                     }
-                     
-                     // Set video to 1 second to avoid black screen preview
-                     demoVideo.currentTime = 1;
-                 });
-
-                 // When video data is loaded, ensure we're at 1 second for preview
-                 demoVideo.addEventListener('loadeddata', function() {
-                     if (demoVideo.paused && demoVideo.currentTime === 0) {
-                         demoVideo.currentTime = 1;
-                     }
-                     updateControlsVisibility();
-                 });
-
-                 // Update controls visibility when play/pause state changes
-                 demoVideo.addEventListener('play', updateControlsVisibility);
-                 demoVideo.addEventListener('pause', updateControlsVisibility);
-
-                 // Additional fallback for duration
-                 demoVideo.addEventListener('durationchange', function() {
-                     const duration = demoVideo.duration;
-                     if (duration && !isNaN(duration) && isFinite(duration)) {
-                         demoTotalDuration.textContent = formatTime(duration);
-                         demoDuration.textContent = formatTime(duration);
-                     }
-                 });
-
-                 // Update progress during playback
-                 demoVideo.addEventListener('timeupdate', function() {
-                     const currentTime = demoVideo.currentTime;
-                     const duration = demoVideo.duration;
-                     
-                     // Update duration display if it wasn't set before
-                     if (duration && !isNaN(duration) && isFinite(duration)) {
-                         if (demoTotalDuration.textContent === '0:00') {
-                             demoTotalDuration.textContent = formatTime(duration);
-                             demoDuration.textContent = formatTime(duration);
-                         }
-                         
-                         const percentage = (currentTime / duration) * 100;
-                         demoProgressBar.style.width = percentage + '%';
-                         demoPlayhead.style.left = percentage + '%';
-                         demoProgress.textContent = formatTime(currentTime);
-                     }
-                 });
-
-                 // Handle play/pause button
-                 demoPlayBtn.addEventListener('click', function(e) {
-                     e.stopPropagation();
-                     
-                     if (demoVideo.paused) {
-                         // If we're at the preview position (1 second), start from beginning
-                         if (Math.abs(demoVideo.currentTime - 1) < 0.1) {
-                             demoVideo.currentTime = 0;
-                         }
-                         demoVideo.play();
-                         demoPlayIcon.className = 'bi bi-pause-fill';
-                     } else {
-                         demoVideo.pause();
-                         demoPlayIcon.className = 'bi bi-play-fill';
-                     }
-                 });
-
-                 // Handle volume button
-                 demoVolumeBtn.addEventListener('click', function(e) {
-                     e.stopPropagation();
-                     
-                     if (demoVideo.muted) {
-                         demoVideo.muted = false;
-                         demoVolumeIcon.className = 'bi bi-volume-up-fill';
-                     } else {
-                         demoVideo.muted = true;
-                         demoVolumeIcon.className = 'bi bi-volume-mute-fill';
-                     }
-                 });
-
-                 // Handle video end
-                 demoVideo.addEventListener('ended', function() {
-                     demoPlayIcon.className = 'bi bi-play-fill';
-                     demoVideo.currentTime = 1; // Return to preview frame instead of black screen
-                 });
-
-                 // Handle timeline clicks for seeking
-                 demoTimeline.addEventListener('click', function(e) {
-                     const rect = this.getBoundingClientRect();
-                     const clickX = e.clientX - rect.left;
-                     const percentage = (clickX / rect.width) * 100;
-                     const newTime = (percentage / 100) * demoVideo.duration;
-                     
-                     if (demoVideo.duration > 0) {
-                         demoVideo.currentTime = newTime;
-                     }
-                 });
-
-                 // Handle video container click to play/pause
-                 const demoVideoContainer = document.querySelector('.demo-video-container');
-                 if (demoVideoContainer) {
-                     demoVideoContainer.addEventListener('click', function(e) {
-                         if (e.target === demoVideo || e.target === demoVideoContainer) {
-                             // If we're at the preview position (1 second), start from beginning
-                             if (demoVideo.paused && Math.abs(demoVideo.currentTime - 1) < 0.1) {
-                                 demoVideo.currentTime = 0;
-                             }
-                             demoPlayBtn.click();
-                         }
-                     });
-                 }
-             }
-
-             // Interactive Floating Badges
-             document.querySelectorAll('.floating-badge').forEach(badge => {
-                 badge.addEventListener('click', function() {
-                     // Add pulse effect
-                     this.classList.add('pulse');
-                     
-                     // Create ripple effect
-                     const ripple = document.createElement('div');
-                     ripple.style.cssText = `
-                         position: absolute;
-                         border-radius: 50%;
-                         background: rgba(255, 255, 255, 0.3);
-                         transform: scale(0);
-                         animation: ripple 0.6s linear;
-                         pointer-events: none;
-                         width: 20px;
-                         height: 20px;
-                         left: 50%;
-                         top: 50%;
-                         margin-left: -10px;
-                         margin-top: -10px;
-                     `;
-                     
-                     const badgeContent = this.querySelector('.badge-content');
-                     badgeContent.style.position = 'relative';
-                     badgeContent.appendChild(ripple);
-                     
-                     // Remove pulse class and ripple after animation
-                     setTimeout(() => {
-                         this.classList.remove('pulse');
-                         ripple.remove();
-                     }, 600);
-                 });
-
-                 // Add random slight movement on page load
-                 setTimeout(() => {
-                     const randomDelay = Math.random() * 2000;
-                     badge.style.animationDelay = randomDelay + 'ms';
-                 }, 100);
-             });
-
-             // Add CSS for ripple animation
-             const style = document.createElement('style');
-             style.textContent = `
-                 @keyframes ripple {
-                     to {
-                         transform: scale(4);
-                         opacity: 0;
-                     }
-                 }
-             `;
-             document.head.appendChild(style);
-         });
-
-
-        // Add dynamic navigation background on scroll
-        window.addEventListener('scroll', function() {
-            const nav = document.querySelector('.glass-nav');
-            if (window.scrollY > 50) {
-                nav.style.background = 'rgba(15, 20, 25, 0.95)';
-                nav.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.5)';
-            } else {
-                nav.style.background = 'rgba(15, 20, 25, 0.8)';
-                nav.style.boxShadow = '0 8px 32px rgba(0, 0, 0, 0.3)';
-            }
+        document.querySelectorAll('.feature-card, .uc-card, .test-card, .hiw-step, .ps-grid > div').forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(20px)';
+            el.style.transition = 'opacity 0.6s ease, transform 0.6s ease';
+            observer.observe(el);
         });
     </script>
 </body>

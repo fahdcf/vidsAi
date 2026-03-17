@@ -53,6 +53,39 @@ return [
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent'),
     ],
 
+    'scene_generation' => [
+        'enable_gemini_fallback' => env('SCENE_GENERATION_ENABLE_GEMINI_FALLBACK', false),
+    ],
+
+    'openrouter' => [
+        'api_key' => env('OPENROUTER_API_KEY'),
+        'base_url' => env('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1/chat/completions'),
+        'models' => array_values(array_filter(array_map(
+            'trim',
+            explode(
+                ',',
+                (string) env(
+                    'OPENROUTER_MODELS',
+                    implode(',', array_filter([
+                        env('OPENROUTER_MODEL1'),
+                        env('OPENROUTER_MODEL2'),
+                    ]))
+                )
+            )
+        ))),
+    ],
+
+    'cloudflare_ai' => [
+        'account_id' => env('CLOUDFLARE_ACCOUNT_ID'),
+        'api_token' => env('CLOUDFLARE_API_TOKEN'),
+        'model' => env('CLOUDFLARE_MODEL', '@cf/leonardo/lucid-origin'),
+    ],
+
+    'image_generation' => [
+        'api_url' => env('IMAGE_API_URL'),
+        'api_token' => env('IMAGE_API_TOKEN'),
+    ],
+
     'pexels' => [
         'api_key' => env('PEXELS_API_KEY', 'zXukdqhgYGWOiFYl5cJHEJ3s1DWMFQLc8UXolQxN73dyltqKgnmU2AD7'),
         'base_url' => env('PEXELS_BASE_URL', 'https://api.pexels.com/videos/search'),

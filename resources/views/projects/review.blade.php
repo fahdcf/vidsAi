@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Review Scenes - {{ $project->name }} - VidsAI</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         * {
@@ -14,17 +15,18 @@
         }
 
         :root {
-            --navy-900: #0f1419;
-            --navy-800: #1a1f2e;
-            --navy-700: #252b3b;
-            --navy-600: #2d3548;
-            --gray-400: #94a3b8;
-            --gray-300: #cbd5e1;
+            --navy-900: #0a0d18;
+            --navy-800: #0f1420;
+            --navy-700: #161d2e;
+            --navy-600: #1e2740;
+            --gray-400: #8192ad;
+            --gray-300: #b4c2d8;
             --blue-500: #3b82f6;
-            --purple-500: #8b5cf6;
+            --purple-500: #7c5ef6;
             --green-500: #10b981;
             --orange-500: #f59e0b;
             --red-500: #ef4444;
+            --teal-400: #2dd4bf;
         }
 
         body {
@@ -1029,39 +1031,47 @@
         }
 
         .btn-regenerate {
-            background: linear-gradient(135deg, var(--orange-500), #d97706);
+            background: transparent;
+            border: 1px solid #3b82f6;
+            color: #3b82f6;
         }
 
         .btn-regenerate:hover {
-            background: linear-gradient(135deg, #d97706, #b45309);
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
         }
 
         .btn-upload {
-            background: linear-gradient(135deg, #06b6d4, #0891b2);
+            background: transparent;
+            border: 1px solid #2dd4bf;
+            color: #2dd4bf;
         }
 
         .btn-upload:hover {
-            background: linear-gradient(135deg, #0891b2, #0e7490);
+            background: rgba(45, 212, 191, 0.1);
+            color: #99f6e4;
         }
 
         .btn-overlay {
-            background: linear-gradient(135deg, var(--purple-500), #7c3aed);
+            background: transparent;
+            border: 1px solid rgba(148, 163, 184, 0.4);
+            color: #94a3b8;
         }
 
         .btn-overlay:hover {
-            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+            background: rgba(148, 163, 184, 0.08);
+            color: #e2e8f0;
         }
 
         .btn-outline-secondary {
             background: transparent;
-            border: 2px solid var(--navy-600);
+            border: 1px solid rgba(148, 163, 184, 0.4);
             color: var(--gray-400);
         }
 
         .btn-outline-secondary:hover {
-            background: var(--navy-700);
+            background: rgba(148, 163, 184, 0.08);
             color: #fff;
-            border-color: var(--navy-600);
         }
 
         /* Regenerate Modal Styles */
@@ -1388,13 +1398,14 @@
         }
 
         .btn-upload {
-            background: linear-gradient(135deg, #06b6d4, #0891b2);
-            color: white;
-            border-color: #06b6d4;
+            background: transparent;
+            color: #2dd4bf;
+            border: 1px solid #2dd4bf;
         }
 
         .btn-upload:hover {
-            background: linear-gradient(135deg, #0891b2, #0e7490);
+            background: rgba(45, 212, 191, 0.1);
+            color: #99f6e4;
         }
 
         /* Loading States */
@@ -1433,9 +1444,9 @@
         }
 
         .btn-confirm {
-            background: linear-gradient(135deg, var(--green-500), #059669);
-            color: white;
-            border: none;
+            background: transparent;
+            color: #3b82f6;
+            border: 1px solid #3b82f6;
             padding: 1rem 2rem;
             border-radius: 12px;
             font-size: 1.1rem;
@@ -1445,9 +1456,11 @@
         }
 
         .btn-confirm:hover {
-            background: linear-gradient(135deg, #059669, #047857);
+            background: rgba(59, 130, 246, 0.1);
+            color: #93c5fd;
+            border-color: #3b82f6;
             transform: translateY(-2px);
-            box-shadow: 0 8px 24px rgba(16, 185, 129, 0.3);
+            box-shadow: none;
         }
 
         /* Form Controls */
@@ -1672,384 +1685,858 @@
             }
         }
     </style>
+    <style>
+        body {
+            background:
+                radial-gradient(900px 500px at 5% -5%, rgba(59, 130, 246, 0.07), transparent),
+                radial-gradient(900px 500px at 95% -5%, rgba(124, 94, 246, 0.07), transparent),
+                #080c18;
+            color: #cdd8ef;
+        }
+
+        .sidebar {
+            display: none !important;
+        }
+
+        .main-content {
+            margin-left: 0 !important;
+            padding: 1.5rem 0 2rem;
+        }
+
+        .container {
+            max-width: 1320px;
+            padding: 0 1rem;
+        }
+
+        .review-topbar {
+            position: sticky;
+            top: 0;
+            z-index: 1050;
+            backdrop-filter: blur(8px);
+            background: rgba(11, 16, 32, 0.7);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+        }
+
+        .review-topbar-inner {
+            max-width: 1320px;
+            margin: 0 auto;
+            padding: 0.9rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .brand-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #f8fafc;
+            font-weight: 700;
+            letter-spacing: 0.2px;
+        }
+
+        .review-hero {
+            background: linear-gradient(160deg, rgba(18, 28, 48, 0.96), rgba(12, 18, 33, 0.96));
+            border: 1px solid rgba(148, 163, 184, 0.16);
+            border-radius: 16px;
+            padding: 1.15rem 1.25rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.33);
+        }
+
+        .review-hero-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 1rem;
+        }
+
+        .review-hero-title {
+            font-size: clamp(1.3rem, 2.1vw, 1.8rem);
+            font-weight: 750;
+            margin: 0;
+            letter-spacing: 0.2px;
+            color: #e8f0ff;
+        }
+
+        .review-hero-subtitle {
+            margin: 0.35rem 0 0;
+            color: #9fb0cd;
+            font-size: 0.92rem;
+        }
+
+        .review-hero-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 0.9rem;
+        }
+
+        .review-steps {
+            display: flex;
+            gap: 0.75rem;
+            margin-bottom: 1rem;
+            padding: 0.75rem;
+            border-radius: 14px;
+            background: rgba(11, 16, 29, 0.92);
+            border: 1px solid rgba(148, 163, 184, 0.12);
+        }
+
+        .review-step {
+            flex: 1;
+            min-width: 0;
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            border-radius: 10px;
+            padding: 0.55rem 0.7rem;
+            background: rgba(30, 41, 59, 0.35);
+            border: 1px solid transparent;
+        }
+
+        .review-step-index {
+            width: 26px;
+            height: 26px;
+            border-radius: 999px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.76rem;
+            font-weight: 700;
+            flex: 0 0 auto;
+            background: rgba(148, 163, 184, 0.18);
+            color: #a7b4cb;
+        }
+
+        .review-step-label {
+            font-size: 0.86rem;
+            color: #9fb0cd;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .review-step.is-done {
+            background: rgba(16, 185, 129, 0.12);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .review-step.is-done .review-step-index {
+            background: rgba(16, 185, 129, 0.25);
+            color: #34d399;
+        }
+
+        .review-step.is-done .review-step-label {
+            color: #c8ffe8;
+        }
+
+        .review-step.is-active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.32);
+        }
+
+        .review-step.is-active .review-step-index {
+            background: rgba(59, 130, 246, 0.3);
+            color: #93c5fd;
+        }
+
+        .review-step.is-active .review-step-label {
+            color: #dbeafe;
+            font-weight: 650;
+        }
+
+        @media (max-width: 900px) {
+            .review-steps {
+                flex-direction: column;
+            }
+        }
+
+        .page-header,
+        .progress-card,
+        .scene-card,
+        .approval-card {
+            background: rgba(13, 19, 34, 0.97);
+            border: 1px solid rgba(148, 163, 184, 0.13);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.38);
+        }
+
+        .page-title {
+            font-size: clamp(1.4rem, 2.4vw, 2rem);
+            letter-spacing: 0.3px;
+        }
+
+        .format-badge {
+            border: 1px solid rgba(99, 102, 241, 0.28);
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+        }
+
+        .scene-card {
+            border-radius: 18px;
+            overflow: hidden;
+        }
+
+        .scene-card-header {
+            background: rgba(15, 23, 42, 0.55);
+        }
+
+        .btn,
+        .action-btn {
+            border-radius: 10px !important;
+            font-weight: 600;
+            letter-spacing: 0.1px;
+            transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.15s ease, box-shadow 0.2s ease;
+        }
+
+        .action-btn:hover,
+        .btn:hover {
+            transform: translateY(-1px);
+        }
+
+        .btn-regenerate {
+            background: transparent !important;
+            border: 1px solid #3b82f6 !important;
+            color: #3b82f6 !important;
+            box-shadow: none;
+        }
+
+        .btn-regenerate:hover {
+            background: rgba(59, 130, 246, 0.1) !important;
+            border-color: #3b82f6 !important;
+            color: #93c5fd !important;
+            box-shadow: none;
+        }
+
+        .btn-upload {
+            background: transparent !important;
+            border: 1px solid #2dd4bf !important;
+            color: #2dd4bf !important;
+            box-shadow: none;
+        }
+
+        .btn-upload:hover {
+            background: rgba(45, 212, 191, 0.1) !important;
+            border-color: #2dd4bf !important;
+            color: #99f6e4 !important;
+            box-shadow: none;
+        }
+
+        .btn-overlay {
+            background: transparent !important;
+            border: 1px solid rgba(148, 163, 184, 0.4) !important;
+            color: #94a3b8 !important;
+            box-shadow: none;
+        }
+
+        .btn-overlay:hover {
+            background: rgba(148, 163, 184, 0.08) !important;
+            border-color: rgba(148, 163, 184, 0.65) !important;
+            color: #e2e8f0 !important;
+            box-shadow: none;
+        }
+
+        .btn-confirm {
+            background: transparent !important;
+            border: 1px solid #3b82f6 !important;
+            color: #3b82f6 !important;
+            min-width: 220px;
+            border-radius: 12px;
+            box-shadow: none;
+        }
+
+        .btn-confirm:hover {
+            background: rgba(59, 130, 246, 0.1) !important;
+            border-color: #3b82f6 !important;
+            color: #93c5fd !important;
+            box-shadow: none;
+        }
+
+        .btn-outline-secondary,
+        .btn-outline-light {
+            border-color: rgba(148, 163, 184, 0.4) !important;
+            color: #94a3b8 !important;
+            background: transparent !important;
+        }
+
+        .btn-outline-secondary:hover,
+        .btn-outline-light:hover {
+            border-color: rgba(148, 163, 184, 0.65) !important;
+            background: rgba(148, 163, 184, 0.08) !important;
+            color: #e2e8f0 !important;
+        }
+
+        .text-muted {
+            color: #a7b4d3 !important;
+        }
+
+        .video-player-container {
+            border: 1px solid rgba(148, 163, 184, 0.18);
+            border-radius: 14px;
+        }
+
+        .video-timeline-section,
+        .timeline-section,
+        .overlay-controls .card {
+            background: rgba(15, 23, 42, 0.55);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+        }
+
+        .action-btn {
+            padding: 0.7rem 1rem;
+        }
+
+        .modal-content {
+            border-radius: 14px;
+        }
+
+        /* ─── Redesigned Scene Card: Horizontal Layout ─── */
+        .scene-card-body {
+            display: flex;
+            align-items: center;   /* vertically center both columns */
+        }
+
+        .scene-video-col {
+            flex: 0 0 380px;
+            padding: 0.85rem;
+            border-right: 1px solid rgba(148, 163, 184, 0.10);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            align-self: stretch;   /* keep the border going full height */
+        }
+
+        .scene-video-col-inner {
+            width: 100%;
+        }
+
+        .scene-video-col .video-player-container {
+            margin-bottom: 0;
+            width: 100%;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        /* Square container — video shows in its original ratio with letterbox bars */
+        .scene-video-col .video-wrapper {
+            position: relative;
+            width: 100%;
+            aspect-ratio: 1 / 1;
+            background: #000;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .scene-video-col .scene-video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: contain;  /* shows full video, bars fill remaining space */
+            background: #000;
+        }
+
+        .scene-details-col {
+            flex: 1;
+            padding: 1.1rem 1.25rem;
+            min-width: 0;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ─── Stat pills in page header ─── */
+        .stat-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.28rem 0.75rem;
+            background: rgba(30, 41, 59, 0.75);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: #cbd5e1;
+            text-decoration: none;
+            cursor: default;
+            font-weight: 500;
+        }
+
+        button.stat-pill {
+            cursor: pointer;
+            background: none;
+        }
+
+        button.stat-pill:hover,
+        a.stat-pill:hover {
+            background: rgba(51, 65, 85, 0.9);
+            border-color: rgba(148, 163, 184, 0.38);
+            color: #fff;
+        }
+
+        /* ─── Scene type badge ─── */
+        .scene-type-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            border: 1px solid rgba(45, 212, 191, 0.35);
+            color: var(--teal-400, #2dd4bf);
+            background: rgba(20, 184, 166, 0.08);
+            letter-spacing: 0.03em;
+        }
+
+        /* ─── Scene status badges ─── */
+        .scene-status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 20px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.03em;
+        }
+
+        .scene-status-draft {
+            background: rgba(245, 158, 11, 0.13);
+            color: #fbbf24;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .scene-status-ready {
+            background: rgba(16, 185, 129, 0.13);
+            color: #34d399;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        /* ─── Scene card header improved ─── */
+        .scene-card-header {
+            padding: 0.85rem 1.1rem !important;
+        }
+
+        .scene-number {
+            font-size: 1rem !important;
+        }
+
+        /* ─── 3-dot menu button ─── */
+        .scene-more-btn {
+            background: none;
+            border: none;
+            color: #64748b;
+            padding: 0.25rem 0.45rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1rem;
+            line-height: 1;
+            transition: all 0.15s ease;
+        }
+
+        .scene-more-btn:hover {
+            background: rgba(148, 163, 184, 0.15);
+            color: #e2e8f0;
+        }
+
+        /* ─── Script collapsible section ─── */
+        .script-toggle-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            margin-bottom: 0.4rem;
+            user-select: none;
+        }
+
+        .script-toggle-row:hover .script-chevron { color: #e2e8f0; }
+
+        .script-label {
+            font-size: 0.72rem;
+            font-weight: 600;
+            color: #64748b;
+            letter-spacing: 0.07em;
+            text-transform: uppercase;
+        }
+
+        .script-chevron {
+            color: #64748b;
+            font-size: 0.8rem;
+            transition: transform 0.2s ease, color 0.15s ease;
+        }
+
+        .script-chevron.open { transform: rotate(0deg); }
+        .script-chevron.closed { transform: rotate(180deg); }
+
+        /* ─── Timeline section compact (inside details col) ─── */
+        .scene-details-col .video-timeline-section {
+            margin-top: 0;
+            padding: 10px 14px;
+            border-radius: 10px;
+        }
+
+        /* ─── Detail badge (duration etc.) ─── */
+        .detail-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.2rem 0.55rem;
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.2);
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: #94a3b8;
+        }
+
+        .suggested-duration-note {
+            font-size: 0.78rem;
+            font-weight: 600;
+            color: #8ea2c2;
+            letter-spacing: 0.01em;
+        }
+
+        .suggested-duration-note .suggested-duration-value {
+            color: #b6c7e2;
+        }
+
+        .suggested-duration-note.is-changed {
+            color: #f59e0b;
+        }
+
+        .suggested-duration-note.is-changed .suggested-duration-value {
+            color: #fbbf24;
+        }
+
+        /* ─── Action buttons row ─── */
+        .scene-actions-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            margin-top: auto;
+            padding-top: 0.75rem;
+        }
+
+        .scene-actions-row .action-btn {
+            padding: 0.45rem 0.85rem !important;
+            font-size: 0.8125rem;
+            border-radius: 8px !important;
+        }
+
+        /* ─── Responsive ─── */
+        @media (max-width: 900px) {
+            .scene-card-body { flex-direction: column; }
+            .scene-video-col {
+                flex: none;
+                border-right: none;
+                border-bottom: 1px solid rgba(148, 163, 184, 0.10);
+            }
+            /* aspect-ratio handles sizing automatically on mobile */
+        }
     </style>
 </head>
 <body>
-    <!-- Sidebar Navigation -->
-    <div class="sidebar">
-        <div class="sidebar-header">
-            <div class="logo">VidsAI</div>
+    <div class="review-topbar">
+        <div class="review-topbar-inner">
+            <div class="brand-chip">
+                <i class="bi bi-stars"></i>
+                <span>VidsAI • Review Workspace</span>
+            </div>
+            <a href="{{ route('dashboard') }}" class="btn btn-outline-light btn-sm">
+                <i class="bi bi-arrow-left me-1"></i>Back to Dashboard
+            </a>
         </div>
-        <nav class="sidebar-nav">
-            <div class="nav-item">
-                <a href="{{ route('dashboard') }}" class="nav-link">
-                    <i class="bi bi-grid"></i>
-                    <span>Dashboard</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="{{ route('projects.create') }}" class="nav-link active">
-                    <i class="bi bi-folder"></i>
-                    <span>Projects</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="#" class="nav-link">
-                    <i class="bi bi-file-earmark"></i>
-                    <span>Templates</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="#" class="nav-link">
-                    <i class="bi bi-bar-chart"></i>
-                    <span>Analytics</span>
-                </a>
-            </div>
-            <div class="nav-item">
-                <a href="#" class="nav-link">
-                    <i class="bi bi-gear"></i>
-                    <span>Settings</span>
-                </a>
-            </div>
-        </nav>
     </div>
 
     <!-- Main Content -->
     <div class="main-content">
         <div class="container">
         <!-- Header -->
-        <div class="page-header">
-            <div class="d-flex justify-content-between align-items-start">
+        <div class="review-hero">
+            <div class="review-hero-head">
                 <div>
-                    <h1 class="page-title">Review Your Video Scenes</h1>
-                    <p class="page-subtitle">Project: {{ $project->name }} - Review and approve each scene before final generation</p>
-                    <div class="d-flex gap-3">
-                        <span class="format-badge">
-                            <i class="bi bi-aspect-ratio"></i>
-                            Format: {{ implode(', ', $project->video_format) }}
-                        </span>
-                        <span class="format-badge">
-                            <i class="bi bi-clock"></i>
-                            Total: {{ $scenes->sum('gemini_duration') ? gmdate('i:s', $scenes->sum('gemini_duration')) : 'N/A' }}
-                        </span>
-                        @if($project->hasVoiceoverTranscript() && $project->voiceover_option === 'upload')
-                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="viewTranscript()">
-                            <i class="bi bi-file-text"></i>
-                            View Transcript ({{ $project->getTranscriptWordsCount() }} words)
-                        </button>
-                        @endif
-                    </div>
-                    </div>
-                    <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary action-btn">
-                        <i class="bi bi-arrow-left me-2"></i>Dashboard
-                    </a>
+                    <h1 class="review-hero-title">Review Your Video Scenes</h1>
+                    <p class="review-hero-subtitle">Project: {{ $project->name }} • Review each scene before final rendering</p>
                 </div>
+                <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary btn-sm" style="white-space:nowrap; flex-shrink:0;">
+                    <i class="bi bi-grid me-1"></i>Dashboard
+                </a>
             </div>
+
+            <div class="review-hero-meta">
+                <span class="stat-pill">
+                    <i class="bi bi-aspect-ratio"></i>
+                    {{ is_array($project->video_format) ? implode(', ', $project->video_format) : ($project->video_format ?? 'N/A') }}
+                </span>
+                <span class="stat-pill">
+                    <i class="bi bi-clock"></i>
+                    {{ $scenes->sum('gemini_duration') ? gmdate('i:s', (int)$scenes->sum('gemini_duration')) : '00:00' }}
+                </span>
+                <span class="stat-pill">
+                    <i class="bi bi-collection-play"></i>
+                    {{ $scenes->count() }} Scenes
+                </span>
+                @if($project->hasVoiceoverTranscript() && $project->voiceover_option === 'upload')
+                <button type="button" class="stat-pill" onclick="viewTranscript()">
+                    <i class="bi bi-file-text"></i>
+                    Transcript ({{ $project->getTranscriptWordsCount() }})
+                </button>
+                @endif
+            </div>
+        </div>
 
             <div id="scenes-container">
 
             <!-- Progress Indicator -->
-            <div class="progress-card">
-                <div class="card-body p-4">
-                    <div class="d-flex justify-content-center align-items-center">
-                        <div class="d-flex align-items-center">
-                            <div class="progress-step completed">
-                                <i class="bi bi-check"></i>
-                            </div>
-                            <span class="ms-3">Generation Complete</span>
-                        </div>
-                        <div class="progress-connector"></div>
-                        <div class="d-flex align-items-center">
-                            <div class="progress-step active">2</div>
-                            <span class="ms-3 fw-bold">Review Scenes</span>
-                        </div>
-                        <div class="progress-connector"></div>
-                        <div class="d-flex align-items-center">
-                            <div class="progress-step">3</div>
-                            <span class="ms-3">Final Video</span>
-                        </div>
-                    </div>
+            <div class="review-steps">
+                <div class="review-step is-done">
+                    <span class="review-step-index"><i class="bi bi-check"></i></span>
+                    <span class="review-step-label">Generation Complete</span>
+                </div>
+                <div class="review-step is-active">
+                    <span class="review-step-index">2</span>
+                    <span class="review-step-label">Review Scenes</span>
+                </div>
+                <div class="review-step">
+                    <span class="review-step-index">3</span>
+                    <span class="review-step-label">Final Video</span>
                 </div>
             </div>
 
-            <!-- Scenes Grid -->
-            <div class="row">
-                @forelse($scenes as $scene)
-                <!-- Scene {{ $scene->scene_number }} -->
-                <div class="col-lg-6 mb-4">
-                    <div class="scene-card">
-                        <div class="scene-card-header">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <h3 class="scene-number mb-0">
-                                    Scene {{ $scene->scene_number }}
+            <!-- Scenes List -->
+            @forelse($scenes as $scene)
+            <!-- Scene {{ $scene->scene_number }} -->
+            @php
+                $videoFormat = is_array($project->video_format) ? implode(', ', $project->video_format) : ($project->video_format ?? '');
+                $sceneTypeBadge = $scene->type === 'image' ? 'Image' : (str_contains(strtolower($videoFormat), '9:16') || str_contains(strtolower($videoFormat), 'portrait') ? 'Vlides' : 'Wides');
+                $sceneDuration = $scene->gemini_duration ?? $scene->duration_seconds ?? 5;
+                $estimatedVideoDuration = 30;
+                $initialWidth = min(100, max(20, ($sceneDuration / $estimatedVideoDuration) * 100));
+            @endphp
+            <div class="scene-card mb-4">
+                <!-- Card Header -->
+                <div class="scene-card-header d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="scene-number">Scene {{ $scene->scene_number }}</span>
+                        <span class="scene-type-badge">{{ $sceneTypeBadge }}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        @if($scene->approved)
+                            <span class="scene-status-badge scene-status-ready">
+                                <i class="bi bi-circle-fill" style="font-size:0.42rem;"></i> Ready
+                            </span>
+                        @else
+                            <span class="scene-status-badge scene-status-draft">
+                                <i class="bi bi-circle-fill" style="font-size:0.42rem;"></i> Draft
+                            </span>
+                        @endif
+                        <button type="button" class="scene-more-btn" title="More options">
+                            <i class="bi bi-three-dots"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Card Body: Video Left + Details Right -->
+                <div class="scene-card-body">
+                    <!-- Left: Video Player -->
+                    <div class="scene-video-col">
+                        <div class="scene-video-col-inner">
+                        @if($scene->video_url || $scene->video_path)
+                            <div class="video-player-container" data-scene-id="{{ $scene->id }}" data-project-id="{{ $project->id }}" data-duration="{{ $scene->gemini_duration ?? 0 }}">
+                                <div class="video-wrapper">
                                     @if($scene->type === 'image')
-                                        <span class="badge bg-success ms-2">
-                                            <i class="bi bi-image me-1"></i>Image
-                                        </span>
+                                        <img id="video-{{ $scene->id }}" class="scene-video" src="{{ $scene->video_url }}" alt="Scene {{ $scene->scene_number }}" style="width:100%;height:100%;object-fit:contain;background:#000;">
                                     @else
-                                        <span class="badge bg-primary ms-2">
-                                            <i class="bi bi-camera-video me-1"></i>Video
-                                        </span>
+                                        <video id="video-{{ $scene->id }}" class="scene-video" preload="metadata" muted>
+                                            @if($scene->video_url)
+                                                <source src="{{ $scene->video_url }}" type="video/mp4">
+                                            @elseif($scene->video_path)
+                                                <source src="{{ Storage::url($scene->video_path) }}" type="video/mp4">
+                                            @endif
+                                            Your browser does not support the video tag.
+                                        </video>
                                     @endif
-                                </h3>
+                                    <!-- Video Overlays -->
+                                    <div class="video-overlays">
+                                        <div class="video-overlay-logo" id="logo-overlay-{{ $scene->id }}" style="display:none;">
+                                            <img src="/images/logo-transparent.png" alt="Logo" class="overlay-logo">
+                                        </div>
+                                        <div class="video-overlay-cta" id="cta-overlay-{{ $scene->id }}" style="display:none;">
+                                            <img src="/images/cta-button.png" alt="Call to Action" class="overlay-cta">
+                                        </div>
+                                        <div class="video-overlay-text" id="text-overlay-{{ $scene->id }}" style="display:none;">
+                                            <div class="overlay-text-content">
+                                                <span class="overlay-text">Your Text Here</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    @if($scene->type !== 'image')
+                                    <div class="video-overlay">
+                                        <button type="button" class="play-btn" data-video-id="video-{{ $scene->id }}">
+                                            <i class="bi bi-play-fill"></i>
+                                        </button>
+                                    </div>
+                                    <div class="video-time-display">
+                                        <span class="current-time">0:00</span> / <span class="total-time">0:00</span>
+                                    </div>
+                                    @endif
+                                </div>
+                            </div>
+                        @else
+                            <div class="video-placeholder d-flex flex-column align-items-center justify-content-center" style="aspect-ratio:16/9;background:#000;border-radius:10px;">
+                                <i class="bi bi-camera-video text-muted" style="font-size:2.5rem;opacity:0.4;"></i>
+                                <p class="text-muted mt-2" style="font-size:0.8rem;">No preview available</p>
+                            </div>
+                        @endif
+                        </div>
+                    </div>
+
+                    <!-- Right: Details -->
+                    <div class="scene-details-col">
+                        <!-- Script Section -->
+                        <div class="mb-3">
+                            <div class="script-toggle-row" onclick="toggleScript({{ $scene->id }})">
+                                <span class="script-label">Script:</span>
+                                <i class="bi bi-chevron-up script-chevron open" id="script-chevron-{{ $scene->id }}"></i>
+                            </div>
+                            <div id="script-content-{{ $scene->id }}">
+                                <p class="text-muted mb-0" style="font-size:0.9375rem;line-height:1.55;">{{ $scene->script_text }}</p>
                             </div>
                         </div>
-                        <div class="card-body p-4">
-                            <!-- Script Text -->
-                            <div class="mb-4">
-                                <h6 class="fw-bold mb-2">Script:</h6>
-                                <p class="text-muted">{{ $scene->script_text }}</p>
-                            </div>
 
-
-
-                            <!-- Video Preview -->
-                            <div class="mb-4">
-                                <div class="d-flex justify-content-between align-items-center mb-3">
-                                    <h6 class="fw-bold mb-0">Video Preview</h6>
-                                    @if($scene->gemini_duration)
-                                        <span class="detail-badge">
-                                            <i class="bi bi-clock"></i>
-                                            <span>{{ number_format($scene->gemini_duration, 1) }}s</span>
-                                        </span>
-                                    @endif
-                                </div>
-
-                                @if($scene->video_url || $scene->video_path)
-                                    <div class="video-player-container" data-scene-id="{{ $scene->id }}" data-project-id="{{ $project->id }}" data-duration="{{ $scene->gemini_duration ?? 0 }}">
-                                        <div class="video-wrapper">
-                                            @if($scene->type === 'image')
-                                                <!-- Display Image -->
-                                                <img id="video-{{ $scene->id }}" class="scene-video" src="{{ $scene->video_url }}" alt="Scene {{ $scene->scene_number }}" style="width: 100%; height: 100%; object-fit: cover;">
-                                            @else
-                                                <!-- Display Video -->
-                                            <video id="video-{{ $scene->id }}" class="scene-video" preload="metadata" muted>
-                                                @if($scene->video_url)
-                                                    <source src="{{ $scene->video_url }}" type="video/mp4">
-                                                @elseif($scene->video_path)
-                                                    <source src="{{ Storage::url($scene->video_path) }}" type="video/mp4">
-                                                @endif
-                                                Your browser does not support the video tag.
-                                            </video>
-                                            @endif
-
-                                            <!-- Video Overlays -->
-                                            <div class="video-overlays">
-                                                <!-- Logo Overlay -->
-                                                <div class="video-overlay-logo" id="logo-overlay-{{ $scene->id }}" style="display: none;">
-                                                    <img src="/images/logo-transparent.png" alt="Logo" class="overlay-logo">
-                                                </div>
-
-                                                <!-- Call to Action Overlay -->
-                                                <div class="video-overlay-cta" id="cta-overlay-{{ $scene->id }}" style="display: none;">
-                                                    <img src="/images/cta-button.png" alt="Call to Action" class="overlay-cta">
-                                                </div>
-
-                                                <!-- Custom Text Overlay -->
-                                                <div class="video-overlay-text" id="text-overlay-{{ $scene->id }}" style="display: none;">
-                                                    <div class="overlay-text-content">
-                                                        <span class="overlay-text">Your Text Here</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            @if($scene->type !== 'image')
-                                            <div class="video-overlay">
-                                                <button type="button" class="play-btn" data-video-id="video-{{ $scene->id }}">
-                                                    <i class="bi bi-play-fill"></i>
-                                                </button>
-                                            </div>
-                                            <div class="video-time-display">
-                                                <span class="current-time">0:00</span> / <span class="total-time">0:00</span>
-                                            </div>
-                                            @endif
-                                        </div>
-
-                                        @if($scene->type !== 'image')
-                                        <!-- Professional Video Timeline -->
-                                        <div class="video-timeline-section">
-                                            <div class="timeline-header">
-                                                <div class="timeline-info">
-                                                    <i class="bi bi-scissors text-primary"></i>
-                                                    <span class="fw-medium">Trim Duration:
-                                                        <span class="selected-duration text-primary editable-header-duration"
-                                                              id="header-duration-{{ $scene->id }}"
-                                                              title="Double-click to edit duration">{{ number_format($scene->gemini_duration ?? 0, 1) }}s</span>
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            <!-- Professional Timeline Slider -->
-                                            <div class="professional-timeline" id="timeline-{{ $scene->id }}">
-                                                <div class="timeline-track"></div>
-
-                                                <!-- Trim Selection -->
-                                                @php
-                                                    // Calculate initial width based on scene duration vs estimated video duration
-                                                    // Use gemini_duration (script timing) instead of duration_seconds (video file duration)
-                                                    $sceneDuration = $scene->gemini_duration ?? $scene->duration_seconds ?? 5;
-                                                    $estimatedVideoDuration = 30; // Default estimate, will be updated by JS
-                                                    $initialWidth = min(100, ($sceneDuration / $estimatedVideoDuration) * 100);
-                                                    $initialWidth = max(20, $initialWidth); // Minimum 20% width
-
-                                                    // Debug logging
-                                                    logger()->info('🔍 Scene duration debug', [
-                                                        'scene_id' => $scene->id,
-                                                        'duration_seconds' => $scene->duration_seconds,
-                                                        'gemini_duration' => $scene->gemini_duration,
-                                                        'calculated_duration' => $sceneDuration,
-                                                        'initial_width' => $initialWidth
-                                                    ]);
-                                                @endphp
-                                                <div class="trim-selection" id="trim-selection-{{ $scene->id }}"
-                                                     style="left: 0%; width: {{ $initialWidth }}%;"
-                                                     data-scene-duration="{{ $sceneDuration }}">
-                                                    <div class="trim-handle left-handle" data-handle="start">
-                                                        <div class="handle-grip"></div>
-                                                    </div>
-                                                    <div class="trim-handle right-handle" data-handle="end">
-                                                        <div class="handle-grip"></div>
-                                                    </div>
-                                                    <div class="selection-info">
-                                                        <span class="duration-badge">{{ number_format($sceneDuration, 1) }}s</span>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Playhead -->
-                                                <div class="timeline-playhead" id="playhead-{{ $scene->id }}">
-                                                    <div class="playhead-line"></div>
-                                                    <div class="playhead-handle">
-                                                        <i class="bi bi-caret-down-fill"></i>
-                                                    </div>
-                                                </div>
-
-                                                <!-- Time Markers -->
-                                                <div class="time-markers" id="time-markers-{{ $scene->id }}">
-                                                    <!-- Time markers will be generated here -->
-                                                </div>
-                                            </div>
-
-                                            <!-- Timeline Controls -->
-                                            <div class="timeline-controls">
-                                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="resetTrim({{ $scene->id }})">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>Reset
-                                                </button>
-                                                <button type="button" class="btn btn-sm btn-outline-info" onclick="refreshTimeDisplay({{ $scene->id }})">
-                                                    <i class="bi bi-arrow-clockwise me-1"></i>Refresh Time
-                                                </button>
-                                                <button type="button" class="btn btn-sm btn-outline-warning" onclick="fixTimeDisplayDirectly({{ $scene->id }})">
-                                                    <i class="bi bi-wrench me-1"></i>Fix Time
-                                                </button>
-                                                <div class="trim-info">
-                                                    <small class="text-muted">
-                                                        Start: <span class="start-time-display">0:00.0</span> |
-                                                        End: <span class="end-time-display">0:00.0</span>
-                                                    </small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        @endif
-                                @else
-                                    <div class="video-placeholder d-flex align-items-center justify-content-center" style="height: 280px; background: #f8f9fa; border-radius: 16px;">
-                                        <div class="text-center">
-                                            <i class="bi bi-camera-video text-muted" style="font-size: 3rem;"></i>
-                                            <p class="text-muted mt-2">Video preview not available</p>
-                                        </div>
-                                    </div>
+                        @if($scene->type !== 'image')
+                        <!-- Video Preview / Timeline -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="script-label">Video Preview</span>
+                                @if($scene->gemini_duration)
+                                    <span class="suggested-duration-note"
+                                          id="suggested-duration-{{ $scene->id }}"
+                                          data-default-duration="{{ number_format($sceneDuration, 1, '.', '') }}">
+                                        Suggested duration: <span class="suggested-duration-value">{{ number_format($sceneDuration, 1) }}s</span>
+                                    </span>
                                 @endif
+                            </div>
+
+                            @if($scene->video_url || $scene->video_path)
+                            <div class="video-timeline-section">
+                                <div class="timeline-header">
+                                    <div class="timeline-info">
+                                        <i class="bi bi-scissors text-primary"></i>
+                                        <span class="fw-medium" style="font-size:0.8rem;">Trim:
+                                            <span class="selected-duration text-primary editable-header-duration"
+                                                  id="header-duration-{{ $scene->id }}"
+                                                  title="Double-click to edit">{{ number_format($sceneDuration, 1) }}s</span>
+                                        </span>
+                                    </div>
                                 </div>
-                            </div>
-
-
-
-                            <!-- Action Buttons -->
-                            <div class="d-flex gap-3">
-                                <button type="button" class="btn action-btn btn-regenerate"
-                                        onclick="regenerateScene({{ $scene->id }})"
-                                        data-scene-keywords="{{ $scene->keywords }}"
-                                        data-scene-prompt="{{ $scene->prompt ?? '' }}">
-                                    <i class="bi bi-arrow-clockwise me-2"></i>Regenerate
-                                </button>
-                                <button type="button" class="btn action-btn btn-upload" data-bs-toggle="modal" data-bs-target="#uploadModal{{ $scene->id }}">
-                                    <i class="bi bi-upload me-2"></i>Upload Custom
-                                </button>
-                                <button type="button" class="btn action-btn btn-overlay" onclick="toggleOverlayControls({{ $scene->id }})">
-                                    <i class="bi bi-layers me-2"></i>Overlays
-                                </button>
-                            </div>
-
-                            <!-- Overlay Controls (Initially Hidden) -->
-                            <div class="overlay-controls mt-3" id="overlay-controls-{{ $scene->id }}" style="display: none;">
-                                <div class="card">
-                                    <div class="card-body p-3">
-                                        <h6 class="fw-bold mb-3"><i class="bi bi-layers me-2"></i>Video Overlays</h6>
-
-                                        <div class="row g-3">
-                                            <!-- Logo Overlay -->
-                                            <div class="col-md-4">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="logo-toggle-{{ $scene->id }}"
-                                                           onchange="toggleOverlay({{ $scene->id }}, 'logo', this.checked)">
-                                                    <label class="form-check-label fw-semibold" for="logo-toggle-{{ $scene->id }}">
-                                                        <i class="bi bi-image me-1"></i>Logo
-                                                    </label>
-                                                </div>
-                                                <small class="text-muted">Top-right corner</small>
-                                            </div>
-
-                                            <!-- CTA Overlay -->
-                                            <div class="col-md-4">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="cta-toggle-{{ $scene->id }}"
-                                                           onchange="toggleOverlay({{ $scene->id }}, 'cta', this.checked)">
-                                                    <label class="form-check-label fw-semibold" for="cta-toggle-{{ $scene->id }}">
-                                                        <i class="bi bi-cursor me-1"></i>Call to Action
-                                                    </label>
-                                                </div>
-                                                <small class="text-muted">Bottom center</small>
-                                            </div>
-
-                                            <!-- Text Overlay -->
-                                            <div class="col-md-4">
-                                                <div class="form-check">
-                                                    <input class="form-check-input" type="checkbox" id="text-toggle-{{ $scene->id }}"
-                                                           onchange="toggleOverlay({{ $scene->id }}, 'text', this.checked)">
-                                                    <label class="form-check-label fw-semibold" for="text-toggle-{{ $scene->id }}">
-                                                        <i class="bi bi-type me-1"></i>Text
-                                                    </label>
-                                                </div>
-                                                <small class="text-muted">Bottom overlay</small>
-                                            </div>
+                                <div class="professional-timeline" id="timeline-{{ $scene->id }}">
+                                    <div class="timeline-track"></div>
+                                    <div class="trim-selection" id="trim-selection-{{ $scene->id }}"
+                                         style="left:0%;width:{{ $initialWidth }}%;"
+                                         data-scene-duration="{{ $sceneDuration }}">
+                                        <div class="trim-handle left-handle" data-handle="start"><div class="handle-grip"></div></div>
+                                        <div class="trim-handle right-handle" data-handle="end"><div class="handle-grip"></div></div>
+                                        <div class="selection-info">
+                                            <span class="duration-badge">{{ number_format($sceneDuration, 1) }}s</span>
                                         </div>
-
-                                        <!-- Text Input for Custom Text -->
-                                        <div class="mt-3" id="text-input-{{ $scene->id }}" style="display: none;">
-                                            <label class="form-label fw-semibold">Custom Text:</label>
-                                            <input type="text" class="form-control" placeholder="Enter your text..."
-                                                   onchange="updateOverlayText({{ $scene->id }}, this.value)">
-                                        </div>
+                                    </div>
+                                    <div class="timeline-playhead" id="playhead-{{ $scene->id }}">
+                                        <div class="playhead-line"></div>
+                                        <div class="playhead-handle"><i class="bi bi-caret-down-fill"></i></div>
+                                    </div>
+                                    <div class="time-markers" id="time-markers-{{ $scene->id }}"></div>
+                                </div>
+                                <div class="timeline-controls">
+                                    <div class="trim-info">
+                                        <small class="text-muted">
+                                            In: <span class="start-time-display" id="start-time-{{ $scene->id }}">0:00.0</span> &nbsp;
+                                            Out: <span class="end-time-display" id="end-time-{{ $scene->id }}">0:00.0</span>
+                                        </small>
                                     </div>
                                 </div>
                             </div>
-
-                            @if($scene->status == 'regenerating')
-                                <div class="regenerating-indicator">
-                                    <div class="loading-spinner"></div>
-                                    <span>Regenerating scene...</span>
-                                </div>
                             @endif
                         </div>
+                        @endif
+
+                        <!-- Action Buttons -->
+                        <div class="scene-actions-row">
+                            <button type="button" class="btn action-btn btn-regenerate"
+                                    onclick="regenerateScene({{ $scene->id }})"
+                                    data-scene-keywords="{{ $scene->keywords }}"
+                                    data-scene-prompt="{{ $scene->prompt ?? '' }}">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Regenerate
+                            </button>
+                            <button type="button" class="btn action-btn btn-upload" data-bs-toggle="modal" data-bs-target="#uploadModal{{ $scene->id }}">
+                                <i class="bi bi-upload me-1"></i>Upload Custom
+                            </button>
+                            <button type="button" class="btn action-btn btn-overlay" onclick="toggleOverlayControls({{ $scene->id }})">
+                                <i class="bi bi-layers me-1"></i>Overlays
+                            </button>
+                        </div>
+
+                        <!-- Overlay Controls (Initially Hidden) -->
+                        <div class="overlay-controls mt-3" id="overlay-controls-{{ $scene->id }}" style="display:none;">
+                            <div class="card">
+                                <div class="card-body p-3">
+                                    <h6 class="fw-bold mb-3"><i class="bi bi-layers me-2"></i>Video Overlays</h6>
+                                    <div class="row g-3">
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="logo-toggle-{{ $scene->id }}"
+                                                       onchange="toggleOverlay({{ $scene->id }}, 'logo', this.checked)">
+                                                <label class="form-check-label fw-semibold" for="logo-toggle-{{ $scene->id }}">
+                                                    <i class="bi bi-image me-1"></i>Logo
+                                                </label>
+                                            </div>
+                                            <small class="text-muted">Top-right corner</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="cta-toggle-{{ $scene->id }}"
+                                                       onchange="toggleOverlay({{ $scene->id }}, 'cta', this.checked)">
+                                                <label class="form-check-label fw-semibold" for="cta-toggle-{{ $scene->id }}">
+                                                    <i class="bi bi-cursor me-1"></i>Call to Action
+                                                </label>
+                                            </div>
+                                            <small class="text-muted">Bottom center</small>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="text-toggle-{{ $scene->id }}"
+                                                       onchange="toggleOverlay({{ $scene->id }}, 'text', this.checked)">
+                                                <label class="form-check-label fw-semibold" for="text-toggle-{{ $scene->id }}">
+                                                    <i class="bi bi-type me-1"></i>Text
+                                                </label>
+                                            </div>
+                                            <small class="text-muted">Bottom overlay</small>
+                                        </div>
+                                    </div>
+                                    <div class="mt-3" id="text-input-{{ $scene->id }}" style="display:none;">
+                                        <label class="form-label fw-semibold">Custom Text:</label>
+                                        <input type="text" class="form-control" placeholder="Enter your text..."
+                                               onchange="updateOverlayText({{ $scene->id }}, this.value)">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if($scene->status == 'regenerating')
+                            <div class="regenerating-indicator mt-3">
+                                <div class="loading-spinner"></div>
+                                <span>Regenerating scene...</span>
+                            </div>
+                        @endif
                     </div>
                 </div>
-                @empty
-                <div class="col-12">
-                    <div class="text-center py-5">
-                        <i class="bi bi-camera-video text-muted" style="font-size: 4rem;"></i>
-                        <h4 class="text-muted mt-3">No scenes available</h4>
-                        <p class="text-muted">Please generate scenes first.</p>
-                    </div>
-                </div>
-                @endforelse
             </div>
+            @empty
+            <div class="text-center py-5">
+                <i class="bi bi-camera-video text-muted" style="font-size:4rem;"></i>
+                <h4 class="text-muted mt-3">No scenes available</h4>
+                <p class="text-muted">Please generate scenes first.</p>
+            </div>
+            @endforelse
 
 
 
@@ -2938,7 +3425,7 @@
                     const sceneDuration = parseFloat(this.trimSelection.dataset.sceneDuration) || 5;
 
                     // ALWAYS show scene duration for initial setup, even if it exceeds video duration
-                    if (this.actualScenePercent && this.trimStart === 0) {
+                    if (this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 1.0) {
                         // This is initial setup - ALWAYS show exact scene duration
                         duration = sceneDuration;
                         console.log(`🎯 Duration badge showing scene duration: ${duration}s (scene needs ${sceneDuration}s, video has ${this.video.duration}s)`);
@@ -2977,8 +3464,8 @@
                 }
 
                 // Update trim info with proper decimal formatting (for precision)
-                const startTimeDisplay = document.querySelector(`[data-scene-id="${this.sceneId}"] .start-time-display`);
-                const endTimeDisplay = document.querySelector(`[data-scene-id="${this.sceneId}"] .end-time-display`);
+                const startTimeDisplay = document.getElementById(`start-time-${this.sceneId}`);
+                const endTimeDisplay = document.getElementById(`end-time-${this.sceneId}`);
 
                 console.log(`🔍 Time display elements found:`, {
                     startTimeDisplay: !!startTimeDisplay,
@@ -2988,9 +3475,11 @@
 
                 if (startTimeDisplay && endTimeDisplay) {
                     let startTime, endTime;
+                    let isInitialSceneWindow = false;
                     
                     // Use actual scene percentage for accurate timing when available
                     if (this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 1.0) {
+                        isInitialSceneWindow = true;
                         // This is the initial scene duration display - use accurate scene timing
                         startTime = 0; // Scene always starts at 0
                         endTime = (this.actualScenePercent / 100) * this.video.duration;
@@ -3018,11 +3507,12 @@
                 }
 
                 // Update selected duration in header with proper decimal format (3.4s style)
-                const selectedDurationEl = document.querySelector(`[data-scene-id="${this.sceneId}"] .selected-duration`);
+                const selectedDurationEl = document.getElementById(`header-duration-${this.sceneId}`);
                 if (selectedDurationEl) {
                     // Use actual scene percentage if available (for initial display), otherwise use visual trim
                     let duration;
-                    if (this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 1.0) {
+                    const isInitialSceneWindow = this.actualScenePercent && this.trimStart === 0 && Math.abs(this.trimEnd - this.actualScenePercent) < 1.0;
+                    if (isInitialSceneWindow) {
                         // This is the initial scene duration display - use exact scene duration
                         duration = parseFloat(this.trimSelection.dataset.sceneDuration) || 5;
                         console.log(`🎯 Using exact scene duration: ${duration.toFixed(2)}s (from dataset)`);
@@ -3033,7 +3523,27 @@
                     }
 
                     selectedDurationEl.textContent = this.formatDuration(duration);
+                    this.updateSuggestedDurationState(duration, isInitialSceneWindow);
+                } else {
+                    const duration = ((this.trimEnd - this.trimStart) / 100) * this.video.duration;
+                    this.updateSuggestedDurationState(duration, false);
                 }
+            }
+
+            updateSuggestedDurationState(currentDuration, isInitialSceneWindow = false) {
+                const suggestedEl = document.getElementById(`suggested-duration-${this.sceneId}`);
+                if (!suggestedEl) return;
+
+                const defaultDuration = parseFloat(suggestedEl.dataset.defaultDuration || this.trimSelection.dataset.sceneDuration || 0);
+                if (!defaultDuration || Number.isNaN(defaultDuration)) return;
+
+                const valueEl = suggestedEl.querySelector('.suggested-duration-value');
+                if (valueEl) {
+                    valueEl.textContent = this.formatDuration(defaultDuration);
+                }
+
+                const hasChanged = !isInitialSceneWindow && Math.abs(currentDuration - defaultDuration) > 0.1;
+                suggestedEl.classList.toggle('is-changed', hasChanged);
             }
 
             updateDurationDisplay(sceneDuration) {
@@ -3045,7 +3555,7 @@
                 }
 
                 // Update the selected duration display to match scene duration initially
-                const selectedDurationEl = document.querySelector(`[data-scene-id="${this.sceneId}"] .selected-duration`);
+                const selectedDurationEl = document.getElementById(`header-duration-${this.sceneId}`);
                 if (selectedDurationEl && sceneDuration) {
                     selectedDurationEl.textContent = this.formatDuration(sceneDuration);
                     console.log(`📊 Updated selected duration for scene ${this.sceneId} to ${sceneDuration}s`);
@@ -3059,7 +3569,7 @@
                     durationBadge.textContent = this.formatDuration(sceneDuration);
                 }
 
-                const selectedDurationEl = document.querySelector(`[data-scene-id="${this.sceneId}"] .selected-duration`);
+                const selectedDurationEl = document.getElementById(`header-duration-${this.sceneId}`);
                 if (selectedDurationEl) {
                     selectedDurationEl.textContent = this.formatDuration(sceneDuration);
                 }
@@ -5715,6 +6225,20 @@
             }
         }
 
+        // Script collapsible toggle
+        function toggleScript(sceneId) {
+            const content = document.getElementById(`script-content-${sceneId}`);
+            const chevron = document.getElementById(`script-chevron-${sceneId}`);
+            if (!content || !chevron) return;
+            if (content.style.display === 'none') {
+                content.style.display = '';
+                chevron.classList.replace('closed', 'open');
+            } else {
+                content.style.display = 'none';
+                chevron.classList.replace('open', 'closed');
+            }
+        }
+
         function toggleOverlay(sceneId, overlayType, isEnabled) {
             const overlay = document.getElementById(`${overlayType}-overlay-${sceneId}`);
             if (overlay) {
@@ -6177,8 +6701,8 @@
             console.log(`📏 Scene ${sceneId} duration: ${sceneDuration}s`);
             
             // Get time display elements
-            const startTimeDisplay = sceneElement.querySelector('.start-time-display');
-            const endTimeDisplay = sceneElement.querySelector('.end-time-display');
+            const startTimeDisplay = document.getElementById(`start-time-${sceneId}`);
+            const endTimeDisplay = document.getElementById(`end-time-${sceneId}`);
             
             if (startTimeDisplay && endTimeDisplay) {
                 // Set start time to 0, end time to scene duration

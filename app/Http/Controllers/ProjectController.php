@@ -6,6 +6,7 @@ use App\Jobs\GenerateScenesFromVoiceJob;
 
 use App\Models\Project;
 use App\Models\Scene;
+use App\Services\ProjectProcessingLogService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
@@ -66,6 +67,17 @@ class ProjectController extends Controller
             'status' => 'processing'
         ]);
 
+        ProjectProcessingLogService::write(
+            $project->id,
+            'Project created and entered processing state.',
+            [
+                'voiceover_option' => $project->voiceover_option,
+                'language' => $project->language,
+                'script_option' => $project->script_option,
+            ],
+            'controller'
+        );
+
         // Call n8n webhook based on voiceover option
         if ($validated['voiceover_option'] === 'upload' && $voiceoverPath) {
             // If user uploaded voiceover, send request immediately and show processing page
@@ -84,6 +96,13 @@ class ProjectController extends Controller
                 'project_id' => $project->id,
                 'queue_connection' => config('queue.default')
             ]);
+
+            ProjectProcessingLogService::write(
+                $project->id,
+                'Dispatching GenerateScenesFromVoiceJob.',
+                ['queue_connection' => config('queue.default')],
+                'controller'
+            );
 
             GenerateScenesFromVoiceJob::dispatch($project);
 
@@ -111,6 +130,13 @@ class ProjectController extends Controller
             'project_status' => $project->status,
             'user_id' => auth()->id()
         ]);
+
+        ProjectProcessingLogService::write(
+            $project->id,
+            'Processing page opened by user.',
+            ['status' => $project->status, 'user_id' => auth()->id()],
+            'controller'
+        );
 
         return view('projects.processing', compact('project'));
     }
@@ -788,6 +814,23 @@ class ProjectController extends Controller
         return response()->json($response);
     }
 
+    public function processingLogs(Request $request, Project $project)
+    {
+        $this->authorize('view', $project);
+
+        $sinceMs = (int) $request->query('since', 0);
+        $limit = (int) $request->query('limit', 120);
+        $logData = ProjectProcessingLogService::readSince($project->id, $sinceMs, $limit);
+
+        return response()->json([
+            'project_id' => $project->id,
+            'status' => $project->status,
+            'entries' => $logData['entries'],
+            'next_since' => $logData['next_since'],
+            'log_file' => basename(ProjectProcessingLogService::getLogPath($project->id)),
+        ]);
+    }
+
     /**
      * Calculate progress percentage based on project status
      */
@@ -859,9 +902,21 @@ class ProjectController extends Controller
 
             // Dispatch the job again
             if ($project->voiceover_option === 'upload' && $project->voiceover_file) {
+                ProjectProcessingLogService::write(
+                    $project->id,
+                    'Retry requested. Dispatching GenerateScenesFromVoiceJob again.',
+                    ['voiceover_file' => $project->voiceover_file],
+                    'controller'
+                );
                 GenerateScenesFromVoiceJob::dispatch($project);
             } else {
                 // For AI/no voiceover projects, trigger video generation
+                ProjectProcessingLogService::write(
+                    $project->id,
+                    'Retry requested. Triggering non-upload video generation flow.',
+                    ['voiceover_option' => $project->voiceover_option],
+                    'controller'
+                );
                 $this->triggerVideoGeneration($project);
             }
 

@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use Exception;
 use App\Models\Project;
+use App\Services\ProjectProcessingLogService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
@@ -24,9 +26,10 @@ class SceneGenerationService
      * - Uses Deepgram for transcription with fallback mechanisms
      * - Handles script mismatches gracefully
      * 
-     * 🤖 SCENE GENERATION:
-     * - All languages use Gemini for scene and subtitle generation
-     * - Maintains consistent output format regardless of transcription method
+    * 🤖 SCENE GENERATION:
+    * - All languages use an OpenRouter-first LLM chain for scene and subtitle generation
+    * - Gemini is retained as the final fallback provider
+    * - Maintains consistent output format regardless of transcription method
      * 
      * @param Project $project The project containing voiceover and script
      * @return array Scene data with videos, transcript, and subtitles
@@ -268,8 +271,8 @@ class SceneGenerationService
                 $syntheticTiming = $this->estimateTimingWhenNoTranscript($voiceoverFullPath, $script);
                 $sceneData = $this->generateScenePhrases($script, $syntheticTiming, $project->language);
             } else {
-                // Step 4: Generate scene phrases using Gemini
-                $this->logToCustomFile('🤖 Step 4: Starting scene generation with Gemini', [
+                // Step 4: Generate scene phrases using the configured provider chain
+                $this->logToCustomFile('🤖 Step 4: Starting scene generation with provider fallback chain', [
                     'project_id' => $project->id,
                     'script' => $script,
                     'transcript_words_count' => count($transcriptData['words'] ?? []),
@@ -278,17 +281,15 @@ class SceneGenerationService
                     'is_arabic' => $isArabic ? 'yes' : 'no',
                     'transcript_timing_ready' => isset($transcriptData['words'][0]['start']) ? 'yes' : 'no',
                     'subtitle_timing_compatible' => isset($transcriptData['words'][0]['start']) ? 'yes - will preserve transcript timing' : 'no - will use estimated timing',
-                    'gemini_url' => config('services.gemini.base_url'),
-                    'gemini_api_key_length' => strlen(config('services.gemini.api_key')),
+                    'providers' => $this->getSceneGenerationProviderSummary(),
                     'timestamp' => now()->toISOString()
                 ]);
             try {
                 $sceneData = $this->generateScenePhrases($script, $transcriptData, $project->language);
             } catch (\Exception $e) {
-                // If Gemini reports mismatch, retry using transcript text as script (voice-first fallback)
-                if (stripos($e->getMessage(), 'Audio does not match script') !== false || 
-                    stripos($e->getMessage(), 'Gemini error: Audio does not match script') !== false) {
-                    $this->logToCustomFile('🔁 Gemini mismatch detected, retrying with transcript as script', [
+                // If the provider reports mismatch, retry using transcript text as script (voice-first fallback)
+                if (stripos($e->getMessage(), 'Audio does not match script') !== false) {
+                    $this->logToCustomFile('🔁 Provider mismatch detected, retrying with transcript as script', [
                         'project_id' => $project->id,
                         'original_script_length' => strlen($script),
                         'transcript_text_length' => strlen($transcriptData['text'] ?? '')
@@ -589,63 +590,87 @@ class SceneGenerationService
     }
 
     /**
-     * Generate scene phrases using Gemini
+     * Generate scene phrases using the configured LLM provider chain.
      */
     private function generateScenePhrases(string $script, array $transcriptData, string $language): array
     {
         try {
-            Log::info('🤖 Generating scene phrases with Gemini', [
+            Log::info('🤖 Generating scene phrases with provider fallback chain', [
                 'script_length' => strlen($script),
                 'transcript_words' => count($transcriptData['words'])
             ]);
 
             $prompt = $this->buildGeminiPrompt($script, $transcriptData, $language);
 
-            $response = Http::withHeaders([
-                'Content-Type' => 'application/json'
-            ])->timeout(120) // 2 minutes timeout
-            ->retry(3, 1000) // Retry 3 times with 1 second delay
-            ->withoutVerifying() // Disable SSL verification for local development
-            ->post(config('services.gemini.base_url') . '?key=' . config('services.gemini.api_key'), [
-                'contents' => [
-                    [
-                        'role' => 'user',
-                        'parts' => [
-                            ['text' => $prompt]
-                        ]
-                    ]
-                ]
-            ]);
-
-            if (!$response->successful()) {
-                throw new \Exception('Gemini API request failed: ' . $response->body());
+            $providers = $this->getSceneGenerationProviders();
+            if ($providers === []) {
+                throw new \RuntimeException('No scene generation providers are configured. Add OPENROUTER_API_KEY and model(s), or GEMINI_API_KEY as a final fallback.');
             }
 
-            $data = $response->json();
-            $rawText = $data['candidates'][0]['content']['parts'][0]['text'] ?? '';
+            $lastError = null;
+            $providerErrors = [];
+            $providerCount = count($providers);
 
-            // Parse the JSON response
-            $rawText = preg_replace('/```json\s*|\s*```/s', '', $rawText);
-            $parsed = json_decode($rawText, true);
+            foreach ($providers as $index => $provider) {
+                $attemptNumber = $index + 1;
 
-            // Check if Gemini returned an error
-            if ($parsed && isset($parsed['error'])) {
-                throw new \Exception('Gemini error: ' . $parsed['error']);
+                $this->logToCustomFile('🤖 Scene generation provider attempt', [
+                    'provider' => $provider['label'],
+                    'model' => $provider['model'],
+                    'attempt' => $attemptNumber,
+                    'total_attempts' => $providerCount,
+                    'prompt_length' => strlen($prompt)
+                ]);
+
+                try {
+                    $rawText = $this->requestSceneGenerationFromProvider($provider, $prompt);
+                    $parsed = $this->parseSceneGenerationResponse($rawText, $provider['label'], $provider['model']);
+
+                    $this->logToCustomFile('✅ Scene generation provider succeeded', [
+                        'provider' => $provider['label'],
+                        'model' => $provider['model'],
+                        'attempt' => $attemptNumber,
+                        'phrases_count' => count($parsed['phrases']),
+                        'subtitles_count' => count($parsed['subtitles_script'] ?? [])
+                    ]);
+
+                    Log::info('✅ Scene phrase provider succeeded', [
+                        'provider' => $provider['label'],
+                        'model' => $provider['model'],
+                        'attempt' => $attemptNumber,
+                    ]);
+
+                    return [
+                        'phrases' => $parsed['phrases'],
+                        'subtitles_script' => $parsed['subtitles_script'] ?? []
+                    ];
+                } catch (\Throwable $providerError) {
+                    $lastError = $providerError;
+                    $providerErrors[] = $provider['label'] . ' [' . $provider['model'] . ']: ' . $providerError->getMessage();
+
+                    $this->logToCustomFile('❌ Scene generation provider failed', [
+                        'provider' => $provider['label'],
+                        'model' => $provider['model'],
+                        'attempt' => $attemptNumber,
+                        'total_attempts' => $providerCount,
+                        'error' => $providerError->getMessage(),
+                        'exception_class' => get_class($providerError)
+                    ]);
+
+                    Log::warning('❌ Scene phrase provider failed', [
+                        'provider' => $provider['label'],
+                        'model' => $provider['model'],
+                        'attempt' => $attemptNumber,
+                        'error' => $providerError->getMessage(),
+                    ]);
+                }
             }
 
-            if (!$parsed || !isset($parsed['phrases']) || !is_array($parsed['phrases'])) {
-                throw new \Exception('Invalid response format from Gemini: ' . $rawText);
-            }
+            $summary = $providerErrors === []
+                ? ($lastError?->getMessage() ?? 'Unknown provider error')
+                : implode(' | ', $providerErrors);
 
-            Log::info('✅ Scene phrases generated', [
-                'phrases_count' => count($parsed['phrases']),
-                'subtitles_count' => count($parsed['subtitles_script'] ?? [])
-            ]);
-
-            return [
-                'phrases' => $parsed['phrases'],
-                'subtitles_script' => $parsed['subtitles_script'] ?? []
-            ];
+            throw new \RuntimeException('All scene generation providers failed: ' . $summary);
 
         } catch (\Exception $e) {
             $this->logToCustomFile('❌ Scene phrase generation failed', [
@@ -659,8 +684,289 @@ class SceneGenerationService
         }
     }
 
+    private function getSceneGenerationProviders(): array
+    {
+        $providers = [];
+        $openRouterApiKey = trim((string) config('services.openrouter.api_key'));
+        $openRouterModels = config('services.openrouter.models', []);
+
+        if ($openRouterApiKey !== '' && is_array($openRouterModels)) {
+            foreach ($openRouterModels as $model) {
+                $model = trim((string) $model);
+                if ($model === '') {
+                    continue;
+                }
+
+                $providers[] = [
+                    'provider' => 'openrouter',
+                    'label' => 'OpenRouter',
+                    'model' => $model,
+                ];
+            }
+        }
+
+        $geminiApiKey = trim((string) config('services.gemini.api_key'));
+        $geminiFallbackEnabled = (bool) config('services.scene_generation.enable_gemini_fallback', false);
+        if ($geminiFallbackEnabled && $geminiApiKey !== '') {
+            $providers[] = [
+                'provider' => 'gemini',
+                'label' => 'Gemini',
+                'model' => $this->extractGeminiModelName(),
+            ];
+        }
+
+        return $providers;
+    }
+
+    private function getSceneGenerationProviderSummary(): array
+    {
+        return array_map(function (array $provider) {
+            return [
+                'provider' => $provider['label'],
+                'model' => $provider['model'],
+            ];
+        }, $this->getSceneGenerationProviders());
+    }
+
+    private function requestSceneGenerationFromProvider(array $provider, string $prompt): string
+    {
+        return match ($provider['provider']) {
+            'openrouter' => $this->requestOpenRouterSceneGeneration($provider['model'], $prompt),
+            'gemini' => $this->requestGeminiSceneGeneration($provider['model'], $prompt),
+            default => throw new \RuntimeException('Unsupported scene generation provider: ' . $provider['provider']),
+        };
+    }
+
+    private function requestOpenRouterSceneGeneration(string $model, string $prompt): string
+    {
+        $payload = [
+            'model' => $model,
+            'messages' => [
+                [
+                    'role' => 'user',
+                    'content' => $prompt,
+                ],
+            ],
+            'temperature' => 0.2,
+            // Cap output size so free-tier reasoning models cannot run away and stall workers.
+            'max_tokens' => 2600,
+        ];
+
+        // StepFun requires reasoning on this endpoint.
+        if (str_starts_with($model, 'stepfun/')) {
+            $payload['reasoning'] = [
+                'enabled' => true,
+                'max_tokens' => 64,
+                'exclude' => true,
+            ];
+            $payload['response_format'] = ['type' => 'json_object'];
+        }
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . config('services.openrouter.api_key'),
+            'Content-Type' => 'application/json',
+            'HTTP-Referer' => config('app.url'),
+            'X-Title' => config('app.name', 'VidsAI'),
+        ])
+            ->timeout(120)
+            ->connectTimeout(10)
+            ->retry(2, 1000)
+            ->withoutVerifying()
+            ->post(config('services.openrouter.base_url'), $payload);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException($this->formatProviderHttpError('OpenRouter', $model, $response));
+        }
+
+        $message = $response->json('choices.0.message');
+        $rawText = $this->normalizeProviderTextContent(is_array($message) ? ($message['content'] ?? null) : null);
+
+        // Some reasoning-first models may leave content empty and put text in reasoning fields.
+        if ($rawText === '' && is_array($message)) {
+            $rawText = $this->normalizeProviderTextContent($message['reasoning'] ?? null);
+        }
+
+        if ($rawText === '' && is_array($message) && isset($message['reasoning_details']) && is_array($message['reasoning_details'])) {
+            $reasoningParts = [];
+            foreach ($message['reasoning_details'] as $detail) {
+                if (is_array($detail) && isset($detail['text']) && is_string($detail['text'])) {
+                    $reasoningParts[] = $detail['text'];
+                }
+            }
+            $rawText = trim(implode("\n", $reasoningParts));
+        }
+
+        if ($rawText === '') {
+            throw new \RuntimeException(
+                'OpenRouter returned an empty response for model ' . $model . '. Body preview: ' .
+                $this->abbreviateProviderBody((string) $response->body(), 600)
+            );
+        }
+
+        return $rawText;
+    }
+
+    private function requestGeminiSceneGeneration(string $model, string $prompt): string
+    {
+        $response = Http::withHeaders([
+            'Content-Type' => 'application/json'
+        ])
+            ->timeout(120)
+            ->connectTimeout(10)
+            ->retry(3, 1000)
+            ->withoutVerifying()
+            ->post(config('services.gemini.base_url') . '?key=' . config('services.gemini.api_key'), [
+                'contents' => [
+                    [
+                        'role' => 'user',
+                        'parts' => [
+                            ['text' => $prompt]
+                        ]
+                    ]
+                ]
+            ]);
+
+        if (!$response->successful()) {
+            throw new \RuntimeException($this->formatProviderHttpError('Gemini', $model, $response));
+        }
+
+        $rawText = (string) ($response->json('candidates.0.content.parts.0.text') ?? '');
+        if ($rawText === '') {
+            throw new \RuntimeException('Gemini returned an empty response for model ' . $model . '.');
+        }
+
+        return $rawText;
+    }
+
+    private function parseSceneGenerationResponse(string $rawText, string $providerLabel, string $model): array
+    {
+        $cleaned = preg_replace('/```json\s*|\s*```/s', '', $rawText) ?? $rawText;
+        $parsed = json_decode(trim($cleaned), true);
+
+        if (!$parsed) {
+            $jsonBlock = $this->extractFirstJsonObject($cleaned);
+            if ($jsonBlock !== null) {
+                $parsed = json_decode($jsonBlock, true);
+            }
+        }
+
+        if ($parsed && isset($parsed['error'])) {
+            throw new \RuntimeException($providerLabel . ' error (' . $model . '): ' . $parsed['error']);
+        }
+
+        if (!$parsed || !isset($parsed['phrases']) || !is_array($parsed['phrases'])) {
+            throw new \RuntimeException('Invalid response format from ' . $providerLabel . ' (' . $model . '): ' . mb_substr(trim($rawText), 0, 1500));
+        }
+
+        return $parsed;
+    }
+
+    private function extractFirstJsonObject(string $text): ?string
+    {
+        $start = strpos($text, '{');
+        if ($start === false) {
+            return null;
+        }
+
+        $depth = 0;
+        $inString = false;
+        $escaped = false;
+        $length = strlen($text);
+
+        for ($i = $start; $i < $length; $i++) {
+            $ch = $text[$i];
+
+            if ($inString) {
+                if ($escaped) {
+                    $escaped = false;
+                    continue;
+                }
+                if ($ch === '\\') {
+                    $escaped = true;
+                    continue;
+                }
+                if ($ch === '"') {
+                    $inString = false;
+                }
+                continue;
+            }
+
+            if ($ch === '"') {
+                $inString = true;
+                continue;
+            }
+
+            if ($ch === '{') {
+                $depth++;
+                continue;
+            }
+
+            if ($ch === '}') {
+                $depth--;
+                if ($depth === 0) {
+                    return substr($text, $start, $i - $start + 1);
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function formatProviderHttpError(string $providerLabel, string $model, $response): string
+    {
+        $status = $response->status();
+        $excerpt = $this->abbreviateProviderBody((string) $response->body());
+
+        return $providerLabel . ' request failed for model ' . $model . ' with HTTP ' . $status . ': ' . $excerpt;
+    }
+
+    private function abbreviateProviderBody(string $body, int $limit = 1500): string
+    {
+        $body = trim($body);
+        if ($body === '') {
+            return 'Empty response body';
+        }
+
+        return mb_substr($body, 0, $limit);
+    }
+
+    private function normalizeProviderTextContent(mixed $content): string
+    {
+        if (is_string($content)) {
+            return $content;
+        }
+
+        if (!is_array($content)) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($content as $item) {
+            if (is_string($item)) {
+                $parts[] = $item;
+                continue;
+            }
+
+            if (is_array($item) && isset($item['text']) && is_string($item['text'])) {
+                $parts[] = $item['text'];
+            }
+        }
+
+        return trim(implode("\n", $parts));
+    }
+
+    private function extractGeminiModelName(): string
+    {
+        $baseUrl = (string) config('services.gemini.base_url');
+        if (preg_match('/models\/([^:\/?]+)/', $baseUrl, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return 'configured-gemini-model';
+    }
+
     /**
-     * Build the prompt for Gemini
+     * Build the prompt for scene generation providers.
      */
     private function buildGeminiPrompt(string $script, array $transcriptData, string $language): string
     {
@@ -746,17 +1052,17 @@ You are given:
 
 ### OUTPUT FORMAT (return ONLY this):
 {
-  \"phrases\": [
-    {
-      \"phrase\": \"Discover EcoSip\",
-      \"keywords\": [\"water bottle\"],
-      \"start_time\": 0.0,
-      \"end_time\": 4.8,
-      \"duration_seconds\": 4.8,
-      \"prompt\": \"A cinematic scene...\",
-      \"subtitles_script\": [\"Discover EcoSip\"]
-    }
-  ],
+    \"phrases\": [
+        {
+            \"phrase\": \"Discover EcoSip\",
+            \"keywords\": [\"reusable water bottle\", \"eco product bottle\", \"sustainable drink\"],
+            \"start_time\": 0.0,
+            \"end_time\": 4.8,
+            \"duration_seconds\": 4.8,
+            \"prompt\": \"A cinematic scene...\",
+            \"subtitles_script\": [\"Discover EcoSip\"]
+        }
+    ],
   \"subtitles_script\": [
     \"Discover EcoSip\",
     \"the reusable water bottle\",
@@ -835,6 +1141,7 @@ Transcript Words: {$transcriptWords}
     private function searchVideosForPhrases(array $phrases): array
     {
         $videos = [];
+        $usedVideoIds = [];
 
         foreach ($phrases as $phrase) {
             try {
@@ -843,9 +1150,12 @@ Transcript Words: {$transcriptWords}
                     'keywords' => $phrase['keywords']
                 ]);
 
-                $videoData = $this->searchPexelsVideo($phrase['keywords']);
+                $videoData = $this->searchPexelsVideo($phrase['keywords'], $usedVideoIds);
                 
                 if ($videoData) {
+                    if (!empty($videoData['video_id'])) {
+                        $usedVideoIds[] = $videoData['video_id'];
+                    }
                     $videos[] = [
                         'phrase' => $phrase['phrase'],
                         'video_url' => $videoData['video_url'],
@@ -877,93 +1187,121 @@ Transcript Words: {$transcriptWords}
     }
 
     /**
-     * Search for video on Pexels
+     * Search for video on Pexels, trying all keywords with fallback and avoiding duplicate videos
      */
-    private function searchPexelsVideo(array $keywords): ?array
+    private function searchPexelsVideo(array $keywords, array $usedVideoIds = []): ?array
     {
-        try {
-            // Use only the first (and only) keyword for better search results
-            $query = $keywords[0] ?? '';
-            
-            if (empty($query)) {
-                Log::warning('No keyword provided for Pexels search');
-                return null;
-            }
+        $keywords = array_filter($keywords, fn($k) => !empty(trim($k)));
 
-            $response = Http::withHeaders([
-                'Authorization' => config('services.pexels.api_key')
-            ])->timeout(60) // 1 minute timeout
-            ->retry(3, 1000) // Retry 3 times with 1 second delay
-            ->withoutVerifying() // Disable SSL verification for local development
-            ->get(config('services.pexels.base_url'), [
-                'query' => $query,
-                'per_page' => 10,
-                'orientation' => 'landscape'
-            ]);
+        if (empty($keywords)) {
+            Log::warning('No keywords provided for Pexels search');
+            return null;
+        }
 
-            if (!$response->successful()) {
-                throw new \Exception('Pexels API request failed: ' . $response->body());
-            }
+        // Try each keyword in order until we find a good result
+        foreach ($keywords as $index => $query) {
+            $query = trim($query);
+            try {
+                Log::info('🔎 Trying Pexels keyword', [
+                    'keyword' => $query,
+                    'attempt' => $index + 1,
+                    'of' => count($keywords)
+                ]);
 
-            $data = $response->json();
-            $videos = $data['videos'] ?? [];
+                $response = Http::withHeaders([
+                    'Authorization' => config('services.pexels.api_key')
+                ])->timeout(60)
+                ->retry(2, 1000)
+                ->withoutVerifying()
+                ->get(config('services.pexels.base_url'), [
+                    'query' => $query,
+                    'per_page' => 15,
+                    'orientation' => 'landscape'
+                ]);
 
-            if (empty($videos)) {
-                Log::warning('No videos found for keywords', ['keywords' => $keywords]);
-                return null;
-            }
+                if (!$response->successful()) {
+                    Log::warning('Pexels API failed for keyword', ['keyword' => $query, 'status' => $response->status()]);
+                    continue;
+                }
 
-            // Get the first video
-            $video = $videos[0];
-            $duration = $video['duration'] ?? 0;
-            $isShortEnough = $duration <= 30;
+                $data = $response->json();
+                $videos = $data['videos'] ?? [];
 
-            // Filter MP4 files only
-            $mp4Files = array_filter($video['video_files'] ?? [], function($file) {
-                return $file['file_type'] === 'video/mp4';
-            });
+                if (empty($videos)) {
+                    Log::info('No videos found, trying next keyword', ['keyword' => $query]);
+                    continue;
+                }
 
-            // Sort files by height (resolution) descending
-            usort($mp4Files, function($a, $b) {
-                return ($b['height'] ?? 0) - ($a['height'] ?? 0);
-            });
+                // Filter out already-used video IDs to avoid repeating the same clip
+                $freshVideos = array_filter($videos, function($v) use ($usedVideoIds) {
+                    return !in_array($v['id'], $usedVideoIds);
+                });
 
-            // Prefer 1080p or 720p if available and video is short
-            $preferredFile = null;
-            if ($isShortEnough) {
+                // Fall back to full results if all are used
+                $candidateVideos = !empty($freshVideos) ? array_values($freshVideos) : array_values($videos);
+
+                // Pick a random video from top 5 candidates for variety
+                $topCandidates = array_slice($candidateVideos, 0, 5);
+                $video = $topCandidates[array_rand($topCandidates)];
+
+                $duration = $video['duration'] ?? 0;
+                $isShortEnough = $duration <= 30;
+
+                // Filter MP4 files only
+                $mp4Files = array_values(array_filter($video['video_files'] ?? [], function($file) {
+                    return $file['file_type'] === 'video/mp4';
+                }));
+
+                if (empty($mp4Files)) {
+                    Log::info('No MP4 files, trying next keyword', ['video_id' => $video['id'] ?? '?']);
+                    continue;
+                }
+
+                // Sort files by height (resolution) descending
+                usort($mp4Files, function($a, $b) {
+                    return ($b['height'] ?? 0) - ($a['height'] ?? 0);
+                });
+
+                // Prefer 1080p or 720p
+                $preferredFile = null;
                 foreach ($mp4Files as $file) {
                     if (in_array($file['height'], [1080, 720])) {
                         $preferredFile = $file;
                         break;
                     }
                 }
+
+                $bestFile = $preferredFile ?? $mp4Files[0];
+
+                Log::info('✅ Pexels video selected', [
+                    'keyword_used' => $query,
+                    'video_id' => $video['id'],
+                    'resolution' => ($bestFile['width'] ?? '?') . 'x' . ($bestFile['height'] ?? '?'),
+                ]);
+
+                return [
+                    'video_url' => $bestFile['link'],
+                    'video_id' => $video['id'],
+                    'resolution' => ($bestFile['width'] ?? 0) . 'x' . ($bestFile['height'] ?? 0),
+                    'duration_seconds' => $duration,
+                    'preview' => $video['image'],
+                    'quality_score' => ($bestFile['height'] >= 720 && $isShortEnough) ? "✔ Good (HD)" : "⚠ Acceptable",
+                    'height' => $bestFile['height'],
+                    'width' => $bestFile['width'],
+                    'keyword_used' => $query,
+                ];
+
+            } catch (\Exception $e) {
+                Log::warning('Pexels search exception for keyword', [
+                    'keyword' => $query,
+                    'error' => $e->getMessage()
+                ]);
+                continue;
             }
-
-            // Use fallback if no HD or if video is too long
-            $bestFile = $preferredFile ?? $mp4Files[0] ?? null;
-
-            if (!$bestFile) {
-                Log::warning('No suitable video file found', ['video_id' => $video['id'] ?? 'unknown']);
-                return null;
-            }
-
-            return [
-                'video_url' => $bestFile['link'],
-                'resolution' => $bestFile['width'] . 'x' . $bestFile['height'],
-                'duration_seconds' => $duration,
-                'preview' => $video['image'],
-                'quality_score' => ($bestFile['height'] >= 720 && $isShortEnough) ? "✔ Good (HD)" : "⚠ Acceptable",
-                'height' => $bestFile['height'],
-                'width' => $bestFile['width']
-            ];
-
-        } catch (\Exception $e) {
-            Log::error('❌ Pexels video search failed', [
-                'keywords' => $keywords,
-                'error' => $e->getMessage()
-            ]);
-            return null;
         }
+
+        Log::error('❌ All Pexels keywords exhausted, no video found', ['keywords' => $keywords]);
+        return null;
     }
 
     /**
@@ -2010,6 +2348,11 @@ Transcript Words: {$transcriptWords}
     private function logToCustomFile(string $message, array $context = []): void
     {
         try {
+            $projectId = isset($context['project_id']) ? (int) $context['project_id'] : null;
+            if ($projectId) {
+                ProjectProcessingLogService::write($projectId, $message, $context, 'service');
+            }
+
             $logEntry = [
                 'timestamp' => now()->toISOString(),
                 'message' => $message,

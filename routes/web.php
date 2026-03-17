@@ -68,7 +68,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/review/{project}/confirm', [ProjectController::class, 'confirmScenes'])->name('projects.confirm-scenes');
     Route::get('/processing/{project}', [ProjectController::class, 'processing'])->name('projects.processing');
     Route::get('/processing/{project}/status', [ProjectController::class, 'processingStatus'])->name('projects.processing-status');
-Route::post('/projects/{project}/retry', [ProjectController::class, 'retryProject'])->name('projects.retry');
+    Route::get('/processing/{project}/logs', [ProjectController::class, 'processingLogs'])->name('projects.processing-logs');
+    Route::post('/projects/{project}/retry', [ProjectController::class, 'retryProject'])->name('projects.retry');
     Route::get('/subtitle-styles/{project}', [ProjectController::class, 'subtitleStyles'])->name('projects.subtitle-styles');
     Route::post('/subtitle-styles/{project}/prepare-voiceover', [ProjectController::class, 'prepareVoiceover'])->name('projects.prepare-voiceover');
     Route::post('/subtitle-styles/{project}/generate', [ProjectController::class, 'generateSubtitles'])->name('projects.generate-subtitles');

@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Project;
 use App\Models\Scene;
+use App\Services\ProjectProcessingLogService;
 use App\Services\SceneGenerationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -371,6 +372,13 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
     private function logToCustomFile(string $message, array $context = []): void
     {
         try {
+            ProjectProcessingLogService::write(
+                $this->project->id,
+                $message,
+                $context,
+                'job'
+            );
+
             $logEntry = [
                 'timestamp' => now()->toISOString(),
                 'message' => $message,
