@@ -35,6 +35,7 @@ class Project extends Model
         'trim_response',
         'voiceover_transcript',
         'subtitles_script',
+        'edit_state',
         'last_scene_config',
         'selected_music'
     ];
@@ -45,6 +46,7 @@ class Project extends Model
         'trim_response' => 'array',
         'voiceover_transcript' => 'array',
         'subtitles_script' => 'array',
+        'edit_state' => 'array',
         'selected_music' => 'array',
         'processing_started_at' => 'datetime',
         'processing_completed_at' => 'datetime'

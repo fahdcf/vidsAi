@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Project;
+use App\Services\EditStateBuilder;
 use App\Services\SubtitleGenerationService;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -50,6 +51,11 @@ class ProcessSubtitleGenerationJob implements ShouldQueue
 
             // Use the SubtitleGenerationService
             $subtitleGenerationService = new SubtitleGenerationService();
+
+            // Build and persist EditState for Player preview and future agent workflows.
+            $editState = (new EditStateBuilder())->build($this->project);
+            $this->project->update(['edit_state' => $editState]);
+
             $responseData = $subtitleGenerationService->generateSubtitlesAndMerge($this->project, $this->videoData, $this->projectInfo);
 
             Log::info('✅ Subtitle generation successful', [

@@ -138,15 +138,23 @@ class SubtitleGenerationService
                 $status = $statusData['status'] ?? 'unknown';
 
                 if ($status === 'completed') {
+                    $finalUrl = $statusData['remoteUrl']
+                        ?? $statusData['publicUrl']
+                        ?? $statusData['outputUrl']
+                        ?? $statusData['downloadUrl']
+                        ?? $statusData['download_url']
+                        ?? '';
+
                     Log::info('✅ Render completed', [
                         'render_id' => $renderId,
                         'project_id' => $projectId,
-                        'download_url' => $statusData['download_url'] ?? 'unknown',
+                        'download_url' => $statusData['downloadUrl'] ?? $statusData['download_url'] ?? 'unknown',
+                        'public_url' => $statusData['publicUrl'] ?? $statusData['outputUrl'] ?? $statusData['remoteUrl'] ?? 'unknown',
                         'completed_at' => $statusData['completedAt'] ?? now()->toISOString()
                     ]);
 
                     return [
-                        'merged video url' => $statusData['remoteUrl'] ?? $statusData['download_url'] ?? '',
+                        'merged video url' => $finalUrl,
                         'completed_at' => $statusData['completedAt'] ?? now()->toISOString()
                     ];
                 } elseif ($status === 'failed') {

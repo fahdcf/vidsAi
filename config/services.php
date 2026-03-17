@@ -131,6 +131,28 @@ return [
         'api_key' => env('IMGBB_API_KEY'),
     ],
 
+    'file_hosts' => [
+        'provider_order' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('FILE_HOST_PROVIDER_ORDER', 'catbox,tmpfiles,0x0'))
+        ))),
+
+        'catbox' => [
+            'enabled' => env('FILE_HOST_CATBOX_ENABLED', true),
+            'upload_url' => env('FILE_HOST_CATBOX_UPLOAD_URL', 'https://catbox.moe/user/api.php'),
+        ],
+
+        'tmpfiles' => [
+            'enabled' => env('FILE_HOST_TMPFILES_ENABLED', true),
+            'upload_url' => env('FILE_HOST_TMPFILES_UPLOAD_URL', 'https://tmpfiles.org/api/v1/upload'),
+        ],
+
+        'zero_x_zero' => [
+            'enabled' => env('FILE_HOST_0X0_ENABLED', true),
+            'upload_url' => env('FILE_HOST_0X0_UPLOAD_URL', 'https://0x0.st'),
+        ],
+    ],
+
     'pollinations' => [
         'base_url' => env('POLLINATIONS_BASE_URL', 'https://pollinations.ai/p'),
         'models' => [

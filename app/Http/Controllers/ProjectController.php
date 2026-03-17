@@ -12,7 +12,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use GuzzleHttp\Client;
 use Illuminate\Support\Arr;
 
 
@@ -525,7 +524,7 @@ class ProjectController extends Controller
                 ]);
             }
             
-            Log::info('📤 Image uploaded to 0x0.st successfully', [
+            Log::info('📤 Image uploaded to external host successfully', [
                 'filename' => $filename,
                 'public_url' => $publicUrl,
                 'size' => $image->getSize(),
@@ -536,7 +535,7 @@ class ProjectController extends Controller
                 'success' => true,
                 'url' => $publicUrl,
                 'filename' => $filename,
-                'message' => 'Image uploaded successfully to 0x0.st'
+                'message' => 'Image uploaded successfully'
             ]);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
@@ -964,7 +963,7 @@ class ProjectController extends Controller
             return back()->with('error', 'Video file not found.');
         }
 
-        // Check if it's an external URL (like 0x0.st)
+        // Check if it's an external URL hosted on a file provider
         if ($project->isFinalVideoExternal()) {
             // For external URLs, redirect to the video URL
             return redirect($project->final_video_path);
@@ -1094,7 +1093,7 @@ class ProjectController extends Controller
         $isNewImageUpload = $request->hasFile('custom_image');
 
         if ($isNewVideoUpload) {
-            // New video upload format - upload to 0x0.st
+            // New video upload format - upload to configured external providers
             logger()->info('New video upload started', [
                 'project_id' => $project->id,
                 'scene_id' => $scene->id,
@@ -1108,7 +1107,7 @@ class ProjectController extends Controller
             try {
                 $file = $request->file('custom_video');
 
-                // Upload video to 0x0.st to get downloadable URL
+                // Upload video to configured providers to get a public URL
                 $downloadableUrl = $this->uploadToFileHost($file);
 
                 if (!$downloadableUrl) {
@@ -1147,7 +1146,7 @@ class ProjectController extends Controller
                 ], 500);
             }
         } elseif ($isNewImageUpload) {
-            // New image upload format - upload to 0x0.st
+            // New image upload format - upload to configured external providers
             logger()->info('New image upload started', [
                 'project_id' => $project->id,
                 'scene_id' => $scene->id,
@@ -1161,7 +1160,7 @@ class ProjectController extends Controller
             try {
                 $file = $request->file('custom_image');
 
-                // Upload image to 0x0.st to get downloadable URL
+                // Upload image to configured providers to get a public URL
                 $downloadableUrl = $this->uploadToFileHost($file);
 
                 if (!$downloadableUrl) {
@@ -1247,60 +1246,138 @@ class ProjectController extends Controller
     }
 
     /**
-     * Upload file to 0x0.st file hosting service
+     * Upload file to configured external hosting providers.
+     * Provider order is controlled by config('services.file_hosts.provider_order').
      */
     private function uploadToFileHost($file)
     {
-        try {
-            logger()->info('Starting upload to 0x0.st', [
-                'filename' => $file->getClientOriginalName(),
-                'size' => $file->getSize(),
-                'mime_type' => $file->getMimeType()
-            ]);
+        $providers = config('services.file_hosts.provider_order', ['catbox', 'tmpfiles', '0x0']);
 
-            // Create a multipart form data request to 0x0.st
-            $client = new Client();
+        logger()->info('📤 Starting external file upload with provider fallback', [
+            'filename' => $file->getClientOriginalName(),
+            'size' => $file->getSize(),
+            'mime_type' => $file->getMimeType(),
+            'providers' => $providers,
+        ]);
 
-            $response = $client->post('https://0x0.st', [
-                'multipart' => [
-                    [
-                        'name' => 'file',
-                        'contents' => fopen($file->getRealPath(), 'r'),
-                        'filename' => $file->getClientOriginalName()
-                    ]
-                ],
-                'headers' => [
-                    'User-Agent' => 'VidsAI/1.0'
-                ],
-                'timeout' => 300, // 5 minutes timeout for large files
-                'verify' => false // Skip SSL verification if needed
-            ]);
+        foreach ($providers as $provider) {
+            $enabled = match ($provider) {
+                'catbox' => (bool) config('services.file_hosts.catbox.enabled', true),
+                'tmpfiles' => (bool) config('services.file_hosts.tmpfiles.enabled', true),
+                '0x0' => (bool) config('services.file_hosts.zero_x_zero.enabled', true),
+                default => false,
+            };
 
-            if ($response->getStatusCode() === 200) {
-                $downloadUrl = trim($response->getBody()->getContents());
-
-                logger()->info('File uploaded successfully to 0x0.st', [
-                    'url' => $downloadUrl
-                ]);
-
-                return $downloadUrl;
+            if (!$enabled) {
+                logger()->info('⏭️ Skipping disabled file host provider', ['provider' => $provider]);
+                continue;
             }
 
-            logger()->error('Failed to upload to 0x0.st', [
-                'status_code' => $response->getStatusCode(),
-                'response' => $response->getBody()->getContents()
+            try {
+                $uploadedUrl = match ($provider) {
+                    'catbox' => $this->uploadToCatbox($file),
+                    'tmpfiles' => $this->uploadToTmpFiles($file),
+                    '0x0' => $this->uploadTo0x0($file),
+                    default => null,
+                };
+
+                if (!empty($uploadedUrl)) {
+                    logger()->info('✅ External file upload succeeded', [
+                        'provider' => $provider,
+                        'url' => $uploadedUrl,
+                    ]);
+
+                    return $uploadedUrl;
+                }
+            } catch (\Throwable $e) {
+                logger()->warning('⚠️ External file upload provider failed', [
+                    'provider' => $provider,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        logger()->error('❌ All external file host providers failed', [
+            'filename' => $file->getClientOriginalName(),
+        ]);
+
+        return null;
+    }
+
+    private function uploadToCatbox($file): ?string
+    {
+        $uploadUrl = config('services.file_hosts.catbox.upload_url', 'https://catbox.moe/user/api.php');
+
+        $response = Http::timeout(120)
+            ->withOptions(['verify' => false])
+            ->attach('fileToUpload', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+            ->post($uploadUrl, [
+                'reqtype' => 'fileupload',
             ]);
 
-            return null;
-
-        } catch (\Exception $e) {
-            logger()->error('Exception during file upload to 0x0.st', [
-                'error' => $e->getMessage(),
-                'file' => $file->getClientOriginalName()
+        if (!$response->successful()) {
+            logger()->warning('Catbox upload failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
             ]);
-
             return null;
         }
+
+        $url = trim($response->body());
+        return filter_var($url, FILTER_VALIDATE_URL) ? $url : null;
+    }
+
+    private function uploadToTmpFiles($file): ?string
+    {
+        $uploadUrl = config('services.file_hosts.tmpfiles.upload_url', 'https://tmpfiles.org/api/v1/upload');
+
+        $response = Http::timeout(120)
+            ->withOptions(['verify' => false])
+            ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+            ->post($uploadUrl);
+
+        if (!$response->successful()) {
+            logger()->warning('TmpFiles upload failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+            return null;
+        }
+
+        $data = $response->json();
+        $url = $data['data']['url'] ?? null;
+
+        if (!is_string($url) || !filter_var($url, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        // Convert tmpfiles landing URL to direct download URL.
+        if (str_contains($url, 'tmpfiles.org/')) {
+            $url = preg_replace('#^https?://tmpfiles\.org/#i', 'https://tmpfiles.org/dl/', $url) ?? $url;
+        }
+
+        return $url;
+    }
+
+    private function uploadTo0x0($file): ?string
+    {
+        $uploadUrl = config('services.file_hosts.zero_x_zero.upload_url', 'https://0x0.st');
+
+        $response = Http::timeout(120)
+            ->withOptions(['verify' => false])
+            ->attach('file', file_get_contents($file->getRealPath()), $file->getClientOriginalName())
+            ->post($uploadUrl);
+
+        if (!$response->successful()) {
+            logger()->warning('0x0 upload failed', [
+                'status' => $response->status(),
+                'body' => $response->body(),
+            ]);
+            return null;
+        }
+
+        $url = trim($response->body());
+        return filter_var($url, FILTER_VALIDATE_URL) ? $url : null;
     }
 
     /**
@@ -1625,14 +1702,14 @@ class ProjectController extends Controller
         try {
             $voiceOverUrl = null;
 
-            // Upload voiceover to 0x0.st if it's an uploaded file
+            // Upload voiceover to external host providers if it's an uploaded file
             if ($project->voiceover_option === 'upload' && $project->voiceover_file) {
                 logger()->info('🔄 Starting voiceover upload process', [
                     'project_id' => $project->id,
                     'file_path' => $project->voiceover_file
                 ]);
 
-                $voiceOverUrl = $this->uploadVoiceoverTo0x0($project);
+                $voiceOverUrl = $this->uploadVoiceoverToExternalHost($project);
 
                 logger()->info('🔍 Upload result', [
                     'project_id' => $project->id,
@@ -2666,7 +2743,7 @@ class ProjectController extends Controller
         return $subtitles;
     }
 
-    private function uploadVoiceoverTo0x0(Project $project): ?string
+    private function uploadVoiceoverToExternalHost(Project $project): ?string
     {
         try {
             if (!$project->voiceover_file || !Storage::disk('public')->exists($project->voiceover_file)) {
@@ -2695,54 +2772,37 @@ class ProjectController extends Controller
 
             $fileSize = filesize($filePath);
 
-            logger()->info('📤 Uploading voiceover to 0x0.st', [
+            logger()->info('📤 Uploading voiceover to external host providers', [
                 'project_id' => $project->id,
                 'file_name' => $fileName,
                 'file_path' => $filePath,
                 'file_size' => $fileSize
             ]);
 
-            // Read file content
-            $fileContent = file_get_contents($filePath);
-            if ($fileContent === false) {
-                logger()->error('❌ Failed to read file content', [
-                    'project_id' => $project->id,
-                    'file_path' => $filePath
-                ]);
-                return null;
-            }
+            $tempUpload = new \Illuminate\Http\UploadedFile(
+                $filePath,
+                $fileName,
+                mime_content_type($filePath) ?: 'audio/mpeg',
+                null,
+                true
+            );
 
-            // Upload to 0x0.st with timeout and SSL verification disabled
-            $response = Http::timeout(60)
-                ->withOptions([
-                    'verify' => false, // Disable SSL verification to fix cURL error 77
-                ])
-                ->attach(
-                    'file',
-                    $fileContent,
-                    $fileName
-                )->post('https://0x0.st');
+            $uploadUrl = $this->uploadToFileHost($tempUpload);
 
-            if ($response->successful()) {
-                $uploadUrl = trim($response->body());
-
+            if (!empty($uploadUrl)) {
                 logger()->info('✅ Voiceover uploaded successfully', [
                     'project_id' => $project->id,
                     'upload_url' => $uploadUrl,
-                    'response_status' => $response->status()
                 ]);
-
                 return $uploadUrl;
-            } else {
-                logger()->error('❌ Failed to upload voiceover to 0x0.st', [
-                    'project_id' => $project->id,
-                    'status_code' => $response->status(),
-                    'response_body' => $response->body(),
-                    'response_headers' => $response->headers()
-                ]);
-
-                return null;
             }
+
+            logger()->error('❌ Failed to upload voiceover using all external providers', [
+                'project_id' => $project->id,
+                'file_name' => $fileName,
+            ]);
+
+            return null;
         } catch (\Exception $e) {
             logger()->error('❌ Exception during voiceover upload', [
                 'project_id' => $project->id,
@@ -3298,7 +3358,7 @@ class ProjectController extends Controller
     }
 
     /**
-     * Upload image to hosting service (0x0.st) through backend to bypass CORS
+     * Upload image to external hosting provider through backend to bypass CORS.
      */
     public function uploadImageToHosting(Request $request)
     {
@@ -3309,21 +3369,15 @@ class ProjectController extends Controller
 
             $image = $request->file('image');
             
-            logger()->info('📤 Uploading image to 0x0.st via backend', [
+            logger()->info('📤 Uploading image via backend to external provider', [
                 'filename' => $image->getClientOriginalName(),
                 'size' => $image->getSize(),
                 'mime' => $image->getMimeType()
             ]);
 
-            // Upload to 0x0.st using Laravel HTTP client
-            $response = Http::attach(
-                'file',
-                file_get_contents($image->getPathname()),
-                $image->getClientOriginalName()
-            )->post('https://0x0.st');
+            $imageUrl = $this->uploadToFileHost($image);
 
-            if ($response->successful()) {
-                $imageUrl = trim($response->body());
+            if ($imageUrl) {
                 
                 logger()->info('✅ Image uploaded successfully', [
                     'url' => $imageUrl
@@ -3335,10 +3389,7 @@ class ProjectController extends Controller
                     'message' => 'Image uploaded successfully'
                 ]);
             } else {
-                logger()->error('❌ Failed to upload image to 0x0.st', [
-                    'status' => $response->status(),
-                    'body' => $response->body()
-                ]);
+                logger()->error('❌ Failed to upload image via configured external providers');
 
                 return response()->json([
                     'success' => false,
