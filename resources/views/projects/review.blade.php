@@ -2551,6 +2551,13 @@
                             </p>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
+                            @if($project->edit_state)
+                            <a href="{{ route('projects.preview', $project) }}"
+                               target="_blank"
+                               class="btn btn-outline-info">
+                                ▶ Live Preview
+                            </a>
+                            @endif
                             <button type="button" class="btn btn-confirm" onclick="confirmAllScenes()" id="confirm-btn">
                                 <i class="bi bi-check-circle me-2"></i>Confirm All Scenes
                             </button>

@@ -20,6 +20,11 @@
                     </p>
                 </div>
                 <div class="d-flex gap-2">
+                    @if($project->edit_state)
+                        <a href="{{ route('projects.preview', $project) }}" class="btn btn-outline-primary">
+                            <i class="bi bi-play-btn"></i> Live Preview
+                        </a>
+                    @endif
                     <a href="{{ route('dashboard') }}" class="btn btn-outline-secondary">
                         <i class="bi bi-arrow-left"></i> Dashboard
                     </a>

@@ -1680,6 +1680,23 @@ class ProjectController extends Controller
         return view('projects.subtitle-styles', compact('project', 'sceneVideos'));
     }
 
+    /**
+     * Dedicated video preview page - live Remotion Player in browser.
+     * No render service involved - runs entirely client-side.
+     */
+    public function preview(Project $project)
+    {
+        $this->authorize('view', $project);
+
+        if (empty($project->edit_state)) {
+            return redirect()
+                ->back()
+                ->with('error', 'Preview not available yet. Complete the video generation first.');
+        }
+
+        return view('projects.preview', compact('project'));
+    }
+
     public function prepareVoiceover(Request $request, Project $project)
     {
         logger()->info('🚀 prepareVoiceover method called', [
@@ -1805,6 +1822,35 @@ class ProjectController extends Controller
         ]);
 
         try {
+            if (\Illuminate\Support\Facades\Schema::hasColumn('projects', 'subtitle_style')) {
+                $project->update(['subtitle_style' => $validated['style']]);
+            }
+
+            // Update edit_state with chosen subtitle style so preview reflects it
+            if (!empty($project->edit_state)) {
+                try {
+                    $editState = $project->edit_state;
+                    $chosenStyle = $validated['style'];
+
+                    // Apply the chosen style to all subtitle segments
+                    if (!empty($editState['tracks']['subtitles'])) {
+                        foreach ($editState['tracks']['subtitles'] as &$sub) {
+                            $sub['style'] = $chosenStyle;
+                        }
+                        unset($sub);
+                    }
+
+                    $editState['metadata']['last_modified'] = now()->toISOString();
+                    $editState['version'] = ($editState['version'] ?? 1) + 1;
+                    $project->update(['edit_state' => $editState]);
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::warning(
+                        '[EditStateBuilder] Failed to update subtitle style in edit_state: ' . $e->getMessage(),
+                        ['project_id' => $project->id]
+                    );
+                }
+            }
+
             // Prepare data for subtitle generation
             $preparedData = $this->prepareSubtitleData($project, $validated);
             $videoData = $preparedData['videoData'];
@@ -3324,6 +3370,19 @@ class ProjectController extends Controller
                 'project_id' => $project->id,
                 'scenes_count' => count($validatedData['scenes'])
             ]);
+
+            // Build and save edit_state immediately so preview is available
+            // before subtitle generation and rendering
+            try {
+                $editState = (new \App\Services\EditStateBuilder())->build($project);
+                $project->update(['edit_state' => $editState]);
+            } catch (\Exception $e) {
+                // Never block the user flow if edit_state build fails
+                \Illuminate\Support\Facades\Log::warning(
+                    '[EditStateBuilder] Failed to build edit_state on scene confirm: ' . $e->getMessage(),
+                    ['project_id' => $project->id]
+                );
+            }
 
             return response()->json([
                 'success' => true,

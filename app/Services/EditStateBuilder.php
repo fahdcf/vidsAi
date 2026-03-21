@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Project;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -26,7 +27,7 @@ class EditStateBuilder
 
         $videoTrack = $this->buildVideoTrack($scenes, $project);
         $subtitleTrack = $this->buildSubtitleTrack($project);
-        $totalFrames = $this->calcTotalFrames($videoTrack, $subtitleTrack);
+        $totalFrames = $this->calcTotalFrames($videoTrack, $subtitleTrack, $project);
         $audioTrack = $this->buildAudioTrack($project, $totalFrames);
 
         return [
@@ -98,6 +99,23 @@ class EditStateBuilder
             $currentFrame = $endFrame;
         }
 
+        // Extend last clip to cover full voiceover duration if scenes are shorter
+        if (!empty($track) && !empty($project->voiceover_transcript)) {
+            $transcript = $project->voiceover_transcript;
+            $lastWord = end($transcript);
+            $voiceoverEndFrame = !empty($lastWord['end'])
+                ? (int) ceil($lastWord['end'] * self::FPS)
+                : 0;
+
+            if ($voiceoverEndFrame > $currentFrame) {
+                // Extend the last clip's end_frame to cover the voiceover
+                $lastIndex = count($track) - 1;
+                $track[$lastIndex]['end_frame'] = $voiceoverEndFrame;
+                // Also update trim_out proportionally — hold on last frame
+                $track[$lastIndex]['trim_out'] = $track[$lastIndex]['trim_out'];
+            }
+        }
+
         return $track;
     }
 
@@ -113,21 +131,79 @@ class EditStateBuilder
             $subtitlesScript = json_decode($subtitlesScript, true) ?? [];
         }
 
-        // Detect and warn about plain string subtitle format (legacy data)
+        $track = [];
+        $style = $project->subtitle_style ?? 'default';
+
+        // Check if subtitles are timed objects or plain strings
         $firstItem = $subtitlesScript[0] ?? null;
-        if ($firstItem !== null && !is_array($firstItem)) {
-            \Illuminate\Support\Facades\Log::warning(
-                '[EditStateBuilder] subtitles_script contains non-array items - '
-                . 'subtitle track will be empty. Project: ' . $project->id
-                . ' Item type: ' . gettype($firstItem)
-            );
-            return [];
+        if (is_string($firstItem)) {
+            // Plain strings — build timing from voiceover transcript
+            $transcript = $project->voiceover_transcript ?? [];
+            $voiceoverTotalDuration = 0.0;
+            if (!empty($transcript)) {
+                $lastWord = end($transcript);
+                $voiceoverTotalDuration = (float) ($lastWord['end'] ?? 0);
+            }
+
+            $subtitleStrings = array_values(array_filter($subtitlesScript, static fn ($s) => is_string($s) && trim($s) !== ''));
+            $sceneTexts = $project->scenes()
+                ->orderBy('scene_number')
+                ->pluck('script_text')
+                ->map(static fn ($t) => (string) $t)
+                ->toArray();
+
+            if (!empty($subtitleStrings) && !empty($sceneTexts)) {
+                $subtitleStrings = $this->mergeSubtitlesToMatchScenes($subtitleStrings, $sceneTexts);
+            }
+
+            foreach ($subtitleStrings as $i => $text) {
+                if (!is_string($text) || empty(trim($text))) {
+                    continue;
+                }
+
+                // Find timing from transcript
+                $nextText = $subtitleStrings[$i + 1] ?? null;
+                $timing = $this->getTimingFromTranscript(
+                    $text,
+                    is_string($nextText) ? $nextText : null,
+                    $transcript,
+                    $voiceoverTotalDuration
+                );
+
+                $startFrame = (int) round($timing['start'] * self::FPS);
+                $endFrame = (int) round($timing['end'] * self::FPS);
+
+                if ($endFrame <= $startFrame) {
+                    continue;
+                }
+
+                $track[] = [
+                    'id' => 'sub_' . $i,
+                    'text' => $text,
+                    'start_frame' => $startFrame,
+                    'end_frame' => $endFrame,
+                    'style' => $style,
+                    'position' => 'bottom',
+                    'config' => [],
+                ];
+            }
+
+            return $track;
         }
 
-        $style = $project->subtitle_style ?? 'default';
-        $track = [];
-
         foreach ($subtitlesScript as $index => $sub) {
+            if (!is_array($sub)) {
+                Log::warning(
+                    '[EditStateBuilder] subtitles_script contains non-array items - skipping item',
+                    [
+                        'project_id' => $project->id,
+                        'item_index' => $index,
+                        'item_type' => gettype($sub),
+                    ]
+                );
+                continue;
+            }
+
             $startFrame = (int) round(($sub['start'] ?? 0) * self::FPS);
             $endFrame = (int) round(($sub['end'] ?? 0) * self::FPS);
 
@@ -159,6 +235,119 @@ class EditStateBuilder
         return $track;
     }
 
+    private function mergeSubtitlesToMatchScenes(array $subtitleStrings, array $sceneTexts): array
+    {
+        if (count($subtitleStrings) <= count($sceneTexts)) {
+            return $subtitleStrings;
+        }
+
+        $merged = [];
+        $subIndex = 0;
+
+        foreach ($sceneTexts as $sceneIndex => $sceneText) {
+            if ($subIndex >= count($subtitleStrings)) {
+                $merged[] = $sceneText;
+                continue;
+            }
+
+            $sceneNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', $sceneText));
+            $sceneWords = array_values(array_filter(explode(' ', $sceneNorm)));
+
+            $collectedWords = [];
+            $collectedStrings = [];
+
+            while ($subIndex < count($subtitleStrings)) {
+                $subStr = (string) $subtitleStrings[$subIndex];
+                $subNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', $subStr));
+                $subWords = array_values(array_filter(explode(' ', $subNorm)));
+
+                $collectedWords = array_merge($collectedWords, $subWords);
+                $collectedStrings[] = $subStr;
+                $subIndex++;
+
+                $sceneWordCount = count($sceneWords);
+                $coveredCount = 0;
+                foreach ($sceneWords as $sw) {
+                    if (in_array($sw, $collectedWords, true)) {
+                        $coveredCount++;
+                    }
+                }
+
+                if ($sceneWordCount > 0 && ($coveredCount / $sceneWordCount) >= 0.8) {
+                    break;
+                }
+
+                if ($subIndex < count($subtitleStrings)) {
+                    $nextSub = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', (string) $subtitleStrings[$subIndex]));
+                    $nextSceneIndex = $sceneIndex + 1;
+                    if (isset($sceneTexts[$nextSceneIndex])) {
+                        $nextSceneNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', (string) $sceneTexts[$nextSceneIndex]));
+                        $nextSceneFirstWord = explode(' ', trim($nextSceneNorm))[0] ?? '';
+                        $nextSubFirstWord = explode(' ', trim($nextSub))[0] ?? '';
+                        if ($nextSceneFirstWord && $nextSubFirstWord === $nextSceneFirstWord) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            $merged[] = implode(', ', $collectedStrings);
+        }
+
+        return $merged;
+    }
+
+    private function getTimingFromTranscript(
+        string $text,
+        ?string $nextText,
+        array $transcript,
+        float $totalDuration
+    ): array {
+        if (empty($transcript)) {
+            return ['start' => 0.0, 'end' => $totalDuration];
+        }
+
+        $words = preg_split('/\s+/', trim(strtolower($text)));
+        $firstWord = preg_replace('/[^a-z0-9]/', '', $words[0] ?? '');
+
+        $nextWords = $nextText ? preg_split('/\s+/', trim(strtolower($nextText))) : [];
+        $nextFirstWord = !empty($nextWords)
+            ? preg_replace('/[^a-z0-9]/', '', $nextWords[0])
+            : null;
+
+        $startTime = null;
+        $endTime = null;
+        $foundStart = false;
+
+        foreach ($transcript as $word) {
+            $w = preg_replace('/[^a-z0-9]/', '', strtolower($word['word'] ?? ''));
+
+            if (!$foundStart && $w === $firstWord) {
+                $startTime = (float) ($word['start'] ?? 0.0);
+                $foundStart = true;
+                continue;
+            }
+
+            if ($foundStart && $nextFirstWord && $w === $nextFirstWord) {
+                $endTime = (float) ($word['start'] ?? $totalDuration);
+                break;
+            }
+        }
+
+        $startTime = $startTime ?? 0.0;
+        $endTime = $endTime ?? $totalDuration;
+
+        if ($endTime <= $startTime) {
+            $endTime = min($totalDuration, $startTime + 1.0);
+        }
+
+        // Add small padding
+        return [
+            'start' => max(0, $startTime - 0.1),
+            'end' => min($totalDuration, $endTime - 0.1),
+        ];
+    }
+
     private function buildAudioTrack(Project $project, int $totalFrames): array
     {
         $track = [];
@@ -166,6 +355,16 @@ class EditStateBuilder
         $voiceoverUrl = $project->voiceover_url
             ?? $project->voiceover_file
             ?? null;
+
+        // Ensure voiceover URL is absolute so the browser Player can load it
+        if ($voiceoverUrl && !str_starts_with($voiceoverUrl, 'http')) {
+            // It's a relative path — convert to full storage URL
+            $voiceoverUrl = asset('storage/' . ltrim($voiceoverUrl, '/'));
+            // If that doesn't work try direct asset URL
+            if (!str_starts_with($voiceoverUrl, 'http')) {
+                $voiceoverUrl = url($voiceoverUrl);
+            }
+        }
 
         if (!empty($voiceoverUrl)) {
             $track[] = [
@@ -205,7 +404,7 @@ class EditStateBuilder
         return $track;
     }
 
-    private function calcTotalFrames(array $videoTrack, array $subtitleTrack): int
+    private function calcTotalFrames(array $videoTrack, array $subtitleTrack, ?Project $project = null): int
     {
         $lastVideoFrame = empty($videoTrack)
             ? 0
@@ -215,7 +414,17 @@ class EditStateBuilder
             ? 0
             : max(array_column($subtitleTrack, 'end_frame'));
 
-        return max($lastVideoFrame, $lastSubtitleFrame, 1);
+        // Use actual voiceover duration from Deepgram transcript as the floor
+        $transcriptFrame = 0;
+        if ($project && !empty($project->voiceover_transcript)) {
+            $transcript = $project->voiceover_transcript;
+            $lastWord = end($transcript);
+            if (!empty($lastWord['end'])) {
+                $transcriptFrame = (int) ceil($lastWord['end'] * self::FPS);
+            }
+        }
+
+        return max($lastVideoFrame, $lastSubtitleFrame, $transcriptFrame, 1);
     }
 
     private function getDimensions(Project $project): array

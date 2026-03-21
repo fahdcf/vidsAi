@@ -123,13 +123,32 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
 
                 // Store the subtitles script if available
                 if (isset($result['subtitles_script'])) {
-                    $updateData['subtitles_script'] = $result['subtitles_script'];
+                    $subtitlesScript = is_array($result['subtitles_script'])
+                        ? array_values($result['subtitles_script'])
+                        : [];
+
+                    $sceneTexts = [];
+                    if (!empty($result['all_videos']) && is_array($result['all_videos'])) {
+                        foreach ($result['all_videos'] as $sceneItem) {
+                            $sceneTexts[] = (string) ($sceneItem['phrase'] ?? $sceneItem['script_text'] ?? '');
+                        }
+                    }
+
+                    // Merge split phrases back to match scene count
+                    if (!empty($subtitlesScript) && !empty($sceneTexts)) {
+                        $subtitlesScript = $this->mergeSubtitlesToMatchScenes(
+                            $subtitlesScript,
+                            $sceneTexts
+                        );
+                    }
+
+                    $updateData['subtitles_script'] = $subtitlesScript;
 
                     Log::info('📝 Storing subtitles script', [
                         'project_id' => $this->project->id,
-                        'subtitles_count' => count($result['subtitles_script']),
-                        'first_subtitle' => $result['subtitles_script'][0] ?? null,
-                        'last_subtitle' => end($result['subtitles_script']) ?? null
+                        'subtitles_count' => count($subtitlesScript),
+                        'first_subtitle' => $subtitlesScript[0] ?? null,
+                        'last_subtitle' => end($subtitlesScript) ?? null
                     ]);
                 } else {
                     Log::warning('⚠️ No subtitles script found in result', [
@@ -289,17 +308,44 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
         // Clear existing scenes for this project
         $project->scenes()->delete();
 
+        // Use Deepgram transcript timings when available
+        $transcriptWords = $project->voiceover_transcript ?? [];
+        $voiceoverTotalDuration = 0.0;
+        if (!empty($transcriptWords)) {
+            $lastWord = end($transcriptWords);
+            $voiceoverTotalDuration = (float) ($lastWord['end'] ?? 0.0);
+        }
+
         $sceneNumber = 1;
-        foreach ($scenesData as $sceneData) {
+        foreach ($scenesData as $index => $sceneData) {
+            $sceneText = (string) ($sceneData['phrase'] ?? '');
+            $nextSceneText = isset($scenesData[$index + 1])
+                ? (string) ($scenesData[$index + 1]['phrase'] ?? '')
+                : null;
+
+            $geminiFallback = (float) (
+                $sceneData['gemini_duration']
+                ?? $sceneData['duration_seconds']
+                ?? 3.0
+            );
+
+            $transcriptDuration = $this->getDurationFromTranscript(
+                $sceneText,
+                $nextSceneText,
+                $transcriptWords,
+                $voiceoverTotalDuration,
+                $geminiFallback
+            );
+
             Scene::create([
                 'project_id' => $project->id,
                 'scene_number' => $sceneNumber,
-                'script_text' => $sceneData['phrase'] ?? '',
+                'script_text' => $sceneText,
                 'video_url' => $sceneData['video_url'] ?? '',
                 'start_time' => $sceneData['start_time'] ?? null,
                 'end_time' => $sceneData['end_time'] ?? null,
-                'duration_seconds' => $sceneData['duration_seconds'] ?? 0,
-                'gemini_duration' => $sceneData['gemini_duration'] ?? null,
+                'duration_seconds' => $transcriptDuration,
+                'gemini_duration' => $transcriptDuration,
                 'keywords' => is_array($sceneData['keywords'] ?? []) ? implode(', ', $sceneData['keywords']) : ($sceneData['keywords'] ?? ''),
                 'prompt' => $sceneData['prompt'] ?? null,
                 'type' => 'video' // Default to video for all generated scenes
@@ -341,6 +387,151 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
             }
         }
         return $structure;
+    }
+
+    /**
+     * Calculate scene duration from Deepgram word timestamps.
+     * Uses the gap between this scene's first word and the next scene's first word
+     * so that inter-phrase silences belong to the current scene.
+     * Falls back to Gemini's estimate if transcript matching fails.
+     */
+    private function getDurationFromTranscript(
+        string $sceneText,
+        ?string $nextSceneText,
+        array $transcriptWords,
+        float $voiceoverTotalDuration,
+        float $geminiFallback
+    ): float {
+        if (empty($transcriptWords)) {
+            return $geminiFallback;
+        }
+
+        // Normalize: lowercase, strip punctuation
+        $normalize = fn(string $w) => strtolower(preg_replace('/[^a-z0-9]/i', '', $w));
+
+        // Get first word of this scene
+        $sceneWordList = preg_split('/\s+/', trim($sceneText));
+        $firstWord = $normalize($sceneWordList[0] ?? '');
+
+        // Get first word of next scene
+        $nextFirstWord = null;
+        if ($nextSceneText) {
+            $nextWordList = preg_split('/\s+/', trim($nextSceneText));
+            $nextFirstWord = $normalize($nextWordList[0] ?? '');
+        }
+
+        // Find this scene's start time in transcript
+        $sceneStartTime = null;
+        $nextSceneStartTime = null;
+        $foundCurrentScene = false;
+
+        foreach ($transcriptWords as $word) {
+            $w = $normalize($word['word'] ?? '');
+
+            if (!$foundCurrentScene && $w === $firstWord) {
+                $sceneStartTime = (float) $word['start'];
+                $foundCurrentScene = true;
+                continue;
+            }
+
+            if ($foundCurrentScene && $nextFirstWord && $w === $nextFirstWord) {
+                $nextSceneStartTime = (float) $word['start'];
+                break;
+            }
+        }
+
+        // Could not find the scene start — use Gemini fallback
+        if ($sceneStartTime === null) {
+            return $geminiFallback;
+        }
+
+        $endTime = $nextSceneStartTime ?? $voiceoverTotalDuration;
+        $duration = round($endTime - $sceneStartTime, 3);
+
+        // Sanity check — duration must be positive and reasonable
+        if ($duration <= 0 || $duration > 60) {
+            return $geminiFallback;
+        }
+
+        return $duration;
+    }
+
+    /**
+     * Merge subtitle strings to match scene count.
+     * When Gemini splits a long phrase across multiple subtitle items,
+     * this merges them back to one item per scene.
+     */
+    private function mergeSubtitlesToMatchScenes(array $subtitleStrings, array $sceneTexts): array
+    {
+        // If counts already match, nothing to do
+        if (count($subtitleStrings) === count($sceneTexts)) {
+            return $subtitleStrings;
+        }
+
+        // If fewer subtitles than scenes, return as-is (different problem)
+        if (count($subtitleStrings) < count($sceneTexts)) {
+            return $subtitleStrings;
+        }
+
+        $merged = [];
+        $subIndex = 0;
+
+        foreach ($sceneTexts as $sceneIndex => $sceneText) {
+            if ($subIndex >= count($subtitleStrings)) {
+                $merged[] = $sceneText; // fallback to scene text
+                continue;
+            }
+
+            // Normalize both for comparison
+            $sceneNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', $sceneText));
+            $sceneWords = array_values(array_filter(explode(' ', $sceneNorm)));
+
+            // Collect subtitle strings until we've covered all words in this scene
+            $collectedWords = [];
+            $collectedStrings = [];
+
+            while ($subIndex < count($subtitleStrings)) {
+                $subStr = (string) $subtitleStrings[$subIndex];
+                $subNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', $subStr));
+                $subWords = array_values(array_filter(explode(' ', $subNorm)));
+
+                $collectedWords = array_merge($collectedWords, $subWords);
+                $collectedStrings[] = $subStr;
+                $subIndex++;
+
+                // Check if we've covered enough words for this scene
+                // Stop when collected words cover at least 80% of scene words
+                $sceneWordCount = count($sceneWords);
+                $coveredCount = 0;
+                foreach ($sceneWords as $sw) {
+                    if (in_array($sw, $collectedWords, true)) {
+                        $coveredCount++;
+                    }
+                }
+
+                if ($sceneWordCount > 0 && ($coveredCount / $sceneWordCount) >= 0.8) {
+                    break;
+                }
+
+                // Also stop if next subtitle string starts a new scene
+                if ($subIndex < count($subtitleStrings)) {
+                    $nextSub = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', (string) $subtitleStrings[$subIndex]));
+                    $nextSceneIndex = $sceneIndex + 1;
+                    if (isset($sceneTexts[$nextSceneIndex])) {
+                        $nextSceneNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', (string) $sceneTexts[$nextSceneIndex]));
+                        $nextSceneFirstWord = explode(' ', trim($nextSceneNorm))[0] ?? '';
+                        $nextSubFirstWord = explode(' ', trim($nextSub))[0] ?? '';
+                        if ($nextSceneFirstWord && $nextSubFirstWord === $nextSceneFirstWord) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            $merged[] = implode(', ', $collectedStrings);
+        }
+
+        return $merged;
     }
 
     /**

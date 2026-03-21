@@ -1963,13 +1963,24 @@
 @endpush
 
 @section('content')
-<div class="subtitle-styles-container">
+<div class="subtitle-styles-container" style="max-width: 100%; margin: 0; padding: 0;">
+    <!-- Two-column layout: Controls (left) + Live preview (right) -->
+    <div style="display:grid; grid-template-columns:1fr 1fr; width:100%;">
+        <!-- LEFT COLUMN — Existing controls -->
+        <div style="min-width:0; overflow:hidden; height:100vh; overflow-y:auto; padding:20px;">
     <!-- Header -->
     <div class="text-center mb-4">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">
             <i class="bi bi-fonts me-2"></i>Choose Subtitle Style
         </h1>
         <p class="text-gray-600">Select a subtitle style for your video scenes</p>
+        @if($project->edit_state)
+        <a href="{{ route('projects.preview', $project) }}"
+           target="_blank"
+           class="btn btn-outline-info mt-3">
+            ▶ Preview Current Edit
+        </a>
+        @endif
     </div>
 
     <!-- Video Preview Section -->
@@ -2465,6 +2476,102 @@
             </button>
         </div>
     </div>
+        </div><!-- Close left column -->
+
+        <!-- RIGHT COLUMN — Live preview panel -->
+        <div style="
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #0D1117;
+            border-left: 1px solid #1E2D40;
+            overflow: hidden;
+        ">
+            {{-- Header --}}
+            <div style="
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                padding: 14px 20px;
+                border-bottom: 1px solid #1E2D40;
+                flex-shrink: 0;
+            ">
+                <span style="color:#F1F5F9; font-size:15px; font-weight:700;">Live Preview</span>
+                <span id="preview-status" style="color:#475569; font-size:12px;">Waiting...</span>
+            </div>
+
+            {{-- Player area --}}
+            <div style="
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #080B11;
+                overflow: hidden;
+                padding: 16px;
+                min-height: 0;
+            ">
+                <div id="vidsai-preview-root" style="
+                    width: 100%;
+                    height: 100%;
+                    min-height: 400px;
+                    color: #475569;
+                    font-size: 13px;
+                    font-family: Arial;
+                    text-align: center;
+                ">
+                    Loading preview...
+                </div>
+            </div>
+
+            {{-- Selections summary --}}
+            <div style="
+                padding: 14px 20px;
+                border-top: 1px solid #1E2D40;
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+                flex-shrink: 0;
+                background: #0D1117;
+            ">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#475569; font-size:12px;">Style</span>
+                    <span id="preview-style-label" style="color:#F1F5F9; font-size:12px; font-weight:600;">—</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#475569; font-size:12px;">Transition</span>
+                    <span id="preview-transition-label" style="color:#F1F5F9; font-size:12px; font-weight:600;">—</span>
+                </div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:#475569; font-size:12px;">Music</span>
+                    <span id="preview-music-label" style="color:#F1F5F9; font-size:12px; font-weight:600;">—</span>
+                </div>
+            </div>
+
+            {{-- Render button --}}
+            <div style="padding: 14px 20px; flex-shrink: 0; border-top: 1px solid #1E2D40;">
+                <button
+                    onclick="generateSubtitles()"
+                    style="
+                        width: 100%;
+                        padding: 13px;
+                        background: #2563EB;
+                        color: #F1F5F9;
+                        border: none;
+                        border-radius: 8px;
+                        font-size: 14px;
+                        font-weight: 700;
+                        cursor: pointer;
+                        font-family: Arial;
+                    "
+                >
+                    🚀 Start Rendering
+                </button>
+            </div>
+        </div><!-- Close right column -->
+    </div><!-- Close grid row -->
 </div>
 
 <!-- Loading Overlay -->
@@ -2517,6 +2624,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     ripple.remove();
                 }, 600);
             });
+}); // <--- FIX FOR UNEXPECTED END OF INPUT
 </script>
 
 @push('scripts')
@@ -2528,8 +2636,17 @@ document.addEventListener('DOMContentLoaded', function() {
     let selectedTransition = 'fade'; // Default transition
     let selectedPosition = 'bottom'; // Default position
 
+    window.selectedStyle = selectedStyle;
+    window.selectedTransition = selectedTransition;
+    window.selectedMusicTrack = selectedMusicTrack;
+    window.currentStyleConfig = currentStyleConfig;
+
     // Project scene videos data
     const projectSceneVideos = @json($sceneVideos);
+    
+    // Live preview state injection
+    window.__EDIT_STATE__ = @json($project->edit_state ?? null);
+    window.__PROJECT_ID__ = {{ $project->id }};
     
     // Debug: Log the scene videos data immediately
     console.log('🔍 DEBUG: projectSceneVideos from PHP:', projectSceneVideos);
@@ -2661,6 +2778,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('🎬 Selecting transition:', transitionType);
 
         selectedTransition = transitionType;
+        window.selectedTransition = selectedTransition;
 
         // Update visual selection
         document.querySelectorAll('.transition-card').forEach(card => {
@@ -2747,6 +2865,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     function removeSelectedTrack() {
         selectedMusicTrack = null;
+        window.selectedMusicTrack = selectedMusicTrack;
         const section = document.getElementById('selectedTrackSection');
         if (section) {
             section.style.display = 'none';
@@ -2997,6 +3116,7 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Initialize currentStyleConfig now that styleConfigs is defined
             currentStyleConfig = styleConfigs[selectedStyle];
+            window.currentStyleConfig = currentStyleConfig;
             console.log('✅ currentStyleConfig initialized');
 
             // Update preview content with project data
@@ -3334,7 +3454,9 @@ document.addEventListener('DOMContentLoaded', function() {
         if (defaultStyle) {
             defaultStyle.classList.add('selected');
             selectedStyle = 'tiktok_trending';
+            window.selectedStyle = selectedStyle;
             currentStyleConfig = styleConfigs['tiktok_trending'];
+            window.currentStyleConfig = currentStyleConfig;
             console.log('🎨 Default style initialized:', selectedStyle, currentStyleConfig);
         }
 
@@ -3348,10 +3470,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
                 // Update selected style
                 selectedStyle = this.getAttribute('data-style');
+                window.selectedStyle = selectedStyle;
                 console.log('🎨 Selected style:', selectedStyle);
 
                 // Update current style config
                 currentStyleConfig = styleConfigs[selectedStyle];
+                window.currentStyleConfig = currentStyleConfig;
                 console.log('🎨 Style config:', currentStyleConfig);
 
                 // Update font families based on selected style and project content
@@ -3391,6 +3515,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update current style config if it exists
                 if (currentStyleConfig) {
                     currentStyleConfig.position = selectedPosition;
+                    window.currentStyleConfig = currentStyleConfig;
                 }
                 
                 console.log('📍 Updated all style configs with position:', selectedPosition);
@@ -4638,6 +4763,7 @@ document.addEventListener('DOMContentLoaded', function() {
         console.log('🎵 Selecting track:', track);
 
         selectedMusicTrack = track;
+        window.selectedMusicTrack = selectedMusicTrack;
 
         // Show selected track info
         showSelectedTrackInfo(track);
@@ -4714,5 +4840,196 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
+</script>
+
+{{-- Remotion Player IIFE bundle --}}
+<script src="{{ asset('js/remotion-player/vidsai-player.iife.js') }}"></script>
+
+<script>
+(function() {
+    'use strict';
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    const raw = window.__EDIT_STATE__;
+    let editState = raw ? JSON.parse(JSON.stringify(raw)) : null;
+    let playerRoot = null;
+
+    // ── Mount / update player ─────────────────────────────────────────────────
+    function mountPlayer() {
+        const P = window.VidsAIPlayer;
+        const el = document.getElementById('vidsai-preview-root');
+        if (!P || !el || !editState) return;
+
+        try {
+            if (!playerRoot) {
+                el.innerHTML = '';
+                playerRoot = P.ReactDOM.createRoot(el);
+            }
+            playerRoot.render(P.React.createElement(P.VideoPreviewPlayer, {
+                editState: editState,
+                projectId: window.__PROJECT_ID__,
+                acknowledgeRemotionLicense: true,
+            }));
+            setStatus('Live');
+        } catch(e) {
+            console.error('[Preview]', e);
+            setStatus('Error');
+        }
+    }
+
+    // ── Edit state mutations ──────────────────────────────────────────────────
+    function applySubtitleStyle(style, config) {
+        if (!editState || !style) return;
+        config = config || {};
+
+        const fps = editState.fps || 30;
+        const clips = editState.tracks.video || [];
+
+        // Generate one subtitle placeholder per scene clip
+        const placeholderTexts = [
+            'Every idea starts with a vision',
+            'But turning that vision into reality takes creativity',
+            'This is where innovation begins',
+            'Welcome to the future of possibilities',
+            'Your story starts here',
+            'The journey of a thousand miles',
+            'Make every moment count',
+            'Transform your vision into reality',
+        ];
+
+        if (!editState.tracks.subtitles || editState.tracks.subtitles.length === 0) {
+            // Create one subtitle per clip based on clip timing
+            if (clips.length > 0) {
+                editState.tracks.subtitles = clips.map(function(clip, i) {
+                    const startFrame = clip.start_frame + Math.round(fps * 0.2);
+                    const endFrame = clip.end_frame - Math.round(fps * 0.2);
+                    return {
+                        id: 'preview_sub_' + i,
+                        text: placeholderTexts[i % placeholderTexts.length],
+                        start_frame: Math.max(startFrame, clip.start_frame),
+                        end_frame: Math.max(Math.min(endFrame, clip.end_frame), startFrame + fps),
+                        style: style,
+                        position: config.position || 'bottom',
+                        config: config,
+                    };
+                });
+            }
+        } else {
+            // Real subtitles exist — just update the style
+            editState.tracks.subtitles = editState.tracks.subtitles.map(function(s) {
+                return Object.assign({}, s, { style: style, config: config });
+            });
+        }
+
+        window.__EDIT_STATE__ = editState;
+        editState.version = (editState.version || 1) + 1;
+        setLabel('preview-style-label', style.replace(/_/g, ' '));
+        mountPlayer();
+    }
+
+    function applyTransition(type) {
+        if (!editState || !type) return;
+        const clips = editState.tracks.video || [];
+        editState.tracks.video = clips.map((clip, i) => Object.assign({}, clip, {
+            transition_out: i < clips.length - 1
+                ? { type: type, duration_frames: 15 }
+                : null
+        }));
+        editState.version = (editState.version || 1) + 1;
+        setLabel('preview-transition-label', type);
+        mountPlayer();
+    }
+
+    function applyMusic(url, name) {
+        if (!editState) return;
+        editState.tracks.audio = (editState.tracks.audio || []).filter(a => a.type !== 'music');
+        if (url) {
+            editState.tracks.audio.push({
+                id: 'music', url: url, type: 'music',
+                start_frame: 0,
+                end_frame: editState.total_frames || 300,
+                volume: 0.3,
+                fade_in_frames: 15,
+                fade_out_frames: 15,
+            });
+        }
+        editState.version = (editState.version || 1) + 1;
+        setLabel('preview-music-label', name || 'Selected');
+        mountPlayer();
+    }
+
+    // ── Hook into existing page functions ─────────────────────────────────────
+    function patchFunctions() {
+        // Style cards — delegated listener
+        document.addEventListener('click', function(e) {
+            const card = e.target.closest('[data-style]');
+            if (card) {
+                setTimeout(() => {
+                    // Read from the card attribute directly — more reliable than window variable
+                    const style = card.getAttribute('data-style') || window.selectedStyle;
+                    // Read the style config that the existing page JS sets
+                    const config = window.currentStyleConfig || window.selectedStyleConfig || {};
+                    if (style) applySubtitleStyle(style, config);
+                }, 30);
+            }
+        });
+
+        // Transition function wrap
+        if (typeof window.selectTransition === 'function') {
+            const orig = window.selectTransition;
+            window.selectTransition = function(t, el) {
+                orig.call(this, t, el);
+                applyTransition(t);
+            };
+        }
+
+        // Music track function wrap
+        if (typeof window.selectTrack === 'function') {
+            const orig = window.selectTrack;
+            window.selectTrack = function(track) {
+                try {
+                    orig.call(this, track);
+                } catch (e) {
+                    console.warn('[Preview] selectTrack logic threw an error:', e);
+                }
+                if (track && track.preview_url) {
+                    applyMusic(track.preview_url, track.name || track.title);
+                }
+            };
+        }
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function setStatus(t) {
+        const el = document.getElementById('preview-status');
+        if (el) el.textContent = t;
+    }
+    function setLabel(id, t) {
+        const el = document.getElementById(id);
+        if (el) el.textContent = t || '—';
+    }
+
+    // ── Wait for bundle then init ─────────────────────────────────────────────
+    function waitAndInit() {
+        if (window.VidsAIPlayer) {
+            setStatus('Loading...');
+            
+            // Set initial labels
+            setLabel('preview-style-label', (window.selectedStyle || '').replace(/_/g, ' ') || '—');
+            setLabel('preview-transition-label', window.selectedTransition || '—');
+            setLabel('preview-music-label', (window.selectedMusicTrack && window.selectedMusicTrack.name) ? window.selectedMusicTrack.name : '—');
+            
+            mountPlayer();
+        } else {
+            setTimeout(waitAndInit, 200);
+        }
+    }
+
+    window.addEventListener('load', function() {
+        patchFunctions();
+        waitAndInit();
+    });
+
+})();
 </script>
 @endpush
