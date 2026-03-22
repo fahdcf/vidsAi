@@ -122,6 +122,7 @@ class EditStateBuilder
     private function buildSubtitleTrack(Project $project): array
     {
         $subtitlesScript = $project->subtitles_script;
+        $transcript = $project->voiceover_transcript ?? [];
 
         if (empty($subtitlesScript)) {
             return [];
@@ -138,7 +139,6 @@ class EditStateBuilder
         $firstItem = $subtitlesScript[0] ?? null;
         if (is_string($firstItem)) {
             // Plain strings — build timing from voiceover transcript
-            $transcript = $project->voiceover_transcript ?? [];
             $voiceoverTotalDuration = 0.0;
             if (!empty($transcript)) {
                 $lastWord = end($transcript);
@@ -185,6 +185,12 @@ class EditStateBuilder
                     'style' => $style,
                     'position' => 'bottom',
                     'config' => [],
+                    'words' => $this->extractWordTimestamps(
+                        $text,
+                        $startFrame,
+                        $endFrame,
+                        $transcript
+                    ),
                 ];
             }
 
@@ -219,15 +225,13 @@ class EditStateBuilder
                 'style' => $style,
                 'position' => $sub['position'] ?? 'bottom',
                 'config' => [],
+                'words' => $this->extractWordTimestamps(
+                    (string) ($sub['text'] ?? ''),
+                    $startFrame,
+                    $endFrame,
+                    $transcript
+                ),
             ];
-
-            if (!empty($sub['words']) && is_array($sub['words'])) {
-                $item['words'] = array_map(static fn ($w) => [
-                    'word' => $w['word'] ?? '',
-                    'start_frame' => (int) round(($w['start'] ?? 0) * self::FPS),
-                    'end_frame' => (int) round(($w['end'] ?? 0) * self::FPS),
-                ], $sub['words']);
-            }
 
             $track[] = $item;
         }
@@ -346,6 +350,180 @@ class EditStateBuilder
             'start' => max(0, $startTime - 0.1),
             'end' => min($totalDuration, $endTime - 0.1),
         ];
+    }
+
+    /**
+     * Extract word-level timestamps for a subtitle segment from the Deepgram transcript.
+     * Returns array of {word, start_frame, end_frame} for each word in the subtitle text.
+     * Falls back to equal distribution if words cannot be matched.
+     */
+    private function extractWordTimestamps(
+        string $subtitleText,
+        int $segmentStartFrame,
+        int $segmentEndFrame,
+        array $transcript
+    ): array {
+        if (empty($transcript) || empty($subtitleText)) {
+            return $this->equalDistributionFallback($subtitleText, $segmentStartFrame, $segmentEndFrame);
+        }
+
+        $subtitleWords = preg_split('/\s+/', trim($subtitleText));
+        $subtitleWords = array_values(array_filter($subtitleWords, static fn ($w) => $w !== ''));
+
+        if (empty($subtitleWords)) {
+            return [];
+        }
+
+        $transcriptNormalized = array_map(static function ($entry) {
+            return [
+                'word' => $entry['word'] ?? $entry['punctuated_word'] ?? '',
+                'normalized' => strtolower((string) preg_replace('/[^a-z0-9]/i', '', (string) ($entry['word'] ?? ''))),
+                'start' => (float) ($entry['start'] ?? 0),
+                'end' => (float) ($entry['end'] ?? 0),
+            ];
+        }, $transcript);
+
+        $segmentStartTime = $segmentStartFrame / self::FPS;
+        $segmentEndTime = $segmentEndFrame / self::FPS;
+
+        $segmentTranscriptWords = array_values(array_filter(
+            $transcriptNormalized,
+            static fn ($w) => $w['start'] >= ($segmentStartTime - 0.5)
+                && $w['start'] <= ($segmentEndTime + 0.5)
+        ));
+
+        if (empty($segmentTranscriptWords)) {
+            return $this->equalDistributionFallback($subtitleText, $segmentStartFrame, $segmentEndFrame);
+        }
+
+        $result = [];
+        $transcriptIndex = 0;
+
+        foreach ($subtitleWords as $i => $subWord) {
+            $subNorm = strtolower((string) preg_replace('/[^a-z0-9]/i', '', $subWord));
+            $found = false;
+
+            for ($j = $transcriptIndex; $j < count($segmentTranscriptWords); $j++) {
+                if ($segmentTranscriptWords[$j]['normalized'] === $subNorm) {
+                    $startFrame = (int) round($segmentTranscriptWords[$j]['start'] * self::FPS);
+                    $nextStart = isset($segmentTranscriptWords[$j + 1])
+                        ? (int) round($segmentTranscriptWords[$j + 1]['start'] * self::FPS)
+                        : $segmentEndFrame;
+
+                    $startFrame = max($segmentStartFrame, $startFrame);
+                    $endFrame = min($segmentEndFrame, $nextStart);
+                    if ($endFrame <= $startFrame) {
+                        $endFrame = min($segmentEndFrame, $startFrame + 1);
+                    }
+
+                    $result[] = [
+                        'word' => $subWord,
+                        'start_frame' => $startFrame,
+                        'end_frame' => $endFrame,
+                    ];
+
+                    $transcriptIndex = $j + 1;
+                    $found = true;
+                    break;
+                }
+            }
+
+            if (!$found) {
+                $prevEnd = !empty($result) ? (int) end($result)['end_frame'] : $segmentStartFrame;
+                $remaining = count($subtitleWords) - $i;
+                $framesLeft = max(0, $segmentEndFrame - $prevEnd);
+                $frameWidth = $remaining > 0 ? (int) round($framesLeft / $remaining) : 0;
+
+                $fallbackEnd = min($segmentEndFrame, $prevEnd + max(1, $frameWidth));
+                $result[] = [
+                    'word' => $subWord,
+                    'start_frame' => $prevEnd,
+                    'end_frame' => $fallbackEnd,
+                ];
+            }
+        }
+
+        return $this->normalizeWordFramesToSegment($result, $segmentStartFrame, $segmentEndFrame);
+    }
+
+    /**
+     * Fallback: distribute words equally across the segment duration.
+     * Used when transcript matching fails.
+     */
+    private function equalDistributionFallback(
+        string $text,
+        int $startFrame,
+        int $endFrame
+    ): array {
+        $words = preg_split('/\s+/', trim($text));
+        $words = array_values(array_filter($words, static fn ($w) => $w !== ''));
+
+        if (empty($words)) {
+            return [];
+        }
+
+        $totalFrames = max(0, $endFrame - $startFrame);
+        $framesPerWord = $totalFrames > 0 ? $totalFrames / count($words) : 0;
+        $result = [];
+
+        foreach ($words as $i => $word) {
+            $wStart = $startFrame + (int) round($i * $framesPerWord);
+            $wEnd = $startFrame + (int) round(($i + 1) * $framesPerWord);
+            $result[] = [
+                'word' => $word,
+                'start_frame' => $wStart,
+                'end_frame' => min($endFrame, max($wStart + 1, $wEnd)),
+            ];
+        }
+
+        return $this->normalizeWordFramesToSegment($result, $startFrame, $endFrame);
+    }
+
+    /**
+     * Remotion progressive subtitle components consume word frames relative to
+     * the subtitle segment Sequence (0..segmentDuration), not absolute timeline frames.
+     */
+    private function normalizeWordFramesToSegment(array $words, int $segmentStartFrame, int $segmentEndFrame): array
+    {
+        $segmentDuration = max(1, $segmentEndFrame - $segmentStartFrame);
+        $normalized = [];
+
+        foreach ($words as $index => $word) {
+            $absStart = (int) ($word['start_frame'] ?? $segmentStartFrame);
+            $absEnd = (int) ($word['end_frame'] ?? $absStart + 1);
+
+            $localStart = max(0, min($segmentDuration - 1, $absStart - $segmentStartFrame));
+            $localEnd = max($localStart + 1, min($segmentDuration, $absEnd - $segmentStartFrame));
+
+            // Keep word intervals contiguous and non-overlapping.
+            if (!empty($normalized)) {
+                $prevEnd = $normalized[count($normalized) - 1]['end_frame'];
+                if ($localStart < $prevEnd) {
+                    $localStart = $prevEnd;
+                }
+                if ($localEnd <= $localStart) {
+                    $localEnd = min($segmentDuration, $localStart + 1);
+                }
+            }
+
+            $normalized[] = [
+                'word' => (string) ($word['word'] ?? ''),
+                'start_frame' => $localStart,
+                'end_frame' => $localEnd,
+            ];
+
+            if ($normalized[$index]['end_frame'] >= $segmentDuration) {
+                $normalized[$index]['end_frame'] = $segmentDuration;
+            }
+        }
+
+        if (!empty($normalized)) {
+            $normalized[0]['start_frame'] = 0;
+            $last = count($normalized) - 1;
+            $normalized[$last]['end_frame'] = $segmentDuration;
+        }
+
+        return $normalized;
     }
 
     private function buildAudioTrack(Project $project, int $totalFrames): array

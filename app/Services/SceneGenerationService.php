@@ -971,7 +971,33 @@ class SceneGenerationService
     private function buildGeminiPrompt(string $script, array $transcriptData, string $language): string
     {
         $transcriptText = $transcriptData['text'] ?? '';
-        $transcriptWords = json_encode($transcriptData['words'] ?? []);
+        // Build pause-annotated transcript for Gemini
+        $annotatedWords = [];
+        $prevEnd = 0.0;
+        foreach ($transcriptData['words'] ?? [] as $i => $word) {
+            $start = (float) ($word['start'] ?? 0);
+            $pause = $i > 0 ? round($start - $prevEnd, 3) : 0.0;
+            $entry = $word;
+            if ($pause >= 0.3) {
+                $entry['pause_before'] = $pause;
+                $entry['cut_candidate'] = true;
+            }
+            $annotatedWords[] = $entry;
+            $prevEnd = (float) ($word['end'] ?? $start);
+        }
+        $transcriptWordsAnnotated = json_encode($annotatedWords, JSON_PRETTY_PRINT);
+
+        $totalDuration = 0.0;
+        if (!empty($transcriptData['words'])) {
+            $lastWord = end($transcriptData['words']);
+            $totalDuration = round((float) ($lastWord['end'] ?? 0), 3);
+        }
+
+        // Calculate recommended scene count based on voiceover duration
+        // Roughly one scene every 2-3 seconds for good pacing
+        $recommendedScenes = max(3, min(8, (int) round($totalDuration / 2.5)));
+        $minScenes = max(2, $recommendedScenes - 1);
+        $maxScenes = $recommendedScenes + 2;
 
         return "
 You are given:
@@ -987,10 +1013,22 @@ You are given:
      {\"error\": \"Audio does not match script.\"}
 
 2. If they match:
-   - Split the script into meaningful scene phrases.
-   - Minimize splits—only break where it makes visual sense.
-   - For lists (commas, \"and\"), split items individually.
-   - Preserve exact wording.
+    - Split the script into dynamic scenes like a professional video editor would.
+    - USE VOICE PAUSES AS CUT POINTS: Any pause >= 0.3s between words is a strong candidate for a scene cut.
+    - USE MEANING SHIFTS AS CUT POINTS: New ideas, emotional beats, contrasts (\"but\", \"this is\", \"welcome\") should trigger cuts.
+    - HARD RULE: Every scene MUST be at least 1.5 seconds long. Never create a scene shorter than 1.5 seconds.
+    - HARD RULE: Every scene MUST contain at least 3 words. Never create a single-word or two-word scene.
+    - Scene durations should vary naturally between 1.5s and 5s for best results.
+    - If a pause exists between short fragments (like \"creativity, passion, and the right tools\"), keep them in the SAME scene rather than splitting them into micro-scenes.
+    - Commas within a flowing thought are NOT scene cuts - only split where there is a genuine meaning shift.
+    - Short scenes (1.5-2.5s) create energy and urgency for punchy statements.
+    - Medium scenes (2.5-4s) work for flowing ideas.
+    - Longer scenes (4-6s) allow complex thoughts to breathe.
+    - DO NOT split based on punctuation or commas alone.
+    - DO split based on rhythm, breath, meaning, and emotional weight.
+    - Preserve exact wording - every word must appear in exactly one scene.
+    - TARGET: Create between {$minScenes} and {$maxScenes} scenes for this {$totalDuration}s voiceover.
+    - This gives approximately one scene every 2-3 seconds which is optimal for short-form video.
 
 3. **CRITICAL: For each phrase, generate ONLY ONE PERFECT KEYWORD:**
    - **ONE keyword only** - not 2-3 keywords
@@ -1020,23 +1058,25 @@ You are given:
    - This creates a **smooth visual narrative** from product → materials → function → lifestyle
 
 5. Align words to transcript:
-   - start_time = first matched word's start
-   - end_time = last matched word's end
-   - Adjust:
-     - Extend each end_time up to the next start_time (include pauses).
-     - First phrase: if start_time > 0, add that to duration_seconds (don't change start_time).
-     - Last phrase: add exactly **2.0 seconds** to duration_seconds.
-     - duration_seconds = end_time - start_time (+ adjustments), rounded to 1 decimal.
+    - start_time = first matched word's start time from transcript
+    - end_time = the start_time of the NEXT scene's first word (not this scene's last word end)
+    - For the FINAL scene only: end_time = last word's end time from transcript
+    - duration_seconds = end_time - start_time, rounded to 3 decimal places
+    - This automatically includes pauses between scenes in the current scene's duration
+    - DO NOT add artificial seconds to any scene - use real transcript timing only
+    - CRITICAL: The sum of all scene duration_seconds MUST equal the last transcript word's end time (approximately {$totalDuration}s for this voiceover).
+    - If your scenes don't cover the full duration, extend the last scene's end_time to the last transcript word's end time.
 
 6. Validation:
-   - Sum(duration_seconds) ≈ last transcript word's end + 2 seconds.
+    - Sum(duration_seconds) must equal approximately the last transcript word's end time
+    - Every word from the transcript must appear in exactly one scene
 
 7. For each phrase:
    - Create a **prompt**: cinematic visual scene description (English).
 
 8. **Also generate subtitles_script:**
    - A **global array** of short TikTok-style subtitle chunks.
-   - Each chunk: **2–4 words**, meaningful, natural.
+    - Each chunk: **2-5 words**, meaningful, natural.
    - **CRITICAL for Arabic**: Split at semantic boundaries, NOT word boundaries!
    - **Arabic Examples:**
      ❌ WRONG: [\"يكون اقتصادي قابل\", \"للنقل وبتمن مناسب\"]
@@ -1049,6 +1089,10 @@ You are given:
    - **Avoid awkward breaks:**
      ❌ [\"the reusable water\", \"bottle made from eco\", \"materials\"]
      ✅ [\"the reusable water bottle\", \"made from eco materials\"]
+     - For LONG scenes (>3s): break into multiple subtitle chunks that each appear and disappear as the words are spoken
+     - For SHORT scenes (<2s): keep the entire phrase as one subtitle chunk
+     - Each chunk should feel complete - a thought fragment, not a random word grouping
+     - Chunks should align to natural speech rhythm and pauses in the voiceover
 
 ### OUTPUT FORMAT (return ONLY this):
 {
@@ -1075,7 +1119,8 @@ NO explanations, NO code, NO markdown, just valid JSON.
 Language: {$language}
 Script: {$script}
 Transcript Text: {$transcriptText}
-Transcript Words: {$transcriptWords}
+Transcript Words (with pause annotations - cut_candidate:true means strong cut point):
+{$transcriptWordsAnnotated}
 
 **SPECIAL INSTRUCTIONS FOR ARABIC ({$language}):**
 - Arabic text flows right-to-left and has different grammar rules

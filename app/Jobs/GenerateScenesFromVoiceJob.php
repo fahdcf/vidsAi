@@ -316,6 +316,21 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
             $voiceoverTotalDuration = (float) ($lastWord['end'] ?? 0.0);
         }
 
+        // Apply post-processing quality rules
+        if ($voiceoverTotalDuration > 0) {
+            $scenesData = $this->enforceSceneQualityRules(
+                $scenesData,
+                $voiceoverTotalDuration,
+                1.5
+            );
+
+            Log::info('[SceneGeneration] Post-processing applied', [
+                'project_id' => $project->id,
+                'scene_count' => count($scenesData),
+                'total_duration' => array_sum(array_column($scenesData, 'gemini_duration')),
+            ]);
+        }
+
         $sceneNumber = 1;
         foreach ($scenesData as $index => $sceneData) {
             $sceneText = (string) ($sceneData['phrase'] ?? '');
@@ -369,6 +384,147 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
             'project_id' => $project->id,
             'scenes_created' => count($scenesData)
         ]);
+    }
+
+    /**
+     * Post-process Gemini scene plan to enforce hard quality rules.
+     * Runs after Gemini responds - deterministic safety net.
+     *
+     * Rules enforced:
+     * 1. Merge scenes shorter than 1.5s into adjacent scenes
+     * 2. Total duration must cover full voiceover
+     */
+    private function enforceSceneQualityRules(
+        array $scenes,
+        float $voiceoverTotalDuration,
+        float $minDurationSeconds = 1.5
+    ): array {
+        if (empty($scenes)) {
+            return $scenes;
+        }
+
+        // Rule 1: Merge scenes shorter than minimum duration
+        $merged = true;
+        $maxPasses = 10; // prevent infinite loop
+        $pass = 0;
+
+        while ($merged && $pass < $maxPasses) {
+            $merged = false;
+            $pass++;
+            $result = [];
+
+            for ($i = 0; $i < count($scenes); $i++) {
+                $scene = $scenes[$i];
+                $duration = (float) ($scene['gemini_duration'] ?? $scene['duration_seconds'] ?? 0);
+                $sceneText = trim((string) ($scene['phrase'] ?? $scene['script_text'] ?? ''));
+                $normalizedSceneText = strtolower((string) preg_replace('/[^a-z0-9\s]/i', ' ', $sceneText));
+                $sceneWords = array_values(array_filter(preg_split('/\s+/', $normalizedSceneText ?: '')));
+                $startsWithConnector = preg_match('/^(and|but|or|so|because|while|then)\b/i', $sceneText) === 1;
+                $isConnectorFragment = $startsWithConnector && count($sceneWords) <= 6;
+
+                if (($duration < $minDurationSeconds || $isConnectorFragment) && count($scenes) > 1) {
+                    // Merge with next scene if it exists, otherwise merge with previous
+                    if ($isConnectorFragment && !empty($result)) {
+                        // Connector fragments belong to the previous thought.
+                        $prev = array_pop($result);
+                        $result[] = [
+                            'phrase' => trim(($prev['phrase'] ?? '') . ' ' . ($scene['phrase'] ?? '')),
+                            'script_text' => trim(($prev['script_text'] ?? $prev['phrase'] ?? '') . ' ' . ($scene['script_text'] ?? $scene['phrase'] ?? '')),
+                            'start_time' => $prev['start_time'] ?? $scene['start_time'] ?? null,
+                            'end_time' => $scene['end_time'] ?? $prev['end_time'] ?? null,
+                            'duration_seconds' => (float) ($prev['duration_seconds'] ?? 0) + (float) ($scene['duration_seconds'] ?? 0),
+                            'gemini_duration' => (float) ($prev['gemini_duration'] ?? 0) + (float) ($scene['gemini_duration'] ?? 0),
+                            'keywords' => array_values(array_filter(array_merge(
+                                is_array($prev['keywords'] ?? null) ? $prev['keywords'] : [],
+                                is_array($scene['keywords'] ?? null) ? $scene['keywords'] : []
+                            ))),
+                            'prompt' => $prev['prompt'] ?? $scene['prompt'] ?? '',
+                            'subtitles_script' => array_values(array_filter(array_merge(
+                                is_array($prev['subtitles_script'] ?? null) ? $prev['subtitles_script'] : [],
+                                is_array($scene['subtitles_script'] ?? null) ? $scene['subtitles_script'] : []
+                            ))),
+                            'cut_reason' => 'merged: connector fragment',
+                        ];
+                        $merged = true;
+                        continue;
+                    }
+
+                    if ($i < count($scenes) - 1) {
+                        // Merge current into next
+                        $next = $scenes[$i + 1];
+                        $scenes[$i + 1] = [
+                            'phrase' => trim(($scene['phrase'] ?? '') . ' ' . ($next['phrase'] ?? '')),
+                            'script_text' => trim(($scene['script_text'] ?? $scene['phrase'] ?? '') . ' ' . ($next['script_text'] ?? $next['phrase'] ?? '')),
+                            'start_time' => $scene['start_time'] ?? $next['start_time'] ?? null,
+                            'end_time' => $next['end_time'] ?? $scene['end_time'] ?? null,
+                            'duration_seconds' => (float) ($scene['duration_seconds'] ?? 0) + (float) ($next['duration_seconds'] ?? 0),
+                            'gemini_duration' => (float) ($scene['gemini_duration'] ?? 0) + (float) ($next['gemini_duration'] ?? 0),
+                            'keywords' => array_values(array_filter(array_merge(
+                                is_array($scene['keywords'] ?? null) ? $scene['keywords'] : [],
+                                is_array($next['keywords'] ?? null) ? $next['keywords'] : []
+                            ))),
+                            'prompt' => $next['prompt'] ?? $scene['prompt'] ?? '',
+                            'subtitles_script' => array_values(array_filter(array_merge(
+                                is_array($scene['subtitles_script'] ?? null) ? $scene['subtitles_script'] : [],
+                                is_array($next['subtitles_script'] ?? null) ? $next['subtitles_script'] : []
+                            ))),
+                            'cut_reason' => 'merged: scene was too short',
+                        ];
+                        $merged = true;
+                        // Skip current scene (merged into next)
+                        continue;
+                    } elseif (!empty($result)) {
+                        // Last scene too short - merge into previous
+                        $prev = array_pop($result);
+                        $result[] = [
+                            'phrase' => trim(($prev['phrase'] ?? '') . ' ' . ($scene['phrase'] ?? '')),
+                            'script_text' => trim(($prev['script_text'] ?? $prev['phrase'] ?? '') . ' ' . ($scene['script_text'] ?? $scene['phrase'] ?? '')),
+                            'start_time' => $prev['start_time'] ?? $scene['start_time'] ?? null,
+                            'end_time' => $scene['end_time'] ?? $prev['end_time'] ?? null,
+                            'duration_seconds' => (float) ($prev['duration_seconds'] ?? 0) + (float) ($scene['duration_seconds'] ?? 0),
+                            'gemini_duration' => (float) ($prev['gemini_duration'] ?? 0) + (float) ($scene['gemini_duration'] ?? 0),
+                            'keywords' => array_values(array_filter(array_merge(
+                                is_array($prev['keywords'] ?? null) ? $prev['keywords'] : [],
+                                is_array($scene['keywords'] ?? null) ? $scene['keywords'] : []
+                            ))),
+                            'prompt' => $prev['prompt'] ?? $scene['prompt'] ?? '',
+                            'subtitles_script' => array_values(array_filter(array_merge(
+                                is_array($prev['subtitles_script'] ?? null) ? $prev['subtitles_script'] : [],
+                                is_array($scene['subtitles_script'] ?? null) ? $scene['subtitles_script'] : []
+                            ))),
+                            'cut_reason' => 'merged: last scene was too short',
+                        ];
+                        $merged = true;
+                        continue;
+                    }
+                }
+
+                $result[] = $scene;
+            }
+
+            $scenes = $result;
+        }
+
+        // Rule 2: Renumber scenes
+        foreach ($scenes as $i => &$scene) {
+            $scene['scene_number'] = $i + 1;
+        }
+        unset($scene);
+
+        // Rule 3: Extend last scene to cover full voiceover
+        if (!empty($scenes) && $voiceoverTotalDuration > 0) {
+            $lastIndex = count($scenes) - 1;
+            $currentTotal = (float) array_sum(array_column($scenes, 'gemini_duration'));
+
+            if ($voiceoverTotalDuration > $currentTotal + 0.1) {
+                $gap = $voiceoverTotalDuration - $currentTotal;
+                $scenes[$lastIndex]['gemini_duration'] = round((float) ($scenes[$lastIndex]['gemini_duration'] ?? 0) + $gap, 3);
+                $scenes[$lastIndex]['duration_seconds'] = $scenes[$lastIndex]['gemini_duration'];
+                $scenes[$lastIndex]['end_time'] = $voiceoverTotalDuration;
+            }
+        }
+
+        return $scenes;
     }
 
     /**
