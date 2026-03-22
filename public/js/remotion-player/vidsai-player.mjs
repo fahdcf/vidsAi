@@ -3664,7 +3664,33 @@ function $t({ editState: e, projectId: i, projectName: a }) {
 		o.current && (s ? o.current.pause() : o.current.play(), c(!s));
 	}, _ = () => {
 		o.current && (o.current.seekTo(0), c(!1));
+	}, v = (w) => {
+		if (!o.current) return;
+		let E = Number.isFinite(w) ? Math.max(0, Math.min(u, Math.round(w))) : 0;
+		o.current.seekTo(E);
+	}, y = (w) => {
+		v(w * l);
 	};
+	typeof window < "u" && (window.VidsAIPlayer = window.VidsAIPlayer || {}, window.VidsAIPlayer.bridge = {
+		play: () => {
+			o.current && (o.current.play(), c(!0));
+		},
+		pause: () => {
+			o.current && (o.current.pause(), c(!1));
+		},
+		toggle: g,
+		restart: _,
+		seekToFrame: v,
+		seekToTime: y,
+		getCurrentFrame: () => o.current ? o.current.getCurrentFrame() : 0,
+		getCurrentTime: () => {
+			let E = o.current ? o.current.getCurrentFrame() : 0;
+			return E / l;
+		},
+		isPlaying: () => s,
+		fps: l,
+		totalFrames: u
+	});
 	return /* @__PURE__ */ (0, $.jsxs)("div", {
 		style: en,
 		"data-project-id": i,
