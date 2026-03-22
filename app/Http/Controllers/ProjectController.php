@@ -1870,11 +1870,19 @@ class ProjectController extends Controller
             'voiceover_url' => $videoData['voiceOver'] ?? 'none'
         ]);
 
-            // Update project status to subtitle_generating
-            $project->update([
+            $updateData = [
                 'status' => 'subtitle_generating',
-                'processing_started_at' => now()
-            ]);
+                'processing_started_at' => now(),
+            ];
+
+            // Save selected music so the editor can load it
+            if (!empty($validated['music'])) {
+                $updateData['selected_music'] = json_encode([
+                    ['url' => $validated['music'], 'volume' => $validated['musicVolume'] ?? 0.3]
+                ]);
+            }
+
+            $project->update($updateData);
 
             logger()->info('🚀 Dispatching subtitle generation job', [
                 'project_id' => $project->id,

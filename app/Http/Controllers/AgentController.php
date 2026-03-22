@@ -49,7 +49,136 @@ class AgentController extends Controller
             }
         }
 
+        // Inject selected_music into edit_state if not already there
+        if (!empty($project->edit_state) && !empty($project->selected_music)) {
+            $editState = $project->edit_state;
+            $audioTracks = $editState['tracks']['audio'] ?? [];
+
+            $hasMusicTrack = !empty(array_filter(
+                $audioTracks,
+                fn($t) => ($t['type'] ?? '') === 'music'
+            ));
+
+            if (!$hasMusicTrack) {
+                $selectedMusic = $project->selected_music;
+                if (is_string($selectedMusic)) {
+                    $selectedMusic = json_decode($selectedMusic, true);
+                }
+
+                $musicUrl = null;
+                if (!empty($selectedMusic)) {
+                    if (isset($selectedMusic[0])) {
+                        $musicUrl = $selectedMusic[0]['url']
+                            ?? $selectedMusic[0]['preview_hq_mp3']
+                            ?? $selectedMusic[0]['preview_lq_mp3']
+                            ?? null;
+                    } elseif (isset($selectedMusic['url'])) {
+                        $musicUrl = $selectedMusic['url']
+                            ?? $selectedMusic['preview_hq_mp3']
+                            ?? $selectedMusic['preview_lq_mp3']
+                            ?? null;
+                    }
+                }
+
+                if ($musicUrl) {
+                    $totalFrames = $editState['total_frames'] ?? 300;
+                    $editState['tracks']['audio'][] = [
+                        'id' => 'music',
+                        'url' => $musicUrl,
+                        'type' => 'music',
+                        'start_frame' => 0,
+                        'end_frame' => $totalFrames,
+                        'volume' => 0.3,
+                        'fade_in_frames' => 15,
+                        'fade_out_frames' => 15,
+                    ];
+                    $editState['version'] = ($editState['version'] ?? 1) + 1;
+                    $project->update(['edit_state' => $editState]);
+
+                    Log::info('[AgentController] Injected selected_music into edit_state', [
+                        'project_id' => $project->id,
+                        'music_url' => $musicUrl,
+                    ]);
+                }
+            }
+        }
+
         return view('projects.editor', compact('project'));
+    }
+
+    /**
+     * Save music selection from subtitle styles page.
+     * Called when user clicks "Open Editor" so music persists
+     * without requiring a full render trigger.
+     *
+     * POST /projects/{project}/save-music
+     * Body: { "music_url": "...", "music_volume": 0.3, "music_name": "..." }
+     */
+    public function saveMusic(Request $request, Project $project)
+    {
+        $this->authorize('update', $project);
+
+        $request->validate([
+            'music_url' => 'nullable|string',
+            'music_volume' => 'nullable|numeric|min:0|max:1',
+            'music_name' => 'nullable|string|max:200',
+        ]);
+
+        $musicUrl = $request->input('music_url');
+        $musicVolume = (float) ($request->input('music_volume', 0.3));
+        $musicName = $request->input('music_name', '');
+
+        if ($musicUrl) {
+            $project->update([
+                'selected_music' => [
+                    ['url' => $musicUrl, 'volume' => $musicVolume, 'name' => $musicName]
+                ],
+            ]);
+
+            // Also inject into edit_state immediately
+            if (!empty($project->fresh()->edit_state)) {
+                $editState = $project->fresh()->edit_state;
+                $audioTracks = $editState['tracks']['audio'] ?? [];
+
+                // Remove existing music track
+                $editState['tracks']['audio'] = array_values(array_filter(
+                    $audioTracks,
+                    fn($t) => ($t['type'] ?? '') !== 'music'
+                ));
+
+                // Add new music track
+                $editState['tracks']['audio'][] = [
+                    'id' => 'music',
+                    'url' => $musicUrl,
+                    'type' => 'music',
+                    'start_frame' => 0,
+                    'end_frame' => $editState['total_frames'] ?? 300,
+                    'volume' => $musicVolume,
+                    'fade_in_frames' => 15,
+                    'fade_out_frames' => 15,
+                ];
+
+                $editState['version'] = ($editState['version'] ?? 1) + 1;
+                $editState['metadata']['last_modified'] = now()->toISOString();
+
+                $project->update(['edit_state' => $editState]);
+
+                Log::info('[AgentController] Music saved and injected into edit_state', [
+                    'project_id' => $project->id,
+                    'music_url' => $musicUrl,
+                    'music_name' => $musicName,
+                ]);
+            }
+        } else {
+            // No music selected — clear it
+            $project->update(['selected_music' => null]);
+        }
+
+        return response()->json([
+            'success' => true,
+            'editor_url' => route('projects.editor', $project),
+            'music_saved' => (bool) $musicUrl,
+        ]);
     }
 
     /**
@@ -61,7 +190,10 @@ class AgentController extends Controller
     {
         $this->authorize('update', $project);
 
-        $request->validate(['message' => 'required|string|max:500']);
+        $request->validate([
+            'message' => 'required|string|max:500',
+            'order' => 'sometimes|array',
+        ]);
 
         $editState = $project->fresh()->edit_state;
 
@@ -70,6 +202,20 @@ class AgentController extends Controller
                 'success' => false,
                 'agent_reply' => 'No edit state found. Please complete scene generation first.',
             ], 422);
+        }
+
+        // Handle direct reorder from drag/drop (bypasses AI classification)
+        if ($request->input('message') === '__reorder__') {
+            $order = $request->input('order', []);
+            if (!empty($order)) {
+                try {
+                    $updated = $this->toolRegistry->execute('reorder_scenes', ['order' => $order], $editState);
+                    $project->update(['edit_state' => $updated]);
+                    return response()->json(['success' => true, 'edit_state' => $updated]);
+                } catch (\Exception $e) {
+                    return response()->json(['success' => false, 'message' => $e->getMessage()], 422);
+                }
+            }
         }
 
         // Classify intent

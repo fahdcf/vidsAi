@@ -10,9 +10,6 @@
     {{-- WaveSurfer.js for waveform --}}
     <script src="https://cdnjs.cloudflare.com/ajax/libs/wavesurfer.js/7.8.7/wavesurfer.min.js"></script>
 
-    {{-- interact.js for drag and drop --}}
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/interact.js/1.10.27/interact.min.js"></script>
-
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -112,20 +109,60 @@
 
         /* -- Main area -------------------------------------------------- */
         #main-area {
-            display: grid;
-            grid-template-columns: 340px 1fr;
+            display: flex;
+            flex-direction: row;
             flex: 1;
             overflow: hidden;
             min-height: 0;
+            height: calc(100vh - 52px);
+            position: relative;
         }
 
         /* -- Left panel - Chat ----------------------------------------- */
         #chat-panel {
+            width: 340px;
+            min-width: 220px;
+            max-width: 600px;
+            flex-shrink: 0;
             display: flex;
             flex-direction: column;
-            border-right: 1px solid var(--border);
+            border-right: none;
             background: var(--surface);
             overflow: hidden;
+            height: 100%;
+            min-height: 0;
+        }
+
+        #resize-handle {
+            width: 6px;
+            background: var(--border);
+            cursor: col-resize;
+            flex-shrink: 0;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.15s;
+            z-index: 10;
+        }
+
+        #resize-handle:hover,
+        #resize-handle.dragging {
+            background: var(--accent);
+        }
+
+        #resize-grip {
+            width: 2px;
+            height: 32px;
+            background: var(--muted);
+            border-radius: 2px;
+            opacity: 0.5;
+        }
+
+        #resize-handle:hover #resize-grip,
+        #resize-handle.dragging #resize-grip {
+            opacity: 1;
+            background: white;
         }
 
         #chat-header {
@@ -284,10 +321,13 @@
 
         /* -- Right panel ------------------------------------------------ */
         #right-panel {
+            flex: 1;
             display: flex;
             flex-direction: column;
             overflow: hidden;
             min-height: 0;
+            height: 100%;
+            min-width: 400px;
         }
 
         /* -- Player area ------------------------------------------------ */
@@ -296,7 +336,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #000;
+            background: #080B11;
             overflow: hidden;
             min-height: 0;
             position: relative;
@@ -318,7 +358,7 @@
 
         /* -- Timeline --------------------------------------------------- */
         #timeline-panel {
-            height: 200px;
+            height: 240px;
             flex-shrink: 0;
             border-top: 1px solid var(--border);
             background: var(--surface);
@@ -331,86 +371,107 @@
             display: flex;
             align-items: center;
             justify-content: space-between;
-            padding: 6px 14px;
+            padding: 5px 12px;
             border-bottom: 1px solid var(--border);
             flex-shrink: 0;
+            height: 32px;
         }
 
-        #timeline-header span {
-            font-size: 11px;
+        #timeline-label {
+            font-size: 10px;
             font-weight: 700;
             color: var(--muted);
             text-transform: uppercase;
             letter-spacing: 0.05em;
         }
 
-        #timeline-hint {
-            font-size: 11px;
-            color: var(--muted);
-        }
-
-        /* Waveform track */
-        #waveform-track {
-            padding: 4px 14px 0;
-            flex-shrink: 0;
-            height: 52px;
-            position: relative;
-        }
-
-        #waveform {
-            width: 100%;
-            height: 44px;
-        }
-
-        #waveform-label {
-            position: absolute;
-            left: 14px;
-            top: 6px;
-            font-size: 10px;
-            color: var(--muted);
-            pointer-events: none;
-            z-index: 1;
-        }
-
-        /* Scene blocks track */
-        #scene-track {
-            flex: 1;
-            padding: 6px 14px;
+        .zoom-btn {
+            width: 22px;
+            height: 22px;
+            background: var(--border);
+            color: var(--text);
+            border: 1px solid #2D3F55;
+            border-radius: 4px;
+            font-size: 13px;
+            cursor: pointer;
+            font-family: Arial;
             display: flex;
             align-items: center;
-            gap: 3px;
+            justify-content: center;
+            padding: 0;
+            line-height: 1;
+        }
+
+        .zoom-btn:hover { background: var(--accent); }
+
+        /* Scrollable body */
+        #timeline-body {
+            flex: 1;
             overflow-x: auto;
-            overflow-y: hidden;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
             min-height: 0;
             position: relative;
         }
 
-        #scene-track::-webkit-scrollbar { height: 4px; }
-        #scene-track::-webkit-scrollbar-track { background: transparent; }
-        #scene-track::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+        #timeline-body::-webkit-scrollbar { width: 6px; height: 6px; }
+        #timeline-body::-webkit-scrollbar-track { background: transparent; }
+        #timeline-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-        #scene-track-label {
-            font-size: 10px;
-            color: var(--muted);
+        /* Track rows */
+        .track-row {
+            display: flex;
+            align-items: stretch;
+            border-bottom: 1px solid var(--border);
             flex-shrink: 0;
-            width: 60px;
-            text-align: right;
-            padding-right: 8px;
+            min-height: 44px;
         }
 
-        #scene-blocks-container {
+        .track-row:last-child { border-bottom: none; }
+
+        .track-label {
+            width: 64px;
+            min-width: 64px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+            background: var(--bg);
+            border-right: 1px solid var(--border);
+            padding: 4px;
+            position: sticky;
+            left: 0;
+            z-index: 5;
+        }
+
+        .track-label .track-icon { font-size: 12px; line-height: 1; }
+
+        .track-label span:last-child {
+            font-size: 9px;
+            color: var(--muted);
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .track-content {
+            flex: 1;
             display: flex;
             align-items: center;
+            padding: 4px 6px;
             gap: 3px;
-            flex: 1;
-            height: 100%;
+            min-width: 0;
+            position: relative;
         }
 
+        /* Scene blocks */
         .scene-block {
-            height: 52px;
-            border-radius: 6px;
+            height: 36px;
+            border-radius: 5px;
             border: 1px solid var(--border);
-            background: linear-gradient(135deg, #1E2D40, #162030);
+            background: linear-gradient(135deg, #1E3A5F, #162030);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -420,56 +481,71 @@
             flex-shrink: 0;
             position: relative;
             overflow: hidden;
-            transition: border-color 0.15s, transform 0.1s;
-            min-width: 60px;
+            transition: border-color 0.15s;
+            min-width: 50px;
         }
 
-        .scene-block:hover {
-            border-color: var(--accent);
-        }
-
-        .scene-block.selected {
-            border-color: var(--sky);
-            box-shadow: 0 0 0 1px var(--sky);
-        }
-
-        .scene-block.dragging {
-            opacity: 0.5;
-            cursor: grabbing;
-            transform: scale(0.95);
-        }
+        .scene-block:hover { border-color: var(--accent); }
+        .scene-block.selected { border-color: var(--sky); box-shadow: 0 0 0 1px var(--sky); }
+        .scene-block.dragging { opacity: 0.4; cursor: grabbing; }
 
         .scene-block .scene-num {
-            font-size: 10px;
+            font-size: 9px;
             font-weight: 700;
             color: var(--sky);
             line-height: 1;
         }
 
         .scene-block .scene-dur {
-            font-size: 10px;
-            color: var(--muted);
-            line-height: 1;
-            margin-top: 2px;
-        }
-
-        .scene-block .scene-text {
             font-size: 9px;
             color: var(--muted);
             line-height: 1;
-            margin-top: 3px;
-            max-width: 90%;
-            text-overflow: ellipsis;
-            overflow: hidden;
-            white-space: nowrap;
-            text-align: center;
+            margin-top: 1px;
         }
 
-        /* Transition arrow between blocks */
+        /* Transition arrow */
         .transition-arrow {
-            font-size: 10px;
+            font-size: 9px;
             color: var(--muted);
             flex-shrink: 0;
+            padding: 0 1px;
+        }
+
+        /* Subtitle blocks */
+        .subtitle-block {
+            height: 28px;
+            border-radius: 4px;
+            background: rgba(56, 189, 248, 0.15);
+            border: 1px solid rgba(56, 189, 248, 0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 4px;
+            flex-shrink: 0;
+            overflow: hidden;
+            min-width: 30px;
+        }
+
+        .subtitle-block span {
+            font-size: 9px;
+            color: var(--sky);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 100%;
+        }
+
+        /* Waveform elements */
+        .waveform-el {
+            width: 100%;
+            height: 36px;
+        }
+
+        #voiceover-waveform-container,
+        #music-waveform-container {
+            flex: 1;
+            overflow: hidden;
+            padding: 4px 6px;
         }
 
         /* Render in progress banner */
@@ -561,6 +637,11 @@
             </div>
         </div>
 
+        {{-- Resize handle --}}
+        <div id="resize-handle" title="Drag to resize">
+            <div id="resize-grip"></div>
+        </div>
+
         {{-- RIGHT: Player + Timeline --}}
         <div id="right-panel">
 
@@ -574,23 +655,67 @@
 
             {{-- Timeline --}}
             <div id="timeline-panel">
+
+                {{-- Timeline header with zoom controls --}}
                 <div id="timeline-header">
-                    <span>Timeline</span>
-                    <span id="timeline-hint">Drag scenes to reorder</span>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span id="timeline-label">TIMELINE</span>
+                        <span id="timeline-duration" style="color:var(--muted); font-size:10px;"></span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="color:var(--muted); font-size:10px;">Zoom:</span>
+                        <button class="zoom-btn" onclick="zoomTimeline(-0.25)" title="Zoom out">-</button>
+                        <span id="zoom-label" style="color:var(--muted); font-size:10px; min-width:32px; text-align:center;">1x</span>
+                        <button class="zoom-btn" onclick="zoomTimeline(0.25)" title="Zoom in">+</button>
+                        <button class="zoom-btn" onclick="zoomTimeline(0, true)" title="Reset zoom" style="font-size:9px; padding:2px 6px;">⟳</button>
+                        <span id="timeline-hint" style="color:var(--muted); font-size:10px; margin-left:8px;">Drag to reorder scenes · Scroll to pan</span>
+                    </div>
                 </div>
 
-                {{-- Waveform --}}
-                <div id="waveform-track">
-                    <span id="waveform-label">Audio</span>
-                    <div id="waveform"></div>
-                </div>
+                {{-- Scrollable timeline body --}}
+                <div id="timeline-body">
 
-                {{-- Scene blocks --}}
-                <div id="scene-track">
-                    <span id="scene-track-label">Scenes</span>
-                    <div id="scene-blocks-container"></div>
+                    {{-- Track: Scenes (video clips) --}}
+                    <div class="track-row">
+                        <div class="track-label">
+                            <span class="track-icon">🎬</span>
+                            <span>Scenes</span>
+                        </div>
+                        <div class="track-content" id="scene-blocks-container"></div>
+                    </div>
+
+                    {{-- Track: Subtitles --}}
+                    <div class="track-row">
+                        <div class="track-label">
+                            <span class="track-icon">💬</span>
+                            <span>Subtitles</span>
+                        </div>
+                        <div class="track-content" id="subtitle-blocks-container"></div>
+                    </div>
+
+                    {{-- Track: Voiceover waveform --}}
+                    <div class="track-row">
+                        <div class="track-label">
+                            <span class="track-icon">🎤</span>
+                            <span>Voice</span>
+                        </div>
+                        <div class="track-content" id="voiceover-waveform-container">
+                            <div id="waveform-voiceover" class="waveform-el"></div>
+                        </div>
+                    </div>
+
+                    {{-- Track: Music waveform --}}
+                    <div class="track-row" id="music-track-row" style="display:none;">
+                        <div class="track-label">
+                            <span class="track-icon">🎵</span>
+                            <span>Music</span>
+                        </div>
+                        <div class="track-content" id="music-waveform-container">
+                            <div id="waveform-music" class="waveform-el"></div>
+                        </div>
+                    </div>
+
                 </div>
-            </div>
 
         </div>
     </div>
@@ -602,17 +727,81 @@
     // --- State ---------------------------------------------------------------
     let editState    = window.__EDIT_STATE__ ? JSON.parse(JSON.stringify(window.__EDIT_STATE__)) : null;
     let playerRoot   = null;
-    let wavesurfer   = null;
+    let timelineZoom = 1.0;
+    let wavesurferVoice = null;
+    let wavesurferMusic = null;
+    const ZOOM_MIN = 0.25;
+    const ZOOM_MAX = 4.0;
+    const TRACK_PX_PER_SEC = 80;
     let isSending    = false;
-    let dragSrcIndex = null;
 
     // --- Boot ----------------------------------------------------------------
     window.addEventListener('load', function () {
         mountPlayer();
         initTimeline();
-        initWaveform();
         checkRenderStatus();
     });
+
+    // --- Resizable panels ---------------------------------------------------
+    (function initResizable() {
+        const handle = document.getElementById('resize-handle');
+        const chatPanel = document.getElementById('chat-panel');
+        const mainArea = document.getElementById('main-area');
+
+        if (!handle || !chatPanel || !mainArea) return;
+
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        handle.addEventListener('mousedown', function (e) {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = chatPanel.offsetWidth;
+            handle.classList.add('dragging');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            e.preventDefault();
+        });
+
+        document.addEventListener('mousemove', function (e) {
+            if (!isResizing) return;
+            const delta = e.clientX - startX;
+            const newWidth = Math.max(220, Math.min(600, startWidth + delta));
+            chatPanel.style.width = newWidth + 'px';
+        });
+
+        document.addEventListener('mouseup', function () {
+            if (!isResizing) return;
+            isResizing = false;
+            handle.classList.remove('dragging');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+            renderSceneBlocks();
+        });
+
+        handle.addEventListener('touchstart', function (e) {
+            isResizing = true;
+            startX = e.touches[0].clientX;
+            startWidth = chatPanel.offsetWidth;
+            handle.classList.add('dragging');
+            e.preventDefault();
+        }, { passive: false });
+
+        document.addEventListener('touchmove', function (e) {
+            if (!isResizing) return;
+            const delta = e.touches[0].clientX - startX;
+            const newWidth = Math.max(220, Math.min(600, startWidth + delta));
+            chatPanel.style.width = newWidth + 'px';
+        }, { passive: false });
+
+        document.addEventListener('touchend', function () {
+            if (!isResizing) return;
+            isResizing = false;
+            handle.classList.remove('dragging');
+            renderSceneBlocks();
+        });
+    })();
 
     // --- Remotion Player -----------------------------------------------------
     function mountPlayer() {
@@ -648,13 +837,53 @@
     function refreshPlayer(newEditState) {
         editState = newEditState;
         mountPlayer();
+        renderSceneBlocks();
+        renderSubtitleBlocks();
+        initMusicWaveform();
+        updateTimelineDuration();
     }
 
     // --- Timeline ------------------------------------------------------------
     function initTimeline() {
         if (!editState) return;
         renderSceneBlocks();
+        renderSubtitleBlocks();
         initDragDrop();
+        initWaveforms();
+        initWheelZoom();
+        updateTimelineDuration();
+    }
+
+    function updateTimelineDuration() {
+        const el = document.getElementById('timeline-duration');
+        if (!el || !editState) return;
+        const dur = ((editState.total_frames ?? 0) / (editState.fps ?? 30)).toFixed(1);
+        el.textContent = dur + 's';
+    }
+
+    function zoomTimeline(delta, reset) {
+        if (reset) {
+            timelineZoom = 1.0;
+        } else {
+            timelineZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, timelineZoom + delta));
+        }
+        const zoomLabel = document.getElementById('zoom-label');
+        if (zoomLabel) {
+            zoomLabel.textContent = timelineZoom.toFixed(2).replace(/\.?0+$/, '') + 'x';
+        }
+        renderSceneBlocks();
+        renderSubtitleBlocks();
+    }
+
+    function initWheelZoom() {
+        const body = document.getElementById('timeline-body');
+        if (!body) return;
+        body.addEventListener('wheel', function (e) {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                zoomTimeline(e.deltaY > 0 ? -0.1 : 0.1);
+            }
+        }, { passive: false });
     }
 
     function renderSceneBlocks() {
@@ -664,16 +893,10 @@
 
         const clips = editState.tracks?.video ?? [];
         const fps   = editState.fps ?? 30;
-        const total = editState.total_frames ?? 1;
-
-        // Calculate total display width available
-        const trackWidth = container.parentElement.clientWidth - 80;
 
         clips.forEach(function (clip, i) {
             const dur   = (clip.end_frame - clip.start_frame) / fps;
-            // Width proportional to duration
-            const pct   = (clip.end_frame - clip.start_frame) / total;
-            const width = Math.max(70, Math.floor(pct * trackWidth));
+            const width = Math.max(50, Math.round(dur * TRACK_PX_PER_SEC * timelineZoom));
             const trans = clip.transition_out?.type ?? 'none';
 
             const block = document.createElement('div');
@@ -681,6 +904,7 @@
             block.style.width = width + 'px';
             block.dataset.clipId    = clip.id;
             block.dataset.clipIndex = i;
+            block.draggable = true;
             block.innerHTML = `
                 <span class="scene-num">S${i + 1}</span>
                 <span class="scene-dur">${dur.toFixed(1)}s</span>
@@ -705,50 +929,106 @@
         });
     }
 
+    function renderSubtitleBlocks() {
+        const container = document.getElementById('subtitle-blocks-container');
+        if (!container || !editState) return;
+        container.innerHTML = '';
+
+        const subs = editState.tracks?.subtitles ?? [];
+        const fps = editState.fps ?? 30;
+
+        if (subs.length === 0) {
+            const empty = document.createElement('span');
+            empty.style.cssText = 'font-size:10px; color:var(--muted); padding:0 8px;';
+            empty.textContent = 'No subtitles yet';
+            container.appendChild(empty);
+            return;
+        }
+
+        const firstStart = subs[0].start_frame / fps;
+        if (firstStart > 0.1) {
+            const spacer = document.createElement('div');
+            spacer.style.cssText = `width:${Math.round(firstStart * TRACK_PX_PER_SEC * timelineZoom)}px; flex-shrink:0;`;
+            container.appendChild(spacer);
+        }
+
+        subs.forEach(function (sub, i) {
+            const startSec = sub.start_frame / fps;
+            const endSec = sub.end_frame / fps;
+            const dur = endSec - startSec;
+            const width = Math.max(30, Math.round(dur * TRACK_PX_PER_SEC * timelineZoom));
+
+            const block = document.createElement('div');
+            block.className = 'subtitle-block';
+            block.style.width = width + 'px';
+            block.title = sub.text ?? '';
+            block.innerHTML = `<span>${sub.text ?? ''}</span>`;
+            container.appendChild(block);
+
+            if (i < subs.length - 1) {
+                const nextStart = subs[i + 1].start_frame / fps;
+                const gap = nextStart - endSec;
+                if (gap > 0.05) {
+                    const spacer = document.createElement('div');
+                    spacer.style.cssText = `width:${Math.round(gap * TRACK_PX_PER_SEC * timelineZoom)}px; flex-shrink:0;`;
+                    container.appendChild(spacer);
+                }
+            }
+        });
+    }
+
     function initDragDrop() {
-        if (typeof interact === 'undefined') return;
+        const container = document.getElementById('scene-blocks-container');
+        if (!container) return;
 
-        interact('.scene-block').draggable({
-            inertia: false,
-            modifiers: [],
-            autoScroll: true,
-            listeners: {
-                start: function (event) {
-                    event.target.classList.add('dragging');
-                    dragSrcIndex = parseInt(event.target.dataset.clipIndex, 10);
-                },
-                move: function (event) {
-                    const target = event.target;
-                    const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
-                    target.style.transform = `translateX(${x}px)`;
-                    target.setAttribute('data-x', x);
-                },
-                end: function (event) {
-                    const target = event.target;
-                    target.classList.remove('dragging');
-                    target.style.transform = '';
-                    target.setAttribute('data-x', 0);
+        let draggedEl = null;
+        let draggedIndex = null;
 
-                    // Find drop target by position
-                    const rect      = target.getBoundingClientRect();
-                    const centerX   = rect.left + rect.width / 2;
-                    const blocks    = Array.from(document.querySelectorAll('.scene-block:not(.dragging)'));
-                    let   dropIndex = blocks.length;
+        container.addEventListener('dragstart', function (e) {
+            const block = e.target.closest('.scene-block');
+            if (!block) return;
+            draggedEl = block;
+            draggedIndex = parseInt(block.dataset.clipIndex, 10);
+            block.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+        });
 
-                    for (let i = 0; i < blocks.length; i++) {
-                        const bRect = blocks[i].getBoundingClientRect();
-                        if (centerX < bRect.left + bRect.width / 2) {
-                            dropIndex = i;
-                            break;
-                        }
-                    }
+        container.addEventListener('dragend', function (e) {
+            const block = e.target.closest('.scene-block');
+            if (block) {
+                block.classList.remove('dragging');
+            }
+            document.querySelectorAll('.scene-block').forEach(b => b.style.outline = '');
+            draggedEl = null;
+            draggedIndex = null;
+        });
 
-                    if (dragSrcIndex !== null && dropIndex !== dragSrcIndex) {
-                        reorderScenesLocally(dragSrcIndex, dropIndex);
-                    }
-                    dragSrcIndex = null;
-                },
-            },
+        container.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            const block = e.target.closest('.scene-block');
+            if (!block || block === draggedEl) return;
+            document.querySelectorAll('.scene-block').forEach(b => b.style.outline = '');
+            block.style.outline = '2px solid var(--sky)';
+        });
+
+        container.addEventListener('dragleave', function (e) {
+            const block = e.target.closest('.scene-block');
+            if (block) {
+                block.style.outline = '';
+            }
+        });
+
+        container.addEventListener('drop', function (e) {
+            e.preventDefault();
+            document.querySelectorAll('.scene-block').forEach(b => b.style.outline = '');
+            const targetBlock = e.target.closest('.scene-block');
+            if (!targetBlock || !draggedEl || targetBlock === draggedEl) return;
+
+            const targetIndex = parseInt(targetBlock.dataset.clipIndex, 10);
+            if (draggedIndex !== null && draggedIndex !== targetIndex) {
+                reorderScenesLocally(draggedIndex, targetIndex);
+            }
         });
     }
 
@@ -761,41 +1041,102 @@
         const insertAt = toIndex > fromIndex ? toIndex - 1 : toIndex;
         clips.splice(Math.max(0, Math.min(clips.length, insertAt)), 0, moved);
 
-        const newOrder = clips.map(c => c.id);
+        // Recalculate frame positions after local reorder
+        let currentFrame = 0;
+        clips.forEach((clip, i) => {
+            const duration = clip.end_frame - clip.start_frame;
+            clip.start_frame = currentFrame;
+            clip.end_frame = currentFrame + duration;
+            if (i === clips.length - 1) {
+                clip.transition_out = null;
+            }
+            currentFrame += duration;
+        });
 
-        // Send to backend
-        sendMessage('reorder_scenes_direct', null, newOrder);
+        editState.tracks.video = clips;
+        editState.total_frames = currentFrame;
+        editState.version = (editState.version || 1) + 1;
+
+        refreshPlayer(editState);
+        renderSceneBlocks();
+
+        const newOrder = clips.map(c => c.id);
+        syncReorderToBackend(newOrder);
     }
 
-    // --- Waveform ------------------------------------------------------------
-    function initWaveform() {
-        const voiceoverUrl = window.__VOICEOVER_URL__;
-        const el = document.getElementById('waveform');
-        if (!el) return;
+    // --- Waveforms -----------------------------------------------------------
+    function initWaveforms() {
+        initVoiceoverWaveform();
+        initMusicWaveform();
+    }
 
-        if (!voiceoverUrl) {
-            el.innerHTML = '<div style="height:44px;display:flex;align-items:center;padding-left:8px;font-size:11px;color:var(--muted);">No audio uploaded yet</div>';
-            return;
+    function initVoiceoverWaveform() {
+        const voiceoverUrl = window.__VOICEOVER_URL__;
+        const el = document.getElementById('waveform-voiceover');
+        if (!el || !voiceoverUrl) return;
+
+        if (wavesurferVoice) {
+            wavesurferVoice.destroy();
+            wavesurferVoice = null;
         }
 
         try {
-            wavesurfer = WaveSurfer.create({
-                container:       '#waveform',
-                waveColor:       '#1E2D40',
-                progressColor:   '#2563EB',
-                cursorColor:     '#38BDF8',
-                height:          44,
-                barWidth:        2,
-                barGap:          1,
-                barRadius:       2,
-                normalize:       true,
-                interact:        true,
-                backend:         'WebAudio',
+            wavesurferVoice = WaveSurfer.create({
+                container: '#waveform-voiceover',
+                waveColor: '#1E3A5F',
+                progressColor: '#2563EB',
+                cursorColor: '#38BDF8',
+                height: 36,
+                barWidth: 2,
+                barGap: 1,
+                barRadius: 2,
+                normalize: true,
+                interact: false,
             });
-
-            wavesurfer.load(voiceoverUrl);
+            wavesurferVoice.load(voiceoverUrl);
         } catch (e) {
-            console.warn('[Editor] WaveSurfer init failed:', e);
+            console.warn('[Timeline] Voiceover waveform failed:', e);
+        }
+    }
+
+    function initMusicWaveform() {
+        const audioTracks = editState?.tracks?.audio ?? [];
+        const musicTrack = audioTracks.find(t => t.type === 'music');
+        const musicUrl = musicTrack?.url ?? null;
+
+        const row = document.getElementById('music-track-row');
+        const el = document.getElementById('waveform-music');
+
+        if (!row || !el) return;
+
+        if (!musicUrl) {
+            row.style.display = 'none';
+            return;
+        }
+
+        row.style.display = 'flex';
+
+        if (wavesurferMusic) {
+            wavesurferMusic.destroy();
+            wavesurferMusic = null;
+        }
+
+        try {
+            wavesurferMusic = WaveSurfer.create({
+                container: '#waveform-music',
+                waveColor: '#1A3A2A',
+                progressColor: '#16A34A',
+                cursorColor: '#4ADE80',
+                height: 36,
+                barWidth: 2,
+                barGap: 1,
+                barRadius: 2,
+                normalize: true,
+                interact: false,
+            });
+            wavesurferMusic.load(musicUrl);
+        } catch (e) {
+            console.warn('[Timeline] Music waveform failed:', e);
         }
     }
 
@@ -858,33 +1199,27 @@
         setSending(false);
     }
 
-    // Direct reorder call (from drag/drop, not chat)
-    async function sendMessage(type, message, newOrder) {
-        if (!editState) return;
+    async function syncReorderToBackend(newOrder) {
+        try {
+            const res = await fetch(window.__CHAT_URL__, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': window.__CSRF_TOKEN__,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    message: '__reorder__',
+                    order: newOrder,
+                }),
+            });
 
-        if (type === 'reorder_scenes_direct') {
-            try {
-                const res  = await fetch(window.__CHAT_URL__, {
-                    method:  'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-CSRF-TOKEN': window.__CSRF_TOKEN__,
-                        'Accept':       'application/json',
-                    },
-                    body: JSON.stringify({
-                        message: 'reorder scenes: ' + newOrder.join(', '),
-                    }),
-                });
-
-                const data = await res.json();
-                if (data.success && data.edit_state) {
-                    refreshPlayer(data.edit_state);
-                    renderSceneBlocks();
-                    appendMessage('ai', '↕️ Scenes reordered.');
-                }
-            } catch (err) {
-                console.error('[Reorder] Error:', err);
+            const data = await res.json();
+            if (!data.success) {
+                console.warn('[Reorder] Backend sync failed:', data);
             }
+        } catch (err) {
+            console.warn('[Reorder] Backend sync error:', err);
         }
     }
 

@@ -88,6 +88,10 @@ Route::middleware('auth')->group(function () {
         [App\Http\Controllers\AgentController::class, 'chat'])
         ->name('projects.chat');
 
+    Route::post('/projects/{project}/save-music',
+        [App\Http\Controllers\AgentController::class, 'saveMusic'])
+        ->name('projects.save-music');
+
     Route::get('/projects/{project}/edit-state',
         [App\Http\Controllers\AgentController::class, 'getEditState'])
         ->name('projects.edit-state');

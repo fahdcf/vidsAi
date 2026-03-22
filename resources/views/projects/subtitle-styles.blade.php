@@ -2569,17 +2569,15 @@
                 >
                     🚀 Start Rendering
                 </button>
-                <a href="{{ route('projects.editor', $project) }}"
-                   style="
-                       display:block; width:100%; padding:11px; margin-top:8px;
-                       background:#1E2D40; color:#F1F5F9;
-                       border:1px solid #2D3F55; border-radius:8px;
-                       font-size:13px; font-weight:600; cursor:pointer;
-                       font-family:Arial; text-align:center; text-decoration:none;
-                   "
-                >
+                <button onclick="openEditor()" style="
+                    display:block; width:100%; padding:11px; margin-top:8px;
+                    background:#1E2D40; color:#F1F5F9;
+                    border:1px solid #2D3F55; border-radius:8px;
+                    font-size:13px; font-weight:600; cursor:pointer;
+                    font-family:Arial; text-align:center;
+                ">
                     ✏️ Open Editor
-                </a>
+                </button>
             </div>
         </div><!-- Close right column -->
     </div><!-- Close grid row -->
@@ -3843,6 +3841,41 @@ document.addEventListener('DOMContentLoaded', function() {
             
             alert('Error preparing request: ' + error.message);
         }
+    }
+
+    async function openEditor() {
+        const editorUrl = '{{ route('projects.editor', $project) }}';
+        const saveMusicUrl = '{{ route('projects.save-music', $project) }}';
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content
+            || '{{ csrf_token() }}';
+
+        // Get current music selection from the page
+        const music = window.selectedMusicTrack || null;
+        const musicUrl = music?.preview_url || music?.url || null;
+        const musicName = music?.name || music?.title || '';
+        const musicVolume = 0.3;
+
+        try {
+            // Save music selection before navigating
+            await fetch(saveMusicUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': csrfToken,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    music_url: musicUrl,
+                    music_volume: musicVolume,
+                    music_name: musicName,
+                }),
+            });
+        } catch (err) {
+            console.warn('[openEditor] Music save failed, navigating anyway:', err);
+        }
+
+        // Navigate to editor regardless of whether music save succeeded
+        window.location.href = editorUrl;
     }
 
     function goBack() {
