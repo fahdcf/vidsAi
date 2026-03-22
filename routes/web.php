@@ -79,6 +79,23 @@ Route::middleware('auth')->group(function () {
     Route::post('/subtitle-styles/{project}/prepare-voiceover', [ProjectController::class, 'prepareVoiceover'])->name('projects.prepare-voiceover');
     Route::post('/subtitle-styles/{project}/generate', [ProjectController::class, 'generateSubtitles'])->name('projects.generate-subtitles');
 
+    // Editor + Agent routes
+    Route::get('/projects/{project}/editor',
+        [App\Http\Controllers\AgentController::class, 'editor'])
+        ->name('projects.editor');
+
+    Route::post('/projects/{project}/chat',
+        [App\Http\Controllers\AgentController::class, 'chat'])
+        ->name('projects.chat');
+
+    Route::get('/projects/{project}/edit-state',
+        [App\Http\Controllers\AgentController::class, 'getEditState'])
+        ->name('projects.edit-state');
+
+    Route::post('/projects/{project}/export',
+        [App\Http\Controllers\AgentController::class, 'export'])
+        ->name('projects.export');
+
 
     if (app()->environment(['local', 'staging'])) {
         // Test route to verify Freesound API

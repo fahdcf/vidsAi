@@ -2557,6 +2557,10 @@
                                class="btn btn-outline-info">
                                 ▶ Live Preview
                             </a>
+                            <a href="{{ route('projects.editor', $project) }}"
+                               class="btn btn-outline-secondary btn-sm">
+                                ✏️ Open Editor
+                            </a>
                             @endif
                             <button type="button" class="btn btn-confirm" onclick="confirmAllScenes()" id="confirm-btn">
                                 <i class="bi bi-check-circle me-2"></i>Confirm All Scenes

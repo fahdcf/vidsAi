@@ -2569,6 +2569,17 @@
                 >
                     🚀 Start Rendering
                 </button>
+                <a href="{{ route('projects.editor', $project) }}"
+                   style="
+                       display:block; width:100%; padding:11px; margin-top:8px;
+                       background:#1E2D40; color:#F1F5F9;
+                       border:1px solid #2D3F55; border-radius:8px;
+                       font-size:13px; font-weight:600; cursor:pointer;
+                       font-family:Arial; text-align:center; text-decoration:none;
+                   "
+                >
+                    ✏️ Open Editor
+                </a>
             </div>
         </div><!-- Close right column -->
     </div><!-- Close grid row -->
