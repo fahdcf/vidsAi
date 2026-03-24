@@ -67,12 +67,21 @@ return [
                 (string) env(
                     'OPENROUTER_MODELS',
                     implode(',', array_filter([
-                        env('OPENROUTER_MODEL1'),
-                        env('OPENROUTER_MODEL2'),
+                        env('OPENROUTER_MODEL1', 'arcee-ai/trinity-large-preview:free'),
+                        env('OPENROUTER_MODEL2', 'google/gemma-3n-e4b-it:free'),
+                        env('OPENROUTER_MODEL3', 'google/gemma-3-4b-it:free'),
+                        env('OPENROUTER_MODEL4', 'google/gemma-3-12b-it:free'),
+                        env('OPENROUTER_MODEL5', 'meta-llama/llama-3.2-3b-instruct:free'),
                     ]))
                 )
             )
         ))),
+    ],
+
+    'groq' => [
+        'api_key' => env('GROQ_API_KEY'),
+        'model' => env('GROQ_MODEL', 'llama-3.1-8b-instant'),
+        'base_url' => env('GROQ_BASE_URL', 'https://api.groq.com/openai/v1/chat/completions'),
     ],
 
     'cloudflare_ai' => [

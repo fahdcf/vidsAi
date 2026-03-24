@@ -58,6 +58,14 @@ class ToolRegistry
                     'order' => ['type' => 'array', 'required' => true],
                 ],
             ],
+            [
+                'name' => 'update_subtitle_config',
+                'description' => 'Change subtitle appearance: font size, color, background color, position, font family, border radius. Apply to all subtitles or a specific one.',
+                'parameters' => [
+                    'config' => ['type' => 'object', 'required' => true, 'description' => 'Key-value pairs of config to update. Supported keys: fontSize (e.g. "48px"), backgroundColor (hex), textColor (hex), fontFamily (e.g. "Roboto"), position ("top"|"bottom"|"center"), borderRadius (e.g. "8px"), opacity (0.0-1.0)'],
+                    'scene_id' => ['type' => 'string', 'required' => false, 'description' => 'Optional subtitle segment ID. If omitted applies to all.'],
+                ],
+            ],
         ];
     }
 
@@ -74,6 +82,7 @@ class ToolRegistry
             'set_music' => $this->setMusic($params, $editState),
             'set_volume' => $this->setVolume($params, $editState),
             'reorder_scenes' => $this->reorderScenes($params, $editState),
+            'update_subtitle_config' => $this->updateSubtitleConfig($params, $editState),
             default => throw new \InvalidArgumentException("Unknown tool: {$toolName}"),
         };
     }
@@ -82,6 +91,7 @@ class ToolRegistry
     {
         $style = $params['style'] ?? 'default';
         $sceneId = $params['scene_id'] ?? null;
+        $styleConfig = $params['style_config'] ?? [];
 
         $validStyles = [
             'progressive_highlight', 'tiktok_trending', 'arabic_banner',
@@ -93,9 +103,15 @@ class ToolRegistry
         }
 
         $editState['tracks']['subtitles'] = array_map(
-            function ($sub) use ($style, $sceneId) {
+            function ($sub) use ($style, $sceneId, $styleConfig) {
                 if ($sceneId === null || ($sub['id'] ?? '') === $sceneId) {
                     $sub['style'] = $style;
+
+                    // Apply style config if provided
+                    if (!empty($styleConfig)) {
+                        $existing = is_array($sub['config'] ?? null) ? $sub['config'] : [];
+                        $sub['config'] = array_merge($existing, $styleConfig);
+                    }
                 }
                 return $sub;
             },
@@ -227,6 +243,73 @@ class ToolRegistry
 
         $editState['tracks']['video'] = $reordered;
         $editState['total_frames'] = $currentFrame;
+
+        return $this->bumpVersion($editState);
+    }
+
+    private function updateSubtitleConfig(array $params, array $editState): array
+    {
+        // Handle relative font size changes
+        if (isset($params['config']['fontSize']) && isset($params['size_direction'])) {
+            $direction = $params['size_direction']; // 'bigger' or 'smaller'
+            $currentFontSize = 32; // default
+
+            // Read current fontSize from first subtitle
+            if (!empty($editState['tracks']['subtitles'])) {
+                $currentConfig = $editState['tracks']['subtitles'][0]['config'] ?? [];
+                if (!empty($currentConfig['fontSize'])) {
+                    $currentFontSize = (int) filter_var($currentConfig['fontSize'], FILTER_SANITIZE_NUMBER_INT);
+                }
+            }
+
+            if ($direction === 'bigger') {
+                $newSize = min(96, $currentFontSize + 12);
+            } else {
+                $newSize = max(16, $currentFontSize - 12);
+            }
+
+            $params['config']['fontSize'] = $newSize . 'px';
+            unset($params['size_direction']);
+        }
+
+        $config = $params['config'] ?? [];
+        $sceneId = $params['scene_id'] ?? null;
+
+        if (empty($config)) {
+            throw new \InvalidArgumentException('update_subtitle_config requires a non-empty config object.');
+        }
+
+        // Validate allowed config keys
+        $allowedKeys = [
+            'fontSize', 'backgroundColor', 'textColor', 'fontFamily',
+            'position', 'borderRadius', 'opacity', 'highlightColor',
+            'topTextColor', 'bottomTextColor', 'paddingX', 'paddingY',
+        ];
+
+        $filteredConfig = array_intersect_key($config, array_flip($allowedKeys));
+
+        if (empty($filteredConfig)) {
+            throw new \InvalidArgumentException(
+                'No valid config keys provided. Allowed: ' . implode(', ', $allowedKeys)
+            );
+        }
+
+        $editState['tracks']['subtitles'] = array_map(
+            function ($sub) use ($filteredConfig, $sceneId) {
+                if ($sceneId === null || ($sub['id'] ?? '') === $sceneId) {
+                    // Merge new config into existing config
+                    $existing = is_array($sub['config'] ?? null) ? $sub['config'] : [];
+                    $sub['config'] = array_merge($existing, $filteredConfig);
+
+                    // If position is being changed, update top-level position too
+                    if (isset($filteredConfig['position'])) {
+                        $sub['position'] = $filteredConfig['position'];
+                    }
+                }
+                return $sub;
+            },
+            $editState['tracks']['subtitles'] ?? []
+        );
 
         return $this->bumpVersion($editState);
     }

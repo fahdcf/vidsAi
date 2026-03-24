@@ -1,0 +1,534 @@
+<div class="sse-root">
+<style>
+    /* ════════════════════════════════════════════
+       NUCLEAR DARK OVERRIDE
+       Overrides ALL original white/blue/light CSS
+       ════════════════════════════════════════════ */
+    footer,.footer,#footer{display:none!important}
+    body{overflow:hidden!important;background:#0a0a0a!important}
+    .subtitle-styles-container{max-width:100%!important;margin:0!important;padding:0!important}
+
+    /* ── Page Header Redesign ── */
+    .navbar{background:var(--bg1)!important;border-bottom:1px solid var(--bd)!important;padding:14px 24px!important;box-shadow:none!important}
+    .navbar-brand{color:var(--t1)!important;font-weight:800!important;font-size:1.4rem!important;letter-spacing:-0.5px!important;display:flex!important;align-items:center!important;gap:8px!important}
+    .navbar-brand i{color:var(--ac)!important}
+    .nav-link{color:var(--t2)!important;font-weight:500!important;transition:all .2s!important;margin:0 4px!important}
+    .nav-link:hover{color:var(--t1)!important}
+    .navbar .btn-primary{background:var(--bg3)!important;border:1px solid var(--bd2)!important;color:var(--t1)!important;font-weight:600!important;border-radius:6px!important;box-shadow:none!important}
+    .navbar .btn-primary:hover{background:var(--ac)!important;color:#0a0a0a!important;border-color:var(--ac)!important}
+    .navbar-toggler{border-color:var(--bd)!important}
+
+    /* ── Color tokens ── */
+    :root{
+        --bg0:#0a0a0a; --bg1:#111; --bg2:#1a1a1a; --bg3:#222;
+        --bd:#2a2a2a; --bd2:#333;
+        --t1:#f0f0f0; --t2:#888; --t3:#555;
+        --ac:#c8ff00; --ac2:rgba(200,255,0,.12); --ac3:rgba(200,255,0,.25);
+    }
+
+    /* ── NUKE all original section backgrounds ── */
+    .video-preview-section,.styles-section,.transitions-section,.music-selection-section,
+    .position-selector-section,.processing-section,.music-section,.music-results-section,
+    .selected-track-section,.selected-music-section,.music-controls-section,
+    .music-search-wrapper,.music-categories-wrapper,.categories-scroll-container{
+        background:transparent!important;padding:0!important;box-shadow:none!important;
+        border:none!important;border-radius:0!important;margin-bottom:0!important;
+    }
+    .music-header{display:none!important}
+    .music-search-wrapper input::placeholder{color:var(--t3)!important}
+    .music-categories-wrapper{background:transparent!important;padding:0!important;border:none!important;margin-bottom:0!important}
+    .categories-scroll-container{display:flex!important;gap:10px!important;overflow-x:auto!important;padding-bottom:5px!important;justify-content:center!important;margin-bottom:24px!important}
+    .categories-scroll-container::-webkit-scrollbar{height:4px!important}
+    .action-buttons{display:none!important}
+
+    /* ── Position selector ── */
+    .position-options{display:flex!important;justify-content:center!important;gap:12px!important;flex-wrap:nowrap!important}
+    .position-option{cursor:pointer!important;text-align:center!important;padding:10px!important;border-radius:10px!important;border:1px solid var(--bd)!important;background:var(--bg2)!important;transition:all .2s!important;width:90px!important}
+    .position-option:hover{border-color:var(--bd2)!important;background:var(--bg3)!important}
+    .position-option.selected{border-color:var(--ac)!important;background:var(--ac2)!important}
+    .position-preview{width:50px!important;height:60px!important;background:var(--bg1)!important;border-radius:6px!important;position:relative!important;margin:0 auto 8px!important;border:1px solid var(--bd)!important}
+    .position-option.selected .position-preview{border-color:var(--ac)!important;box-shadow:none!important}
+    .position-indicator{position:absolute!important;background:var(--ac)!important;color:#0a0a0a!important;font-size:9px!important;font-weight:700!important;padding:2px 6px!important;border-radius:3px!important}
+    .position-name{font-size:11px!important;font-weight:500!important;color:var(--t3)!important;margin-top:0!important}
+    .position-option.selected .position-name{color:var(--ac)!important}
+
+    /* ── Style category cards ── */
+    .style-categories{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(240px,1fr))!important;gap:12px!important}
+    .style-category{background:var(--bg2)!important;border:1px solid var(--bd)!important;border-radius:10px!important;padding:0!important;
+        cursor:pointer!important;transition:all .2s!important;overflow:hidden!important;color:var(--t1)!important;box-shadow:none!important}
+    .style-category:hover{border-color:var(--bd2)!important;background:var(--bg3)!important}
+    .style-category.selected{border-color:var(--ac)!important;background:var(--ac2)!important;box-shadow:0 0 0 1px var(--ac) inset!important}
+    .style-preview{border-radius:0!important;margin:0!important;height:90px!important;display:flex!important;align-items:center!important;justify-content:center!important;background:var(--bg1)!important;border-bottom:1px solid var(--bd)!important}
+    .style-name{font-size:13px!important;font-weight:600!important;color:var(--t1)!important;padding:10px 12px 2px!important;margin:0!important}
+    .style-category.selected .style-name{color:var(--ac)!important}
+    .style-description{font-size:11px!important;color:var(--t2)!important;padding:0 12px 10px!important;line-height:1.4!important;margin:0!important}
+
+    /* ── Transition cards (dark override of original .transition-card) ── */
+    .transition-card{background:var(--bg2)!important;border:1px solid var(--bd)!important;border-radius:10px!important;padding:14px!important;cursor:pointer!important;transition:all .2s!important;overflow:hidden!important}
+    .transition-card:hover{border-color:var(--bd2)!important;background:var(--bg3)!important;transform:none!important;box-shadow:none!important}
+    .transition-card.selected{border-color:var(--ac)!important;background:var(--ac2)!important;box-shadow:none!important}
+    .transition-card.selected .transition-name{color:var(--ac)!important}
+    .transition-preview{background:var(--bg1)!important;border-radius:8px!important;height:80px!important;margin-bottom:10px!important;border:1px solid var(--bd)!important;position:relative!important;overflow:hidden!important}
+    .transition-demo{width:100%!important;height:100%!important;position:relative!important}
+    .demo-clip{width:46px!important;height:32px!important;border-radius:4px!important;position:absolute!important;display:flex!important;align-items:center!important;justify-content:center!important;font-size:12px!important;font-weight:700!important;top:50%!important;left:50%!important;margin-top:-16px!important;margin-left:-23px!important}
+    .demo-clip.clip-1{background:var(--ac)!important;color:#0a0a0a!important;transform:translateX(-28px);z-index:1!important}
+    .demo-clip.clip-2{background:transparent!important;border:2px solid var(--ac)!important;color:var(--ac)!important;transform:translateX(28px);box-sizing:border-box!important;z-index:2!important}
+    .transition-name{font-size:13px!important;font-weight:600!important;color:var(--t1)!important;margin-bottom:3px!important;gap:6px!important}
+    .transition-name i{color:var(--ac)!important}
+    .transition-description{color:var(--t3)!important;font-size:11px!important;line-height:1.3!important}
+    .transitions-grid{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(200px,1fr))!important;gap:12px!important;margin-top:0!important}
+
+    /* Continuous Animations Mapping */
+    .fade-demo .clip-1{animation:vFadeA 2.5s infinite}
+    .fade-demo .clip-2{animation:vFadeB 2.5s infinite}
+    .slide-left-demo .clip-1{animation:vSlideLA 2.5s infinite}
+    .slide-left-demo .clip-2{animation:vSlideLB 2.5s infinite}
+    .slide-right-demo .clip-1{animation:vSlideRA 2.5s infinite}
+    .slide-right-demo .clip-2{animation:vSlideRB 2.5s infinite}
+    .slide-up-demo .clip-1{animation:vSlideUA 2.5s infinite}
+    .slide-up-demo .clip-2{animation:vSlideUB 2.5s infinite}
+    .slide-down-demo .clip-1{animation:vSlideDA 2.5s infinite}
+    .slide-down-demo .clip-2{animation:vSlideDB 2.5s infinite}
+    .zoom-in-demo .clip-1{animation:vZoomInA 2.5s infinite}
+    .zoom-in-demo .clip-2{animation:vZoomInB 2.5s infinite}
+    .zoom-out-demo .clip-1{animation:vZoomOutA 2.5s infinite}
+    .zoom-out-demo .clip-2{animation:vZoomOutB 2.5s infinite}
+    .crossfade-demo .clip-1{animation:vCrossfadeA 2.5s infinite}
+    .crossfade-demo .clip-2{animation:vCrossfadeB 2.5s infinite}
+    .wipe-left-demo .clip-1{animation:vWipeLA 2.5s infinite}
+    .wipe-left-demo .clip-2{animation:vWipeLB 2.5s infinite}
+    .wipe-right-demo .clip-1{animation:vWipeRA 2.5s infinite}
+    .wipe-right-demo .clip-2{animation:vWipeRB 2.5s infinite}
+    .bounce-demo .clip-1{animation:vBounceA 2.5s infinite}
+    .bounce-demo .clip-2{animation:vBounceB 2.5s infinite}
+    .none-demo .clip-1{animation:vCutA 2.5s infinite}
+    .none-demo .clip-2{animation:vCutB 2.5s infinite}
+
+    /* Advanced Custom Keyframes representing accurate transition mechanics */
+    @keyframes vFadeA{0%,20%,80%,100%{transform:translateX(-28px);opacity:1}25%,75%{transform:translateX(-28px);opacity:0}}
+    @keyframes vFadeB{0%,20%,80%,100%{transform:translateX(28px);opacity:1}22%{transform:translateX(-28px);opacity:0}30%,75%{transform:translateX(-28px);opacity:1}78%{transform:translateX(28px);opacity:0}}
+    @keyframes vSlideLA{0%,20%,80%,100%{transform:translateX(-28px);opacity:1}30%,75%{transform:translateX(-90px);opacity:0}}
+    @keyframes vSlideLB{0%,20%,80%,100%{transform:translateX(28px);opacity:1}22%{transform:translateX(50px);opacity:1}30%,75%{transform:translateX(-28px);opacity:1}}
+    @keyframes vSlideRA{0%,20%,80%,100%{transform:translateX(-28px);opacity:1}30%,75%{transform:translateX(30px);opacity:0}}
+    @keyframes vSlideRB{0%,20%,80%,100%{transform:translateX(28px);opacity:1}21%{transform:translateX(-90px);opacity:0}22%{transform:translateX(-90px);opacity:1}30%,75%{transform:translateX(-28px);opacity:1}}
+    @keyframes vSlideUA{0%,20%,80%,100%{transform:translate(-28px,0);opacity:1}30%,75%{transform:translate(-28px,-45px);opacity:0}}
+    @keyframes vSlideUB{0%,20%,80%,100%{transform:translate(28px,0);opacity:1}21%{transform:translate(-28px,45px);opacity:0}22%{transform:translate(-28px,45px);opacity:1}30%,75%{transform:translate(-28px,0);opacity:1}}
+    @keyframes vSlideDA{0%,20%,80%,100%{transform:translate(-28px,0);opacity:1}30%,75%{transform:translate(-28px,45px);opacity:0}}
+    @keyframes vSlideDB{0%,20%,80%,100%{transform:translate(28px,0);opacity:1}21%{transform:translate(-28px,-45px);opacity:0}22%{transform:translate(-28px,-45px);opacity:1}30%,75%{transform:translate(-28px,0);opacity:1}}
+    @keyframes vZoomInA{0%,20%,80%,100%{transform:translate(-28px,0);opacity:1}25%,75%{transform:translate(-28px,0);opacity:0}}
+    @keyframes vZoomInB{0%,20%,80%,100%{transform:translate(28px,0) scale(1);opacity:1}21%{transform:translate(-28px,0) scale(0);opacity:0}22%{transform:translate(-28px,0) scale(0);opacity:1}30%,75%{transform:translate(-28px,0) scale(1.1);opacity:1}}
+    @keyframes vZoomOutA{0%,20%,80%,100%{transform:translate(-28px,0) scale(1);opacity:1}30%,75%{transform:translate(-28px,0) scale(0);opacity:0}}
+    @keyframes vZoomOutB{0%,20%,80%,100%{transform:translate(28px,0) scale(1);opacity:1}21%{transform:translate(-28px,0) scale(1.5);opacity:0}22%{transform:translate(-28px,0) scale(1.5);opacity:1}30%,75%{transform:translate(-28px,0) scale(1);opacity:1}}
+    @keyframes vCrossfadeA{0%,20%,80%,100%{transform:translateX(-28px);opacity:1}30%,75%{transform:translateX(-28px);opacity:0}}
+    @keyframes vCrossfadeB{0%,20%,80%,100%{transform:translateX(28px);opacity:1}21%{transform:translateX(-28px);opacity:0}30%,75%{transform:translateX(-28px);opacity:1}}
+    @keyframes vWipeLA{0%,20%,80%,100%{transform:translateX(-28px);clip-path:inset(0 0 0 0);opacity:1}30%,75%{transform:translateX(-28px);clip-path:inset(0 100% 0 0);opacity:1}}
+    @keyframes vWipeLB{0%,20%,80%,100%{transform:translateX(28px);clip-path:inset(0 0 0 0);opacity:1}21%{transform:translateX(-28px);clip-path:inset(0 0 0 100%);opacity:1}30%,75%{transform:translateX(-28px);clip-path:inset(0 0 0 0);opacity:1}}
+    @keyframes vWipeRA{0%,20%,80%,100%{transform:translateX(-28px);clip-path:inset(0 0 0 0);opacity:1}30%,75%{transform:translateX(-28px);clip-path:inset(0 0 0 100%);opacity:1}}
+    @keyframes vWipeRB{0%,20%,80%,100%{transform:translateX(28px);clip-path:inset(0 0 0 0);opacity:1}21%{transform:translateX(-28px);clip-path:inset(0 100% 0 0);opacity:1}30%,75%{transform:translateX(-28px);clip-path:inset(0 0 0 0);opacity:1}}
+    @keyframes vBounceA{0%,20%,80%,100%{transform:translateX(-28px);opacity:1}25%,75%{transform:translateX(-28px);opacity:0}}
+    @keyframes vBounceB{0%,20%,80%,100%{transform:translateX(28px) scale(1);opacity:1}21%{transform:translateX(-28px) scale(0);opacity:0}22%{transform:translateX(-28px) scale(0);opacity:1}26%{transform:translateX(-28px) scale(1.15);opacity:1}30%,75%{transform:translateX(-28px) scale(1);opacity:1}}
+    @keyframes vCutA{0%,20%,80%,100%{transform:translateX(-28px);opacity:1}21%,75%{transform:translateX(-28px);opacity:0}}
+    @keyframes vCutB{0%,20%,80%,100%{transform:translateX(28px);opacity:1}21%,75%{transform:translateX(-28px);opacity:1}}
+
+    /* ── Music cards (.blue-wave-card) FULL dark override ── */
+    .blue-wave-card{background:var(--bg2)!important;border:1px solid var(--bd)!important;border-radius:10px!important;color:var(--t1)!important;box-shadow:none!important;padding:18px 20px!important;min-height:95px!important}
+    .blue-wave-card:hover{border-color:var(--bd2)!important;box-shadow:none!important;transform:none!important}
+    .blue-wave-card .track-name{color:var(--t1)!important;font-size:14px!important}
+    .blue-wave-card .track-artist{color:var(--t2)!important}
+    .blue-wave-card .track-duration{background:var(--bg3)!important;color:var(--t2)!important;border:1px solid var(--bd)!important}
+    .blue-wave-card .track-genre{background:var(--ac2)!important;color:var(--ac)!important;border:none!important}
+    .blue-wave-card .wave-bar{background:var(--ac)!important}
+    .blue-wave-card .play-btn{background:var(--ac)!important;color:#0a0a0a!important;box-shadow:none!important}
+    .blue-wave-card .play-btn:hover{background:var(--ac)!important;filter:brightness(1.1)!important}
+    .blue-wave-card .select-btn{background:transparent!important;color:var(--ac)!important;border:1px solid var(--ac)!important;border-radius:6px!important;font-size:12px!important;padding:6px 14px!important}
+    .blue-wave-card .select-btn:hover{background:var(--ac)!important;color:#0a0a0a!important}
+    .blue-wave-card.selected{border-color:var(--ac)!important;background:var(--ac2)!important;transform:none!important;box-shadow:none!important}
+    .blue-wave-card.selected .select-btn{background:var(--ac)!important;color:#0a0a0a!important;border-color:var(--ac)!important}
+    .blue-wave-card .info-separator{background:var(--t3)!important}
+    .blue-wave-card .progress-ring:hover{border-color:var(--ac)!important;box-shadow:none!important}
+    .blue-wave-card.playing .progress-ring{border-color:var(--ac)!important}
+
+    /* ── Video cards ── */
+    .video-card{background:var(--bg2)!important;border:1px solid var(--bd)!important;border-radius:10px!important;box-shadow:none!important}
+    .video-card:hover{transform:none!important;box-shadow:none!important;border-color:var(--bd2)!important}
+    .video-wrapper{background:var(--bg1)!important;height:160px!important}
+    .video-info{background:var(--bg2)!important;padding:10px 12px!important}
+    .scene-description{display:none!important}
+    .video-info *{color:var(--t2)!important}
+    .scene-title{color:var(--t1)!important;font-size:13px!important}
+    .scene-badge{background:var(--ac)!important;color:#0a0a0a!important}
+    .scene-duration{background:var(--bg3)!important;color:var(--t2)!important}
+    .scene-description{color:var(--t3)!important;font-size:11px!important}
+    .scene-url{background:var(--bg1)!important;color:var(--t3)!important;border:1px solid var(--bd)!important}
+    .timeline-bar{background:var(--bg3)!important}
+    .trim-indicator{background:var(--ac)!important}
+    .animation-selection .form-label{color:var(--t2)!important}
+    .animation-selection .form-select{background:var(--bg1)!important;border-color:var(--bd)!important;color:var(--t1)!important}
+    .animation-selection .form-select:focus{border-color:var(--ac)!important;box-shadow:0 0 0 2px var(--ac2)!important}
+    .video-grid{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(220px,1fr))!important;gap:12px!important}
+    .status-dot{background:var(--ac)!important}
+
+    /* ── Search + Category pills ── */
+    .search-input-container{max-width:100%!important}
+    .modern-search-input{background:var(--bg2)!important;border:1px solid var(--bd)!important;color:var(--t1)!important;border-radius:8px!important;padding:.7rem 1rem .7rem 2.5rem!important;font-size:13px!important;box-shadow:none!important;width:100%!important}
+    .modern-search-input:focus{border-color:var(--ac)!important;box-shadow:0 0 0 2px var(--ac2)!important;outline:none!important}
+    .search-icon{color:var(--t3)!important;font-size:14px!important}
+    .category-btn{background:var(--bg2)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important;font-size:12px!important;padding:6px 12px!important;box-shadow:none!important}
+    .category-btn:hover{border-color:var(--bd2)!important;color:var(--t1)!important;transform:none!important;box-shadow:none!important}
+    .category-btn.active{background:var(--ac)!important;color:#0a0a0a!important;border-color:var(--ac)!important;box-shadow:none!important}
+    .clear-search-btn{background:var(--bg3)!important;color:var(--t2)!important}
+    .music-grid{display:grid!important;grid-template-columns:repeat(auto-fill,minmax(280px,1fr))!important;gap:10px!important}
+    .blue-wave-card{padding:12px!important}
+    .blue-wave-card .track-name{font-size:13px!important}
+    .blue-wave-card .track-info-line{font-size:12px!important;margin-bottom:.6rem!important}
+    .blue-wave-card .waveform{height:14px!important;margin-bottom:.6rem!important}
+    .blue-wave-card .track-controls{gap:.5rem!important}
+    .blue-wave-card .play-btn{width:36px!important;height:36px!important}
+    .blue-wave-card .select-btn{padding:5px 10px!important;font-size:11px!important;border-radius:20px!important}
+
+    /* ── Section titles ── */
+    .section-title{color:var(--t1)!important;font-size:12px!important;font-weight:600!important;text-transform:uppercase!important;letter-spacing:.06em!important;margin:0!important}
+    .section-title i{color:var(--ac)!important}
+    .section-header{border-bottom:1px solid var(--bd)!important;padding-bottom:8px!important;margin-bottom:12px!important}
+    .section-badge{background:var(--ac)!important;color:#0a0a0a!important}
+    .results-count{background:var(--bg3)!important;color:var(--t2)!important}
+
+    /* ── Selected track ── */
+    .selected-track-section{background:var(--ac2)!important;border:1px solid rgba(200,255,0,.2)!important;border-radius:10px!important;padding:12px!important;box-shadow:none!important;margin-top:16px!important}
+    .selected-track-card{background:transparent!important;box-shadow:none!important;padding:8px!important;border-radius:0!important}
+    .selected-track-name{color:var(--ac)!important;font-size:14px!important}
+    .selected-track-details{color:var(--t2)!important}
+    .selected-track-details span{color:var(--t2)!important}
+    .download-btn{background:var(--ac)!important;color:#0a0a0a!important;border:none!important;border-radius:6px!important;box-shadow:none!important}
+    .download-btn:hover{box-shadow:none!important;transform:none!important;filter:brightness(1.1)!important}
+    .remove-track-btn,.remove-selection-btn{background:#dc2626!important;border-radius:6px!important}
+
+    /* ── Pagination ── */
+    .pagination-btn{background:var(--bg2)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important}
+    .pagination-btn:hover:not(:disabled){border-color:var(--ac)!important;color:var(--ac)!important;transform:none!important}
+    .page-number{background:var(--bg2)!important;border:1px solid var(--bd)!important;color:var(--t2)!important;border-radius:6px!important}
+    .page-number:hover{border-color:var(--ac)!important;color:var(--ac)!important}
+    .page-number.active{background:var(--ac)!important;color:#0a0a0a!important;border-color:var(--ac)!important}
+
+    /* ── Loading ── */
+    .loading-placeholder{color:var(--t3)!important}
+    .loading-spinner{border-color:var(--bg3)!important;border-top-color:var(--ac)!important}
+    .modern-loading-container{background:var(--bg1)!important;border-color:var(--bd)!important;grid-column:1 / -1!important;width:100%!important;max-width:none!important;display:flex!important;flex-direction:column!important;align-items:center!important;justify-content:center!important;padding:40px 0!important;border-radius:12px!important}
+    .modern-spinner::before{border-color:var(--bd)!important}
+    .modern-spinner::after{border-top-color:var(--ac)!important;border-right-color:var(--ac)!important}
+    .loading-text{color:var(--t1)!important}
+    .loading-subtext{color:var(--t2)!important}
+
+    /* ── Notification ── */
+    .notification{background:var(--bg2)!important;border:1px solid var(--bd)!important;box-shadow:0 8px 24px rgba(0,0,0,.4)!important}
+    .notification-success{border-left-color:var(--ac)!important;color:var(--t1)!important}
+    .notification-success i{color:var(--ac)!important}
+
+    /* ── Tab bar ── */
+    .sse-tab{padding:14px 20px;font-size:13px;font-weight:600;color:var(--t3);background:none;border:none;cursor:pointer;position:relative;transition:color .2s;white-space:nowrap}
+    .sse-tab:hover{color:var(--t2)}
+    .sse-tab.active{color:var(--ac)}
+    .sse-tab.active::after{content:'';position:absolute;bottom:0;left:14px;right:14px;height:2px;background:var(--ac);border-radius:2px}
+
+    /* ── Scrollbar ── */
+    ::-webkit-scrollbar{width:6px;height:6px}
+    ::-webkit-scrollbar-track{background:transparent}
+    ::-webkit-scrollbar-thumb{background:#333;border-radius:10px}
+    ::-webkit-scrollbar-thumb:hover{background:#444}
+</style>
+
+<!-- ══════ LAYOUT ══════ -->
+<div style="display:flex;height:calc(100vh - 56px);background:#0a0a0a;font-family:'Inter',system-ui,sans-serif;color:#e0e0e0;">
+
+    <!-- LEFT: Selection Panel -->
+    <div style="flex:1.5;display:flex;flex-direction:column;border-right:1px solid #2a2a2a;min-width:0;">
+
+        <!-- Tab bar -->
+        <div style="display:flex;align-items:stretch;border-bottom:1px solid #2a2a2a;background:#111;flex-shrink:0;justify-content:space-between;">
+            <div style="display:flex;">
+                <button class="sse-tab active" onclick="sse(this,'tab-styles')">Styles</button>
+                <button class="sse-tab" onclick="sse(this,'tab-music')">Music</button>
+                <button class="sse-tab" onclick="sse(this,'tab-transitions')">Transitions</button>
+                <button class="sse-tab" onclick="sse(this,'tab-clips')">Clips</button>
+            </div>
+            <div style="display:flex;align-items:center;padding-right:14px;">
+                <button onclick="window.location.href='/dashboard'" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#555;font-size:11px;padding:5px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.color='#aaa'" onmouseout="this.style.color='#555'"><i class="bi bi-x-lg" style="font-size:10px"></i></button>
+            </div>
+        </div>
+
+        <script>
+        function sse(btn,id){
+            document.querySelectorAll('.sse-pane').forEach(e=>e.style.display='none');
+            document.querySelectorAll('.sse-tab').forEach(e=>e.classList.remove('active'));
+            document.getElementById(id).style.display='block';
+            btn.classList.add('active');
+        }
+        </script>
+
+        <!-- Scrollable content -->
+        <div style="flex:1;overflow-y:auto;padding:24px 28px;">
+
+            <!-- STYLES TAB -->
+            <div id="tab-styles" class="sse-pane">
+                <h2 style="font-size:16px;font-weight:700;color:#f0f0f0;margin:0 0 4px;">Subtitle Styles</h2>
+                <p style="font-size:12px;color:#666;margin:0 0 20px;">Choose how captions appear on screen.</p>
+
+                <div class="styles-section" id="stylesSection" style="display:{{ $project->voiceover_option === 'upload' && !$project->voiceover_url ? 'none' : 'block' }};">
+
+                    <!-- Position -->
+                    <div class="position-selector-section" style="margin-bottom:24px;">
+                        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:10px;text-align:center;">Position</div>
+                        <div class="position-options">
+                            <div class="position-option selected" data-position="bottom">
+                                <div class="position-preview position-bottom"><div class="position-indicator" style="bottom:4px;left:50%;transform:translateX(-50%);">Bot</div></div>
+                                <div class="position-name">Bottom</div>
+                            </div>
+                            <div class="position-option" data-position="center">
+                                <div class="position-preview position-center"><div class="position-indicator" style="top:50%;left:50%;transform:translate(-50%,-50%);">Mid</div></div>
+                                <div class="position-name">Center</div>
+                            </div>
+                            <div class="position-option" data-position="top">
+                                <div class="position-preview position-top"><div class="position-indicator" style="top:4px;left:50%;transform:translateX(-50%);">Top</div></div>
+                                <div class="position-name">Top</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Style Cards (class=style-category so existing JS works) -->
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:10px;">Presets</div>
+                    <div class="style-categories" id="styleCategories">
+
+                        <div class="style-category" data-style="tiktok_trending">
+                            <div class="style-preview tiktok-trending-style">
+                                <div class="tiktok-preview"><span class="tiktok-top">VIRAL CONTENT</span><span class="tiktok-bottom">TRENDING NOW</span></div>
+                            </div>
+                            <div class="style-name">TikTok Trending</div>
+                            <div class="style-description">Dual-colored block text for viral short-form.</div>
+                        </div>
+
+                        <div class="style-category" data-style="progressive_highlight">
+                            <div class="style-preview progressive-highlight-style">
+                                <div class="progressive-words">
+                                    <span class="progressive-word">WORD</span><span class="progressive-word active">BY</span><span class="progressive-word">WORD</span><span class="progressive-word">HIGHLIGHTING</span>
+                                </div>
+                            </div>
+                            <div class="style-name">Progressive Highlight</div>
+                            <div class="style-description">Word-by-word with blue pop animation.</div>
+                        </div>
+
+                        <div class="style-category" data-style="rectangular">
+                            <div class="style-preview rectangular-style">
+                                <div class="style-text">COOL SUBTITLE</div>
+                            </div>
+                            <div class="style-name">Rectangular</div>
+                            <div class="style-description">Red backing, sharp corners, cinematic.</div>
+                        </div>
+
+                        <div class="style-category" data-style="rounded_progressive">
+                            <div class="style-preview rounded-progressive-style">
+                                <div class="rounded-words">
+                                    <span class="rounded-word">ROUNDED</span><span class="rounded-word active">PROGRESSIVE</span><span class="rounded-word">HIGHLIGHTING</span>
+                                </div>
+                            </div>
+                            <div class="style-name">Rounded Progressive</div>
+                            <div class="style-description">Purple rounded word highlighting.</div>
+                        </div>
+
+                        <div class="style-category" data-style="arabic_banner">
+                            <div class="style-preview arabic-banner-style">
+                                <div class="arabic-banner-preview">
+                                    <div class="arabic-first">مرحباً بكم</div>
+                                    <div class="arabic-second">اشتركوا الآن</div>
+                                </div>
+                            </div>
+                            <div class="style-name">Arabic Banner</div>
+                            <div class="style-description">RTL dual-tone floating bubbles.</div>
+                        </div>
+
+                        <div class="style-category" data-style="rectangular_banner">
+                            <div class="style-preview rectangular-banner-style">
+                                <div class="rectangular-banner-preview">
+                                    <div class="rect-first">SHARP BANNER</div>
+                                    <div class="rect-second">SUBSCRIBE NOW</div>
+                                </div>
+                            </div>
+                            <div class="style-name">Rectangular Banner</div>
+                            <div class="style-description">Green-white dual banner for CTA.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- MUSIC TAB -->
+            <div id="tab-music" class="sse-pane" style="display:none;">
+                <div class="music-selection-section" id="musicSection" style="display:{{ $project->voiceover_option === 'upload' && !$project->voiceover_url ? 'none' : 'block' }};">
+
+                    <!-- Search + Categories row -->
+                    <div style="display:flex;gap:12px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+                        <div style="position:relative;flex:1;min-width:200px;">
+                            <i class="bi bi-search" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#555;font-size:13px;"></i>
+                            <input type="text" id="musicSearchInput" class="modern-search-input" placeholder="Search tracks..." style="width:100%;" />
+                        </div>
+                    </div>
+
+                    <div class="categories-scroll-container" style="margin-bottom:18px;overflow-x:auto;padding-bottom:4px;">
+                        <div class="music-categories" id="musicCategories" style="display:flex;gap:6px;"></div>
+                    </div>
+
+                    <!-- Featured -->
+                    <div class="music-section" id="trendingSection">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#555;">Featured Tracks</div>
+                        </div>
+                        <div class="music-grid" id="trendingTracks"></div>
+                    </div>
+
+                    <!-- Search Results -->
+                    <div class="music-section" id="searchSection" style="display:none;">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+                            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#555;">Search Results</div>
+                            <div class="results-count" id="resultsCount" style="background:#222;color:#888;padding:3px 10px;border-radius:4px;font-size:11px;">0 tracks</div>
+                        </div>
+                        <div class="music-grid" id="searchResultsTracks"></div>
+                        <div class="pagination-controls" id="paginationControls" style="display:none;">
+                            <button class="pagination-btn" id="prevPageBtn" onclick="changePage(-1)"><i class="bi bi-chevron-left"></i> Prev</button>
+                            <div class="page-numbers" id="pageNumbers"></div>
+                            <button class="pagination-btn" id="nextPageBtn" onclick="changePage(1)">Next <i class="bi bi-chevron-right"></i></button>
+                        </div>
+                    </div>
+
+                    <!-- Selected -->
+                    <div class="selected-track-section" id="selectedTrackSection" style="display:none;">
+                        <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#c8ff00;margin-bottom:8px;padding:12px 12px 0;">Selected Track</div>
+                        <div class="selected-track-card" id="selectedTrackCard"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TRANSITIONS TAB -->
+            <div id="tab-transitions" class="sse-pane" style="display:none;">
+                <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#555;margin-bottom:14px;">Scene Transitions</div>
+
+                <div class="transitions-section">
+                    <div class="transitions-grid">
+
+                        <div class="transition-card" data-transition="fade" onclick="selectTransition('fade')">
+                            <div class="transition-preview"><div class="transition-demo fade-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Fade</div>
+                            <div class="transition-description">Smooth opacity dissolve between clips</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="slide-left" onclick="selectTransition('slide-left')">
+                            <div class="transition-preview"><div class="transition-demo slide-left-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Slide Left</div>
+                            <div class="transition-description">Push frame left to reveal next</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="slide-right" onclick="selectTransition('slide-right')">
+                            <div class="transition-preview"><div class="transition-demo slide-right-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Slide Right</div>
+                            <div class="transition-description">Push frame right to reveal next</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="slide-up" onclick="selectTransition('slide-up')">
+                            <div class="transition-preview"><div class="transition-demo slide-up-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Slide Up</div>
+                            <div class="transition-description">Push frame upward</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="slide-down" onclick="selectTransition('slide-down')">
+                            <div class="transition-preview"><div class="transition-demo slide-down-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Slide Down</div>
+                            <div class="transition-description">Push frame downward</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="zoom-in" onclick="selectTransition('zoom-in')">
+                            <div class="transition-preview"><div class="transition-demo zoom-in-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Zoom In</div>
+                            <div class="transition-description">Scale into next scene</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="zoom-out" onclick="selectTransition('zoom-out')">
+                            <div class="transition-preview"><div class="transition-demo zoom-out-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Zoom Out</div>
+                            <div class="transition-description">Pull away to reveal next</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="crossfade" onclick="selectTransition('crossfade')">
+                            <div class="transition-preview"><div class="transition-demo crossfade-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Crossfade</div>
+                            <div class="transition-description">Alpha blend both clips</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="wipe-left" onclick="selectTransition('wipe-left')">
+                            <div class="transition-preview"><div class="transition-demo wipe-left-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Wipe Left</div>
+                            <div class="transition-description">Curtain sweep from right</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="wipe-right" onclick="selectTransition('wipe-right')">
+                            <div class="transition-preview"><div class="transition-demo wipe-right-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Wipe Right</div>
+                            <div class="transition-description">Curtain sweep from left</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="bounce" onclick="selectTransition('bounce')">
+                            <div class="transition-preview"><div class="transition-demo bounce-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Bounce</div>
+                            <div class="transition-description">Elastic spring snap entry</div>
+                        </div>
+
+                        <div class="transition-card" data-transition="none" onclick="selectTransition('none')">
+                            <div class="transition-preview"><div class="transition-demo none-demo"><div class="demo-clip clip-1" data-label="A"></div><div class="demo-clip clip-2" data-label="B"></div></div></div>
+                            <div class="transition-name">Hard Cut</div>
+                            <div class="transition-description">Instant switch, no blend</div>
+                        </div>
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- CLIPS TAB -->
+            <div id="tab-clips" class="sse-pane" style="display:none;">
+                <h2 style="font-size:16px;font-weight:700;color:#f0f0f0;margin:0 0 4px;">Scene Clips</h2>
+                <p style="font-size:12px;color:#666;margin:0 0 20px;">Trimmed video segments from the pipeline.</p>
+                <div class="processing-section" id="processingSection" style="display:{{ $project->voiceover_option === 'upload' && !$project->voiceover_url ? 'block' : 'none' }};text-align:center;padding:40px 0;">
+                    <div class="spinner-border mb-3" role="status" style="color:#c8ff00;width:2.5rem;height:2.5rem;"></div>
+                    <p style="color:#666;font-size:13px;">Processing voiceover...</p>
+                </div>
+                <div class="video-preview-section">
+                    <div class="video-grid" id="videoGrid"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- RIGHT: Preview -->
+    <div style="flex:1;display:flex;flex-direction:column;background:#0a0a0a;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 18px;border-bottom:1px solid #2a2a2a;flex-shrink:0;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:13px;font-weight:600;color:#f0f0f0;">Preview</span>
+                <span id="preview-status" style="font-size:10px;font-weight:700;color:#c8ff00;text-transform:uppercase;letter-spacing:.04em;background:rgba(200,255,0,.1);padding:3px 7px;border-radius:4px;">Live</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button onclick="openEditor()" style="background:#1a1a1a;border:1px solid #2a2a2a;color:#888;font-size:12px;padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:500;" onmouseover="this.style.color='#eee';this.style.borderColor='#444'" onmouseout="this.style.color='#888';this.style.borderColor='#2a2a2a'">Editor</button>
+                <button id="generateBtn" onclick="generateSubtitles()" style="background:#c8ff00;border:none;color:#0a0a0a;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;font-weight:700;" onmouseover="this.style.filter='brightness(1.1)'" onmouseout="this.style.filter='none'">Render Video</button>
+            </div>
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;padding:20px;min-height:0;">
+            <div id="vidsai-preview-root" style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;border:1px dashed #2a2a2a;border-radius:8px;color:#555;font-size:13px;">
+                <div style="text-align:center;">
+                    <div style="width:28px;height:28px;border:2px solid #c8ff00;border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px;"></div>
+                    <div>Loading engine...</div>
+                </div>
+            </div>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 18px;border-top:1px solid #2a2a2a;flex-shrink:0;justify-content:center;">
+            <div style="background:#1a1a1a;padding:5px 10px;border-radius:5px;font-size:11px;color:#555;border:1px solid #2a2a2a;">Style: <span id="preview-style-label" style="color:#f0f0f0;font-weight:600;margin-left:3px;">—</span></div>
+            <div style="background:#1a1a1a;padding:5px 10px;border-radius:5px;font-size:11px;color:#555;border:1px solid #2a2a2a;">Transition: <span id="preview-transition-label" style="color:#f0f0f0;font-weight:600;margin-left:3px;">—</span></div>
+            <div style="background:#1a1a1a;padding:5px 10px;border-radius:5px;font-size:11px;color:#555;border:1px solid #2a2a2a;">Music: <span id="preview-music-label" style="color:#f0f0f0;font-weight:600;margin-left:3px;">—</span></div>
+        </div>
+    </div>
+</div>
+</div>
