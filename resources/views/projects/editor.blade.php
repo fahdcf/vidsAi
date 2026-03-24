@@ -14,13 +14,15 @@
         * { box-sizing: border-box; margin: 0; padding: 0; }
 
         :root {
-            --bg:      #080B11;
-            --surface: #0D1117;
-            --border:  #1E2D40;
-            --accent:  #2563EB;
-            --sky:     #38BDF8;
-            --text:    #F1F5F9;
-            --muted:   #475569;
+            --bg:      #050607;
+            --surface: #0b0d10;
+            --border:  #1f242c;
+            --accent:  #c8ff00;
+            --sky:     #e8ff8f;
+            --text:    #edf1e8;
+            --muted:   #8e9680;
+            --chip-bg: #12161b;
+            --border-strong: #2d333d;
             --radius:  8px;
         }
 
@@ -67,8 +69,8 @@
             font-size: 11px;
             padding: 3px 8px;
             border-radius: 20px;
-            background: var(--border);
-            color: var(--sky);
+            background: var(--chip-bg);
+            color: var(--accent);
             font-weight: 600;
         }
 
@@ -80,9 +82,9 @@
 
         .btn-back {
             padding: 7px 14px;
-            background: var(--border);
+            background: var(--chip-bg);
             color: var(--text);
-            border: 1px solid #2D3F55;
+            border: 1px solid var(--border-strong);
             border-radius: 6px;
             font-size: 12px;
             cursor: pointer;
@@ -93,7 +95,7 @@
         .btn-export {
             padding: 7px 16px;
             background: var(--accent);
-            color: var(--text);
+            color: #11150d;
             border: none;
             border-radius: 6px;
             font-size: 13px;
@@ -181,7 +183,8 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #22C55E;
+            background: var(--accent);
+            box-shadow: 0 0 8px rgba(200, 255, 0, 0.6);
         }
 
         #chat-messages {
@@ -222,7 +225,7 @@
 
         .chat-msg.user .chat-bubble {
             background: var(--accent);
-            color: white;
+            color: #11150d;
             border-bottom-right-radius: 3px;
         }
 
@@ -241,8 +244,8 @@
             font-size: 10px;
             padding: 2px 6px;
             border-radius: 4px;
-            background: rgba(37, 99, 235, 0.2);
-            color: var(--sky);
+            background: rgba(200, 255, 0, 0.16);
+            color: var(--accent);
             font-family: monospace;
             align-self: flex-start;
             margin-top: 2px;
@@ -259,7 +262,7 @@
 
         .quick-chip {
             padding: 5px 10px;
-            background: var(--bg);
+            background: var(--chip-bg);
             border: 1px solid var(--border);
             border-radius: 20px;
             font-size: 11px;
@@ -307,7 +310,7 @@
         #chat-send {
             padding: 8px 14px;
             background: var(--accent);
-            color: white;
+            color: #11150d;
             border: none;
             border-radius: 6px;
             font-size: 13px;
@@ -336,7 +339,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            background: #080B11;
+            background: var(--bg);
             overflow: hidden;
             min-height: 0;
             position: relative;
@@ -390,7 +393,7 @@
             height: 22px;
             background: var(--border);
             color: var(--text);
-            border: 1px solid #2D3F55;
+            border: 1px solid var(--border-strong);
             border-radius: 4px;
             font-size: 13px;
             cursor: pointer;
@@ -488,11 +491,11 @@
             top: 0;
             bottom: 0;
             width: 1px;
-            background: rgba(71, 85, 105, 0.5);
+            background: rgba(120, 130, 110, 0.35);
         }
 
         .time-tick.major {
-            background: rgba(148, 163, 184, 0.75);
+            background: rgba(214, 228, 184, 0.6);
         }
 
         .time-label {
@@ -510,8 +513,8 @@
             top: 0;
             bottom: 0;
             width: 2px;
-            background: #F97316;
-            box-shadow: 0 0 6px rgba(249, 115, 22, 0.7);
+            background: var(--accent);
+            box-shadow: 0 0 10px rgba(200, 255, 0, 0.75);
             pointer-events: none;
             z-index: 15;
         }
@@ -525,7 +528,7 @@
             width: 8px;
             height: 8px;
             border-radius: 50%;
-            background: #F97316;
+            background: var(--accent);
         }
 
         /* Scene blocks */
@@ -533,7 +536,7 @@
             height: 36px;
             border-radius: 5px;
             border: 1px solid var(--border);
-            background: linear-gradient(135deg, #1E3A5F, #162030);
+            background: linear-gradient(135deg, #13171d, #0d1014);
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -577,8 +580,8 @@
         .subtitle-block {
             height: 28px;
             border-radius: 4px;
-            background: rgba(56, 189, 248, 0.15);
-            border: 1px solid rgba(56, 189, 248, 0.3);
+            background: rgba(200, 255, 0, 0.12);
+            border: 1px solid rgba(200, 255, 0, 0.26);
             display: flex;
             align-items: center;
             justify-content: center;
@@ -633,7 +636,7 @@
             color: var(--muted);
             pointer-events: none;
             z-index: 2;
-            background: rgba(8, 11, 17, 0.35);
+            background: rgba(5, 6, 7, 0.42);
             border-radius: 4px;
         }
 
@@ -651,8 +654,8 @@
             top: 12px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(37,99,235,0.9);
-            color: white;
+            background: rgba(200, 255, 0, 0.9);
+            color: #11150d;
             padding: 8px 18px;
             border-radius: 20px;
             font-size: 12px;
@@ -1297,9 +1300,9 @@
         try {
             wavesurferVoice = WaveSurfer.create({
                 container: '#waveform-voiceover',
-                waveColor: '#1E3A5F',
-                progressColor: '#2563EB',
-                cursorColor: '#38BDF8',
+                waveColor: '#2a3120',
+                progressColor: '#c8ff00',
+                cursorColor: '#e8ff8f',
                 height: 36,
                 barWidth: 2,
                 barGap: 1,
@@ -1367,9 +1370,9 @@
         try {
             wavesurferMusic = WaveSurfer.create({
                 container: '#waveform-music',
-                waveColor: '#1A3A2A',
-                progressColor: '#16A34A',
-                cursorColor: '#4ADE80',
+                waveColor: '#27331a',
+                progressColor: '#c8ff00',
+                cursorColor: '#e8ff8f',
                 height: 36,
                 barWidth: 2,
                 barGap: 1,
