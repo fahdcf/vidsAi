@@ -6,8 +6,13 @@ require_once 'vendor/autoload.php';
 echo "🧪 Testing Deepgram API Transcription...\n\n";
 
 // Configuration
-$deepgramApiKey = '3d6ded8c284da3b52a2ac189d67157ea0c0f9f3a'; // New working API key
+$deepgramApiKey = getenv('DEEPGRAM_API_KEY') ?: '';
 $deepgramUrl = 'https://api.deepgram.com/v1/listen';
+
+if ($deepgramApiKey === '') {
+    fwrite(STDERR, "Set DEEPGRAM_API_KEY in the process environment before this manual diagnostic.\n");
+    exit(1);
+}
 
 // Test audio file path (use one of the existing voiceover files)
 $audioFile = 'storage/app/public/voiceovers/7K9NJ9lpyvW3rG5WqZSO53AQrnUq71hPLJ87NxDG.mp3';
@@ -61,11 +66,6 @@ curl_setopt($ch, CURLOPT_HTTPHEADER, [
 curl_setopt($ch, CURLOPT_POSTFIELDS, file_get_contents($audioFile));
 curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-curl_setopt($ch, CURLOPT_VERBOSE, true);
-
-// Create a temporary file for verbose output
-$verbose = fopen('php://temp', 'w+');
-curl_setopt($ch, CURLOPT_STDERR, $verbose);
 
 echo "📤 Sending request to Deepgram...\n";
 $startTime = microtime(true);
@@ -96,13 +96,7 @@ if ($error) {
     }
 }
 
-// Show verbose output
-rewind($verbose);
-$verboseLog = stream_get_contents($verbose);
-fclose($verbose);
-
-echo "\n📋 Verbose cURL output:\n";
-echo $verboseLog;
+// Do not print cURL verbose headers: they can contain the Authorization token.
 
 echo "\n" . str_repeat("=", 50) . "\n";
 echo "🏁 Test completed\n";

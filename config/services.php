@@ -37,10 +37,10 @@ return [
 
     'n8n' => [
         'webhook_url' => env('N8N_WEBHOOK_URL'),
-        'regenerate_url' => env('N8N_REGENERATE_URL', 'https://n8n-projects-production.up.railway.app/webhook-test/regenerate-scenes'),
-        'voice_scenes_url' => env('N8N_VOICE_SCENES_URL', 'https://n8n-projects-production.up.railway.app/webhook-test/generate-scenes-from-voice'),
-        'trim_scenes_url' => env('N8N_TRIM_SCENES_URL', 'https://n8n-projects-production.up.railway.app/webhook-test/trim-scenes'),
-        'merge_subtitles_url' => env('N8N_MERGE_SUBTITLES_URL', 'https://n8n-projects-production.up.railway.app/webhook-test/merge-scenes-with-subtitles'),
+        'regenerate_url' => env('N8N_REGENERATE_URL'),
+        'voice_scenes_url' => env('N8N_VOICE_SCENES_URL'),
+        'trim_scenes_url' => env('N8N_TRIM_SCENES_URL'),
+        'merge_subtitles_url' => env('N8N_MERGE_SUBTITLES_URL'),
     ],
 
     'freesound' => [
@@ -87,13 +87,13 @@ return [
     ],
 
     'pexels' => [
-        'api_key' => env('PEXELS_API_KEY', 'zXukdqhgYGWOiFYl5cJHEJ3s1DWMFQLc8UXolQxN73dyltqKgnmU2AD7'),
+        'api_key' => env('PEXELS_API_KEY'),
         'base_url' => env('PEXELS_BASE_URL', 'https://api.pexels.com/videos/search'),
     ],
 
     'deepgram' => [
-        'api_key' => env('DEEPGRAM_API_KEY', '3d6ded8c284da3b52a2ac189d67157ea0c0f9f3a'),
-        'fallback_api_key' => env('DEEPGRAM_FALLBACK_API_KEY', 'bbb834ee2c7055e22a947593c4d00540d0490cde'),
+        'api_key' => env('DEEPGRAM_API_KEY'),
+        'fallback_api_key' => env('DEEPGRAM_FALLBACK_API_KEY'),
         'base_url' => env('DEEPGRAM_BASE_URL', 'https://api.deepgram.com/v1/listen'),
     ],
 
@@ -116,7 +116,7 @@ return [
     ],
 
     'video_trim' => [
-        'base_url' => env('VIDEO_TRIM_BASE_URL', 'https://8d7efae734fa.ngrok-free.app'),
+        'base_url' => env('VIDEO_TRIM_BASE_URL'),
         'trim_endpoint' => env('VIDEO_TRIM_ENDPOINT', '/trim'),
         'status_endpoint' => env('VIDEO_TRIM_STATUS_ENDPOINT', '/status'),
     ],
