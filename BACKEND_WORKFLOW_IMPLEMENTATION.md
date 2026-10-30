@@ -19,19 +19,19 @@ This document describes the implementation of backend services that replace the 
 ```php
 // Gemini AI for scene generation
 'gemini' => [
-    'api_key' => env('GEMINI_API_KEY', 'AIzaSyDO6P2zGiIEhg2zhoKr1b_gMnOXH-CgL9k'),
+    'api_key' => env('GEMINI_API_KEY', 'YOUR_GEMINI_API_KEY'),
     'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent'),
 ],
 
 // Pexels for video search
 'pexels' => [
-    'api_key' => env('PEXELS_API_KEY', 'zXukdqhgYGWOiFYl5cJHEJ3s1DWMFQLc8UXolQxN73dyltqKgnmU2AD7'),
+    'api_key' => env('PEXELS_API_KEY', 'YOUR_PEXELS_API_KEY'),
     'base_url' => env('PEXELS_BASE_URL', 'https://api.pexels.com/videos/search'),
 ],
 
 // Deepgram for audio transcription
 'deepgram' => [
-    'api_key' => env('DEEPGRAM_API_KEY', 'bbb834ee2c7055e22a947593c4d00540d0490cde'),
+    'api_key' => env('DEEPGRAM_API_KEY', 'YOUR_DEEPGRAM_FALLBACK_API_KEY'),
     'base_url' => env('DEEPGRAM_BASE_URL', 'https://api.deepgram.com/v1/listen'),
 ],
 

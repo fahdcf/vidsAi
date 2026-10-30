@@ -102,7 +102,7 @@ try {
 echo "\n🔧 Solution:\n";
 echo "The issue is that the required API keys are missing from your .env file.\n";
 echo "You need to add these lines to your .env file:\n\n";
-echo "DEEPGRAM_API_KEY=bbb834ee2c7055e22a947593c4d00540d0490cde\n";
-echo "GEMINI_API_KEY=AIzaSyDO6P2zGiIEhg2zhoKr1b_gMnOXH-CgL9k\n";
-echo "PEXELS_API_KEY=zXukdqhgYGWOiFYl5cJHEJ3s1DWMFQLc8UXolQxN73dyltqKgnmU2AD7\n\n";
+echo "DEEPGRAM_API_KEY=YOUR_DEEPGRAM_FALLBACK_API_KEY\n";
+echo "GEMINI_API_KEY=YOUR_GEMINI_API_KEY\n";
+echo "PEXELS_API_KEY=YOUR_PEXELS_API_KEY\n\n";
 echo "After adding these, restart your Laravel application and try again.\n";
