@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/pricing', [HomeController::class, 'pricing'])->name('pricing');
 
-if (app()->environment(['local', 'staging'])) {
+if (app()->environment(['local', 'staging']) && config('editing.legacy_diagnostics', false)) {
     // Test route for debugging Laragon setup
     Route::get('/test-laravel', function() {
         return response()->json([
@@ -70,7 +70,7 @@ Route::middleware('auth')->group(function () {
     Route::post('/review/{project}/confirm', [ProjectController::class, 'confirmScenes'])->name('projects.confirm-scenes');
     Route::get('/processing/{project}', [ProjectController::class, 'processing'])->name('projects.processing');
     Route::get('/processing/{project}/status', [ProjectController::class, 'processingStatus'])->name('projects.processing-status');
-    if (app()->environment(['local', 'staging'])) {
+    if (app()->environment(['local', 'staging']) && config('editing.legacy_diagnostics', false)) {
         Route::get('/processing/{project}/logs', [ProjectController::class, 'processingLogs'])->name('projects.processing-logs');
     }
     Route::post('/projects/{project}/retry', [ProjectController::class, 'retryProject'])->name('projects.retry');
@@ -101,7 +101,7 @@ Route::middleware('auth')->group(function () {
         ->name('projects.export');
 
 
-    if (app()->environment(['local', 'staging'])) {
+    if (app()->environment(['local', 'staging']) && config('editing.legacy_diagnostics', false)) {
         // Test route to verify Freesound API
         Route::get('/test-freesound', function() {
             $apiKey = config('services.freesound.api_key');
@@ -424,6 +424,22 @@ Route::middleware('auth')->group(function () {
 
 });
 
+
+Route::middleware('auth')->group(function () {
+    $c = \App\Http\Controllers\EditingController::class;
+    Route::post('/projects/{project}/assets', [\App\Http\Controllers\ProjectAssetController::class,'upload']);
+    Route::post('/projects/{project}/commands', [$c,'commands']);
+    Route::post('/projects/{project}/restore-revision', [$c,'restore']);
+    Route::get('/projects/{project}/exports/{export}', [$c,'exportStatus']);
+    Route::delete('/projects/{project}/exports/{export}', [$c,'cancel']);
+    Route::get('/projects/{project}/exports/{export}/download', [$c,'download'])->name('projects.export-download');
+    Route::post('/projects/{project}/agent-runs', [$c,'plan']);
+    Route::get('/projects/{project}/agent-runs/{run}', [$c,'run']);
+    Route::delete('/projects/{project}/agent-runs/{run}', [$c,'cancelRun']);
+    Route::post('/projects/{project}/agent-runs/{run}/execute', [$c,'execute']);
+});
+
+Route::get('/projects/{project}/assets/{asset}', [\App\Http\Controllers\ProjectAssetController::class,'show'])->name('projects.asset');
 require __DIR__.'/auth.php';
 
 

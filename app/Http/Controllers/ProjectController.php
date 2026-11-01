@@ -19,6 +19,7 @@ class ProjectController extends Controller
 {
     public function create()
     {
+        if(config('editing.react_editor')) return \Inertia\Inertia::render('Create');
         return view('projects.create');
     }
 
@@ -34,7 +35,7 @@ class ProjectController extends Controller
             'video_format.*' => 'in:16:9,1:1,9:16,all',
             'script_option' => 'required|in:paste,generate',
             'custom_script' => 'required_if:script_option,paste|nullable|string|max:5000',
-            'voiceover_option' => 'required|in:upload,ai,none',
+            'voiceover_option' => 'required|in:upload',
             'voiceover_file' => 'required_if:voiceover_option,upload|nullable|file|mimes:mp3,wav|max:10240'
         ]);
 
@@ -156,6 +157,7 @@ class ProjectController extends Controller
 
     public function regenerateScene(Request $request, Project $project, Scene $scene)
     {
+        abort_unless($scene->project_id === $project->id, 404);
         $this->authorize('update', $project);
         
         $scene->update(['status' => 'regenerating']);
@@ -168,6 +170,7 @@ class ProjectController extends Controller
 
     public function updateScene(Request $request, Scene $scene)
     {
+        $this->authorize('update', $scene->project);
         logger()->info('🔄 Scene update request received', [
             'scene_id' => $scene->id,
             'video_url' => $request->video_url,
@@ -217,6 +220,7 @@ class ProjectController extends Controller
 
     public function regenerateSceneProxy(Request $request, Scene $scene)
     {
+        $this->authorize('update', $scene->project);
         logger()->info('🔄 Scene regeneration proxy request', [
             'scene_id' => $scene->id,
             'regeneration_option' => $request->regeneration_option,
@@ -567,6 +571,7 @@ class ProjectController extends Controller
      */
     public function checkAiGenerationStatus(Scene $scene)
     {
+        $this->authorize('update', $scene->project);
         try {
             logger()->info('🔍 Checking AI generation status', [
                 'scene_id' => $scene->id,
@@ -1072,6 +1077,7 @@ class ProjectController extends Controller
 
     public function uploadCustomMedia(Request $request, Project $project, Scene $scene)
     {
+        abort_unless($scene->project_id === $project->id, 404);
         // Add debugging
         logger()->info('Upload request received', [
             'project_id' => $project->id,
@@ -1826,30 +1832,15 @@ class ProjectController extends Controller
                 $project->update(['subtitle_style' => $validated['style']]);
             }
 
-            // Update edit_state with chosen subtitle style so preview reflects it
-            if (!empty($project->edit_state)) {
-                try {
-                    $editState = $project->edit_state;
-                    $chosenStyle = $validated['style'];
-
-                    // Apply the chosen style to all subtitle segments
-                    if (!empty($editState['tracks']['subtitles'])) {
-                        foreach ($editState['tracks']['subtitles'] as &$sub) {
-                            $sub['style'] = $chosenStyle;
-                        }
-                        unset($sub);
-                    }
-
-                    $editState['metadata']['last_modified'] = now()->toISOString();
-                    $editState['version'] = ($editState['version'] ?? 1) + 1;
-                    $project->update(['edit_state' => $editState]);
-                } catch (\Exception $e) {
-                    \Illuminate\Support\Facades\Log::warning(
-                        '[EditStateBuilder] Failed to update subtitle style in edit_state: ' . $e->getMessage(),
-                        ['project_id' => $project->id]
-                    );
-                }
-            }
+            // Preserve the saved timeline and apply selection-page settings through the shared core.
+            $editing = app(\App\Services\EditingService::class);
+            $document = $editing->document($project);
+            $operations = [['tool'=>'set_subtitle_style','params'=>['style'=>$validated['style'],'style_config'=>$validated['style_config']]]];
+            if (array_key_exists('music', $validated)) $operations[] = ['tool'=>'set_music','params'=>['url'=>$validated['music'],'volume'=>min(1,max(0,(float)($validated['musicVolume']??0.3)))]];
+            if (isset($validated['voiceOverVolume'])) $operations[] = ['tool'=>'set_volume','params'=>['track'=>'voiceover','volume'=>min(2,max(0,(float)$validated['voiceOverVolume']))]];
+            if (isset($validated['style_config']['transition'])) $operations[] = ['tool'=>'set_transition','params'=>['type'=>$validated['style_config']['transition'],'duration_frames'=>15]];
+            $editing->commit($project,['commandId'=>(string)\Illuminate\Support\Str::uuid(),'projectId'=>(string)$project->id,'expectedRevision'=>$document['revision'],'operations'=>$operations]);
+            $project->refresh();
 
             // Prepare data for subtitle generation
             $preparedData = $this->prepareSubtitleData($project, $validated);
@@ -1877,9 +1868,9 @@ class ProjectController extends Controller
 
             // Save selected music so the editor can load it
             if (!empty($validated['music'])) {
-                $updateData['selected_music'] = json_encode([
+                $updateData['selected_music'] = [
                     ['url' => $validated['music'], 'volume' => $validated['musicVolume'] ?? 0.3]
-                ]);
+                ];
             }
 
             $project->update($updateData);
@@ -3337,6 +3328,16 @@ class ProjectController extends Controller
                 'scenes.*.overlays.text_content' => 'sometimes|nullable|string|max:255'
             ]);
 
+            // Validate every source window before writing any scene.
+            $seen = [];
+            foreach ($validatedData['scenes'] as $item) {
+                $owned = $project->scenes()->find($item['scene_id']);
+                if (!$owned || in_array($item['scene_id'], $seen, true) || $item['end_time'] <= $item['start_time'] || ($owned->type === 'video' && $owned->duration_seconds > 0 && $item['end_time'] > $owned->duration_seconds + 0.001)) {
+                    throw \Illuminate\Validation\ValidationException::withMessages(['scenes'=>'Every scene must belong to this project and have a valid source window.']);
+                }
+                $seen[] = $item['scene_id'];
+            }
+
             // Update scenes with trimming data from review page
             foreach ($validatedData['scenes'] as $sceneData) {
                 $scene = $project->scenes()->find($sceneData['scene_id']);
@@ -3361,8 +3362,7 @@ class ProjectController extends Controller
                     $scene->update([
                         'start_time' => $startTime,
                         'end_time' => $endTime,
-                        'trimmed_duration' => $trimmedDuration,
-                        'type' => 'video' // Ensure type stays as video when trimming
+                        'trimmed_duration' => $trimmedDuration
                     ]);
                 }
             }
@@ -3383,6 +3383,18 @@ class ProjectController extends Controller
             // before subtitle generation and rendering
             try {
                 $editState = (new \App\Services\EditStateBuilder())->build($project);
+                if ($previous = $project->edit_state) {
+                    foreach (['subtitles','audio','overlays','motion_graphics'] as $track) $editState['tracks'][$track] = $previous['tracks'][$track] ?? [];
+                    $oldClips = collect($previous['tracks']['video'] ?? [])->keyBy('id');
+                    foreach ($editState['tracks']['video'] as &$clip) {
+                        if ($old = $oldClips->get($clip['id'])) foreach (['animation','transition_out','speed','volume','color_grade'] as $key) $clip[$key] = $old[$key] ?? $clip[$key];
+                    }
+                    unset($clip);
+                    $editState['schemaVersion'] = 1;
+                    $editState['revision'] = ($previous['revision'] ?? $previous['version'] ?? 1) + 1;
+                    $editState['version'] = $editState['revision'];
+                    foreach ($editState['tracks'] as $items) foreach ($items as $item) $editState['total_frames'] = max($editState['total_frames'], $item['end_frame']);
+                }
                 $project->update(['edit_state' => $editState]);
             } catch (\Exception $e) {
                 // Never block the user flow if edit_state build fails

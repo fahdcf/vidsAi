@@ -12,6 +12,7 @@ class DashboardController extends Controller
     {
         $projects = Auth::user()->projects()->latest()->get();
         
+        if (config('editing.react_editor')) return \Inertia\Inertia::render('Dashboard', ['projects'=>$projects->map(fn($p)=>['id'=>$p->id,'name'=>$p->name,'status'=>$p->status,'created_at'=>$p->created_at->toISOString()])]);
         return view('dashboard', compact('projects'));
     }
 }

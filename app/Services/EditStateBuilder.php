@@ -254,7 +254,7 @@ class EditStateBuilder
                 continue;
             }
 
-            $sceneNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', $sceneText));
+            $sceneNorm = mb_strtolower((string) preg_replace('/[^\p{L}\p{N}\s]/u', '', $sceneText));
             $sceneWords = array_values(array_filter(explode(' ', $sceneNorm)));
 
             $collectedWords = [];
@@ -262,7 +262,7 @@ class EditStateBuilder
 
             while ($subIndex < count($subtitleStrings)) {
                 $subStr = (string) $subtitleStrings[$subIndex];
-                $subNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', $subStr));
+                $subNorm = mb_strtolower((string) preg_replace('/[^\p{L}\p{N}\s]/u', '', $subStr));
                 $subWords = array_values(array_filter(explode(' ', $subNorm)));
 
                 $collectedWords = array_merge($collectedWords, $subWords);
@@ -282,10 +282,10 @@ class EditStateBuilder
                 }
 
                 if ($subIndex < count($subtitleStrings)) {
-                    $nextSub = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', (string) $subtitleStrings[$subIndex]));
+                    $nextSub = mb_strtolower((string) preg_replace('/[^\p{L}\p{N}\s]/u', '', (string) $subtitleStrings[$subIndex]));
                     $nextSceneIndex = $sceneIndex + 1;
                     if (isset($sceneTexts[$nextSceneIndex])) {
-                        $nextSceneNorm = strtolower((string) preg_replace('/[^a-z0-9\s]/i', '', (string) $sceneTexts[$nextSceneIndex]));
+                        $nextSceneNorm = mb_strtolower((string) preg_replace('/[^\p{L}\p{N}\s]/u', '', (string) $sceneTexts[$nextSceneIndex]));
                         $nextSceneFirstWord = explode(' ', trim($nextSceneNorm))[0] ?? '';
                         $nextSubFirstWord = explode(' ', trim($nextSub))[0] ?? '';
                         if ($nextSceneFirstWord && $nextSubFirstWord === $nextSceneFirstWord) {
@@ -311,12 +311,12 @@ class EditStateBuilder
             return ['start' => 0.0, 'end' => $totalDuration];
         }
 
-        $words = preg_split('/\s+/', trim(strtolower($text)));
-        $firstWord = preg_replace('/[^a-z0-9]/', '', $words[0] ?? '');
+        $words = preg_split('/\s+/', trim(mb_strtolower($text)));
+        $firstWord = preg_replace('/[^\p{L}\p{N}]/u', '', $words[0] ?? '');
 
-        $nextWords = $nextText ? preg_split('/\s+/', trim(strtolower($nextText))) : [];
+        $nextWords = $nextText ? preg_split('/\s+/', trim(mb_strtolower($nextText))) : [];
         $nextFirstWord = !empty($nextWords)
-            ? preg_replace('/[^a-z0-9]/', '', $nextWords[0])
+            ? preg_replace('/[^\p{L}\p{N}]/u', '', $nextWords[0])
             : null;
 
         $startTime = null;
@@ -324,7 +324,7 @@ class EditStateBuilder
         $foundStart = false;
 
         foreach ($transcript as $word) {
-            $w = preg_replace('/[^a-z0-9]/', '', strtolower($word['word'] ?? ''));
+            $w = preg_replace('/[^\p{L}\p{N}]/u', '', mb_strtolower($word['word'] ?? ''));
 
             if (!$foundStart && $w === $firstWord) {
                 $startTime = (float) ($word['start'] ?? 0.0);
@@ -377,7 +377,7 @@ class EditStateBuilder
         $transcriptNormalized = array_map(static function ($entry) {
             return [
                 'word' => $entry['word'] ?? $entry['punctuated_word'] ?? '',
-                'normalized' => strtolower((string) preg_replace('/[^a-z0-9]/i', '', (string) ($entry['word'] ?? ''))),
+                'normalized' => mb_strtolower((string) preg_replace('/[^\p{L}\p{N}]/u', '', (string) ($entry['word'] ?? ''))),
                 'start' => (float) ($entry['start'] ?? 0),
                 'end' => (float) ($entry['end'] ?? 0),
             ];
@@ -400,7 +400,7 @@ class EditStateBuilder
         $transcriptIndex = 0;
 
         foreach ($subtitleWords as $i => $subWord) {
-            $subNorm = strtolower((string) preg_replace('/[^a-z0-9]/i', '', $subWord));
+            $subNorm = mb_strtolower((string) preg_replace('/[^\p{L}\p{N}]/u', '', $subWord));
             $found = false;
 
             for ($j = $transcriptIndex; $j < count($segmentTranscriptWords); $j++) {
@@ -559,9 +559,10 @@ class EditStateBuilder
 
         $musicUrl = null;
         if (!empty($project->selected_music) && is_array($project->selected_music)) {
-            $musicUrl = $project->selected_music['url']
-                ?? $project->selected_music['preview_hq_mp3']
-                ?? $project->selected_music['preview_lq_mp3']
+            $selection = isset($project->selected_music[0]) ? $project->selected_music[0] : $project->selected_music;
+            $musicUrl = $selection['url']
+                ?? $selection['preview_hq_mp3']
+                ?? $selection['preview_lq_mp3']
                 ?? null;
         }
         $musicUrl = $musicUrl ?? ($project->music_url ?? null);
@@ -618,6 +619,9 @@ class EditStateBuilder
         return match (true) {
             str_contains($format, '16:9') => ['width' => 1920, 'height' => 1080],
             str_contains($format, '1:1') => ['width' => 1080, 'height' => 1080],
+            str_contains($format, '4:5') => ['width'=>1080,'height'=>1350],
+            str_contains($format, '21:9') => ['width'=>1920,'height'=>824],
+            str_contains($format, '3:2') => ['width'=>1620,'height'=>1080],
             default => ['width' => 1080, 'height' => 1920],
         };
     }
@@ -639,7 +643,7 @@ class EditStateBuilder
             $format = implode(' ', $format);
         }
 
-        $format = strtolower((string) $format);
+        $format = mb_strtolower((string) $format);
 
         if (str_contains($format, 'tiktok')) {
             return 'tiktok';

@@ -65,6 +65,7 @@ class VoiceoverTranscriptTest extends TestCase
         
         $project = Project::factory()->create([
             'user_id' => $user->id,
+            'voiceover_option' => 'upload',
             'voiceover_transcript' => [
                 [
                     'word' => 'test',
@@ -96,6 +97,7 @@ class VoiceoverTranscriptTest extends TestCase
         
         $project = Project::factory()->create([
             'user_id' => $user->id,
+            'voiceover_option' => 'upload',
             'voiceover_transcript' => null
         ]);
 
@@ -116,6 +118,7 @@ class VoiceoverTranscriptTest extends TestCase
         
         $project = Project::factory()->create([
             'user_id' => $owner->id,
+            'voiceover_option' => 'upload',
             'voiceover_transcript' => [
                 ['word' => 'test', 'start' => 0.0, 'end' => 0.5, 'confidence' => 0.99]
             ]

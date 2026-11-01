@@ -1,0 +1,34 @@
+name: Migration checks
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  php:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: pdo_sqlite, sqlite3, mbstring, fileinfo
+      - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env && php artisan key:generate
+      - run: php vendor/phpunit/phpunit/phpunit
+  frontend:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: vidsAi
+      - uses: actions/checkout@v4
+        with:
+          repository: fahdcf/remotion-api
+          ref: migration/react-typescript
+          token: ${{ secrets.REMOTION_REPO_TOKEN }}
+          path: remotion-api
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: npm ci
+        working-directory: remotion-api
+      - run: npm ci && npm run typecheck && npm run build
+        working-directory: vidsAi

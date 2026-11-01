@@ -74,7 +74,7 @@ class SubtitleGenerationService
                 'video_data_keys' => array_keys($videoData)
             ]);
 
-            $response = Http::withOptions([
+            $response = Http::withToken((string)config('editing.worker_token'))->withOptions([
                 'timeout' => 1200, // 20 minutes timeout
                 'verify' => false
             ])->post($renderUrl, $videoData);
@@ -125,7 +125,7 @@ class SubtitleGenerationService
                     'project_id' => $projectId
                 ]);
 
-                $response = Http::withOptions([
+                $response = Http::withToken((string)config('editing.worker_token'))->withOptions([
                     'timeout' => 30,
                     'verify' => false
                 ])->get($statusUrl);
@@ -137,13 +137,18 @@ class SubtitleGenerationService
                 $statusData = $response->json();
                 $status = $statusData['status'] ?? 'unknown';
 
-                if ($status === 'completed') {
+                if (in_array($status, ['completed','done'],true)) {
                     $finalUrl = $statusData['remoteUrl']
                         ?? $statusData['publicUrl']
                         ?? $statusData['outputUrl']
                         ?? $statusData['downloadUrl']
                         ?? $statusData['download_url']
                         ?? '';
+
+                    // Local renders return a path served by the separate render API.
+                    if (is_string($finalUrl) && str_starts_with($finalUrl, '/')) {
+                        $finalUrl = rtrim(config('services.video_render.base_url'), '/') . $finalUrl;
+                    }
 
                     Log::info('✅ Render completed', [
                         'render_id' => $renderId,

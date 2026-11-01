@@ -63,7 +63,7 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 'timestamp' => now()->toISOString()
             ]);
 
-            $sceneGenerationService = new SceneGenerationService();
+            $sceneGenerationService = app(SceneGenerationService::class);
             
             $this->logToCustomFile('🎯 Calling generateScenesFromVoice method', [
                 'project_id' => $this->project->id,
@@ -361,7 +361,7 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 'end_time' => $sceneData['end_time'] ?? null,
                 'duration_seconds' => $transcriptDuration,
                 'gemini_duration' => $transcriptDuration,
-                'keywords' => is_array($sceneData['keywords'] ?? []) ? implode(', ', $sceneData['keywords']) : ($sceneData['keywords'] ?? ''),
+                'keywords' => is_array($sceneData['keywords'] ?? []) ? implode(', ', $sceneData['keywords'] ?? []) : ($sceneData['keywords'] ?? ''),
                 'prompt' => $sceneData['prompt'] ?? null,
                 'type' => 'video' // Default to video for all generated scenes
             ]);
@@ -732,7 +732,7 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 'context' => $context,
                 'memory_usage' => memory_get_usage(true),
                 'memory_peak' => memory_get_peak_usage(true),
-                'execution_time' => microtime(true) - LARAVEL_START
+                'execution_time' => microtime(true) - (defined('LARAVEL_START') ? LARAVEL_START : microtime(true))
             ];
 
             $logContent = json_encode($logEntry, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) . "\n" . str_repeat('-', 80) . "\n";

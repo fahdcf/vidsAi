@@ -13,171 +13,54 @@ class SceneTrimTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_trim_scenes_sends_correct_data_to_n8n_webhook()
+    private function project(User $user): Project
     {
-        // Create a test user and project
-        $user = User::factory()->create();
-        $project = Project::factory()->create([
-            'user_id' => $user->id,
-            'name' => 'Test Trim Project',
-            'status' => 'reviewing'
-        ]);
+        $d = json_decode(file_get_contents(base_path('tests/Fixtures/edit-state.json')), true);
+        $p = Project::factory()->create(['user_id' => $user->id, 'status' => 'subtitle_selection']);
+        $d['project_id'] = (string) $p->id;
+        $p->update(['edit_state' => $d]);
 
-        // Create test scenes
-        $scene1 = Scene::factory()->create([
-            'project_id' => $project->id,
-            'scene_number' => 1,
-            'script_text' => 'First scene text',
-            'video_url' => 'https://example.com/video1.mp4',
-            'duration_seconds' => 10.5
-        ]);
-
-        $scene2 = Scene::factory()->create([
-            'project_id' => $project->id,
-            'scene_number' => 2,
-            'script_text' => 'Second scene text',
-            'video_url' => 'https://example.com/video2.mp4',
-            'duration_seconds' => 8.3
-        ]);
-
-        // Mock the n8n trim webhook response
-        Http::fake([
-            'https://n8n-projects-jqkw.onrender.com/webhook-test/trim-scenes' => Http::response([
-                'success' => true,
-                'message' => 'Scenes trimmed successfully'
-            ], 200)
-        ]);
-
-        // Prepare trim data
-        $trimData = [
-            'scenes' => [
-                [
-                    'scene_id' => $scene1->id,
-                    'video_url' => 'https://example.com/video1.mp4',
-                    'duration' => 5.2,
-                    'start_time' => 2.0,
-                    'end_time' => 7.2
-                ],
-                [
-                    'scene_id' => $scene2->id,
-                    'video_url' => 'https://example.com/video2.mp4',
-                    'duration' => 4.1,
-                    'start_time' => 1.5,
-                    'end_time' => 5.6
-                ]
-            ]
-        ];
-
-        // Make the trim request
-        $response = $this->actingAs($user)
-            ->postJson(route('projects.trim-scenes', $project), $trimData);
-
-        // Assert successful response
-        $response->assertStatus(200)
-            ->assertJson([
-                'success' => true,
-                'message' => 'Scenes trimmed successfully! Your video is being processed.'
-            ]);
-
-        // Assert the project status was updated
-        $project->refresh();
-        $this->assertEquals('completed', $project->status);
-
-        // Assert the correct data was sent to n8n
-        Http::assertSent(function ($request) use ($project, $scene1, $scene2) {
-            $data = $request->data();
-            
-            return $request->url() === 'https://n8n-projects-jqkw.onrender.com/webhook-test/trim-scenes' &&
-                   $data['project_id'] === $project->id &&
-                   $data['project_name'] === $project->name &&
-                   count($data['scenes']) === 2 &&
-                   $data['scenes'][0]['scene_id'] === $scene1->id &&
-                   $data['scenes'][0]['video_url'] === 'https://example.com/video1.mp4' &&
-                   $data['scenes'][0]['duration'] === 5.2 &&
-                   $data['scenes'][0]['start_time'] === 2.0 &&
-                   $data['scenes'][0]['end_time'] === 7.2 &&
-                   $data['scenes'][0]['scene_number'] === 1 &&
-                   $data['scenes'][0]['script_text'] === 'First scene text';
-        });
+        return $p;
     }
 
-    public function test_trim_scenes_validates_required_fields()
+    public function test_trim_command_is_saved_once_with_revision_and_source_offsets(): void
     {
-        $user = User::factory()->create();
-        $project = Project::factory()->create([
-            'user_id' => $user->id,
-            'status' => 'reviewing'
-        ]);
-
-        // Test with missing scenes data
-        $response = $this->actingAs($user)
-            ->postJson(route('projects.trim-scenes', $project), []);
-
-        $response->assertStatus(422)
-            ->assertJsonValidationErrors(['scenes']);
-
-        // Test with invalid scene data
-        $response = $this->actingAs($user)
-            ->postJson(route('projects.trim-scenes', $project), [
-                'scenes' => [
-                    [
-                        'scene_id' => 'invalid',
-                        // missing required fields
-                    ]
-                ]
-            ]);
-
-        $response->assertStatus(422)
-            ->assertJsonValidationErrors([
-                'scenes.0.video_url',
-                'scenes.0.duration',
-                'scenes.0.start_time',
-                'scenes.0.end_time'
-            ]);
+        $u = User::factory()->create();
+        $p = $this->project($u);
+        $d = $p->edit_state;
+        $d['tracks']['video'][0]['trim_in'] = 5;
+        $d['tracks']['video'][0]['trim_out'] = 20;
+        $d['version'] = $d['revision'] = 2;
+        Http::fake(['*/commands' => Http::response(['document' => $d])]);
+        $command = ['commandId' => (string) \Illuminate\Support\Str::uuid(), 'expectedRevision' => 1, 'operations' => [['tool' => 'trim_clip', 'params' => ['id' => 'a', 'trim_in' => 5, 'trim_out' => 20]]]];
+        $this->actingAs($u)->postJson("/projects/{$p->id}/commands", $command)->assertOk()->assertJsonPath('revision', 2);
+        $this->postJson("/projects/{$p->id}/commands", $command)->assertOk();
+        Http::assertSentCount(1);
+        Http::assertSent(fn ($r) => $r['document']['tracks']['video'][0]['trim_in'] === 0 && $r['command']['operations'][0]['params']['trim_in'] === 5);
+        $this->assertEquals(5, $p->fresh()->edit_state['tracks']['video'][0]['trim_in']);
+        $this->assertDatabaseCount('edit_revisions', 2);
+        $this->assertDatabaseCount('edit_commands', 1);
     }
 
-    public function test_trim_scenes_handles_n8n_webhook_failure()
+    public function test_stale_edits_and_invalid_envelopes_are_rejected(): void
     {
-        $user = User::factory()->create();
-        $project = Project::factory()->create([
-            'user_id' => $user->id,
-            'status' => 'reviewing'
-        ]);
+        $u = User::factory()->create();
+        $p = $this->project($u);
+        Http::fake();
+        $this->actingAs($u)->postJson("/projects/{$p->id}/commands", [])->assertUnprocessable();
+        $this->postJson("/projects/{$p->id}/commands", ['commandId' => (string) \Illuminate\Support\Str::uuid(), 'expectedRevision' => 0, 'operations' => [['tool' => 'set_transition', 'params' => []]]])->assertConflict();
+        Http::assertNothingSent();
+    }
 
-        $scene = Scene::factory()->create([
-            'project_id' => $project->id,
-            'scene_number' => 1
-        ]);
-
-        // Mock n8n webhook failure
-        Http::fake([
-            'https://n8n-projects-jqkw.onrender.com/webhook-test/trim-scenes' => Http::response([
-                'error' => 'Processing failed'
-            ], 500)
-        ]);
-
-        $trimData = [
-            'scenes' => [
-                [
-                    'scene_id' => $scene->id,
-                    'video_url' => 'https://example.com/video.mp4',
-                    'duration' => 5.0,
-                    'start_time' => 0.0,
-                    'end_time' => 5.0
-                ]
-            ]
-        ];
-
-        $response = $this->actingAs($user)
-            ->postJson(route('projects.trim-scenes', $project), $trimData);
-
-        $response->assertStatus(500)
-            ->assertJson([
-                'success' => false
-            ]);
-
-        // Assert project status was not changed
-        $project->refresh();
-        $this->assertEquals('reviewing', $project->status);
+    public function test_another_account_cannot_open_or_edit_project_or_scene(): void
+    {
+        $owner = User::factory()->create();
+        $other = User::factory()->create();
+        $p = $this->project($owner);
+        $scene = Scene::factory()->create(['project_id' => $p->id]);
+        $this->actingAs($other)->get("/projects/{$p->id}/editor")->assertForbidden();
+        $this->postJson("/projects/{$p->id}/commands", [])->assertForbidden();
+        $this->putJson("/scenes/{$scene->id}/update", ['video_url' => 'https://example.com/a.mp4'])->assertForbidden();
+        $this->getJson("/projects/{$p->id}/edit-state")->assertForbidden();
     }
 }
