@@ -10,6 +10,7 @@ import {
 } from "@vidsai/contracts";
 import { applyOperations } from "@vidsai/editing-core";
 import Shell from "../Shell";
+import {operationSummary} from '../operationSummary';
 import { api } from "../api";
 type Project = { id: number; name: string; status: string };
 export default function Editor({
@@ -1060,8 +1061,7 @@ export default function Editor({
                             {plan.plan.operations.map(
                                 (o: Operation, i: number) => (
                                     <li key={i}>
-                                        {o.tool.replaceAll("_", " ")}:{" "}
-                                        {JSON.stringify(o.params)}
+                                        {operationSummary(o,doc.fps)}
                                     </li>
                                 ),
                             )}
