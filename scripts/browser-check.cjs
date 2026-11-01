@@ -7,6 +7,7 @@ const root = path.resolve(__dirname, "../..");
 const config = JSON.parse(
     fs.readFileSync(path.join(root, "runtime/local-config.json")),
 );
+const origin=`http://127.0.0.1:${config.webPort||8100}`;
 async function main() {
     const browser = await chromium.launch({
         executablePath:
@@ -25,7 +26,7 @@ async function main() {
     try {
         const email = `migration-${Date.now()}@example.test`;
         const password = "Migration-" + crypto.randomUUID();
-        await page.goto("http://127.0.0.1:8100/register");
+        await page.goto(origin+"/register");
         await page.locator("#name").fill("Migration verification");
         await page.locator("#email").fill(email);
         await page.locator("#password").fill(password);
@@ -47,7 +48,7 @@ async function main() {
             { cwd: path.join(root, "vidsAi"), env, encoding: "utf8" },
         ).trim();
         assert.match(id, /^\d+$/);
-        await page.goto(`http://127.0.0.1:8100/projects/${id}/editor`);
+        await page.goto(`${origin}/projects/${id}/editor`);
         await page
             .getByRole("heading", { name: /Migration verification/ })
             .waitFor();
@@ -114,7 +115,7 @@ async function main() {
         });
         const outsider = await browser.newContext();
         const unauthorized = await outsider.request.get(
-            `http://127.0.0.1:8100/projects/${id}/edit-state`,
+            `${origin}/projects/${id}/edit-state`,
             { headers: { Accept: "application/json" } },
         );
         assert.equal(unauthorized.status(), 401);
