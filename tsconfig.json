@@ -1,1 +1,27 @@
-{"compilerOptions":{"target":"ES2022","module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true,"esModuleInterop":true,"skipLibCheck":true,"noEmit":true,"lib":["ES2022","DOM"],"baseUrl":".","paths":{"@vidsai/*":["../remotion-api/packages/*"]}},"include":["resources/js/editor/**/*.ts","resources/js/editor/**/*.tsx"]}
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@vidsai/*": [
+        "../remotion-api/packages/*"
+      ]
+    }
+  },
+  "include": [
+    "resources/js/editor/**/*.ts",
+    "resources/js/editor/**/*.tsx"
+  ]
+}

@@ -4,32 +4,48 @@
   "type": "module",
   "scripts": {
     "build": "vite build --configLoader native",
-    "dev": "vite",
-    "typecheck": "tsc --noEmit",
-    "prebuild": "node scripts/build-shared.cjs"
+    "dev": "tsx watch server/start.ts",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
+    "prebuild": "node scripts/build-shared.cjs",
+    "start": "tsx server/start.ts",
+    "dev:ui": "vite",
+    "test": "node scripts/test-server.cjs",
+    "local:start": "node scripts/node-local.cjs start",
+    "local:stop": "node scripts/node-local.cjs stop",
+    "local:status": "node scripts/node-local.cjs status",
+    "test:browser": "node scripts/node-browser-check.cjs",
+    "import:media": "node scripts/import-media.cjs",
+    "test:fresh": "node scripts/test-server.cjs --fresh"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.0.0",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^26.6.6",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
     "@vitejs/plugin-react": "^5.0.4",
-    "axios": "^1.8.2",
-    "concurrently": "^9.0.1",
     "csstype": "3.1.3",
-    "laravel-vite-plugin": "^1.2.0",
     "playwright": "1.62.1",
-    "tailwindcss": "^4.0.0",
     "typescript": "5.8.2",
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@inertiajs/react": "2.3.29",
-    "@popperjs/core": "^2.11.8",
     "@remotion/player": "4.0.539",
-    "bootstrap": "^5.3.7",
+    "bcryptjs": "^3.0.2",
+    "better-sqlite3": "^12.8.0",
+    "express": "^5.1.0",
+    "multer": "^2.5.0",
+    "nodemailer": "^10.3.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
     "remotion": "4.0.539",
+    "tsx": "^4.19.3",
     "zod": "4.6.7"
+  },
+  "name": "vidsai",
+  "engines": {
+    "node": ">=24"
   }
 }

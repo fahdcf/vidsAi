@@ -1,0 +1,14 @@
+{
+  "origin": "http://127.0.0.1:8100",
+  "projectId": 15,
+  "revision": 9,
+  "downloadBytes": 2076628,
+  "pageErrors": 0,
+  "restartPersistence": "passed",
+  "runtimeProcesses": [
+    "node",
+    "node",
+    "node"
+  ],
+  "oldProjectPhpProcesses": 0
+}

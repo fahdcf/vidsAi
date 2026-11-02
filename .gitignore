@@ -72,3 +72,12 @@ __pycache__/
 
 # Local provider credentials and recovery artifacts; never commit.
 /nvidia/private/
+/dist/
+
+# Durable local state is stored outside the application source.
+/runtime/
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+/node_modules.incomplete.bak/

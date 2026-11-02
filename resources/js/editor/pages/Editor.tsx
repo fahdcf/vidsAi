@@ -10,8 +10,9 @@ import {
 } from "@vidsai/contracts";
 import { applyOperations } from "@vidsai/editing-core";
 import Shell from "../Shell";
-import {operationSummary} from '../operationSummary';
+import { operationSummary } from "../operationSummary";
 import { api } from "../api";
+import MusicLibrary from "../MusicLibrary";
 type Project = { id: number; name: string; status: string };
 export default function Editor({
     project,
@@ -88,6 +89,7 @@ export default function Editor({
     }
     function scheduleAutosave(event: React.FormEvent<HTMLElement>) {
         const target = event.target as HTMLInputElement;
+        if (target.closest("[data-no-autosave]")) return;
         if (target.type === "file") return;
         const form = target.closest("form");
         if (!form) return;
@@ -648,6 +650,17 @@ export default function Editor({
                         )}
                         {tab === "Audio" && (
                             <>
+                                <MusicLibrary
+                                    busy={busy}
+                                    onChoose={(url) =>
+                                        void edit([
+                                            {
+                                                tool: "set_music",
+                                                params: { url, volume: 0.2 },
+                                            },
+                                        ])
+                                    }
+                                />
                                 <form
                                     onSubmit={(e) => {
                                         e.preventDefault();
@@ -666,7 +679,7 @@ export default function Editor({
                                     }}
                                 >
                                     <h2>Background music</h2>
-                                    <a href={`/subtitle-styles/${project.id}`}>
+                                    <a href="#music-library">
                                         Browse music library
                                     </a>
                                     <label>
@@ -1061,7 +1074,7 @@ export default function Editor({
                             {plan.plan.operations.map(
                                 (o: Operation, i: number) => (
                                     <li key={i}>
-                                        {operationSummary(o,doc.fps)}
+                                        {operationSummary(o, doc.fps)}
                                     </li>
                                 ),
                             )}

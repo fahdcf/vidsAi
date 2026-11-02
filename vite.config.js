@@ -1,18 +1,55 @@
-import { defineConfig } from 'vite';
-import laravel from 'laravel-vite-plugin';
-import tailwindcss from '@tailwindcss/vite';
-import react from '@vitejs/plugin-react';
-import path from 'node:path';
-
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import path from "node:path";
 export default defineConfig({
-    plugins: [
-        laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js','resources/js/editor/app.tsx'],
-            refresh: true,
-        }),
-        react(),
-        tailwindcss(),
-    ],
-    resolve:{dedupe:['react','react-dom','remotion','@remotion/player','zod'],alias:{'@vidsai/contracts':path.resolve(import.meta.dirname,'../remotion-api/packages/contracts/dist/index.js'),'@vidsai/editing-core':path.resolve(import.meta.dirname,'../remotion-api/packages/editing-core/dist/index.js'),'@vidsai/compositions':path.resolve(import.meta.dirname,'../remotion-api/packages/compositions/dist/index.js')}},
-    server:{fs:{allow:['..']}},
+    plugins: [react()],
+    resolve: {
+        dedupe: ["react", "react-dom", "remotion", "@remotion/player", "zod"],
+        alias: {
+            "@vidsai/contracts": path.resolve(
+                import.meta.dirname,
+                "../remotion-api/packages/contracts/dist/index.js",
+            ),
+            "@vidsai/editing-core": path.resolve(
+                import.meta.dirname,
+                "../remotion-api/packages/editing-core/dist/index.js",
+            ),
+            "@vidsai/compositions": path.resolve(
+                import.meta.dirname,
+                "../remotion-api/packages/compositions/dist/index.js",
+            ),
+        },
+    },
+    server: {
+        fs: { allow: [".."] },
+        proxy: Object.fromEntries(
+            [
+                "/api",
+                "/login",
+                "/register",
+                "/logout",
+                "/profile",
+                "/password",
+                "/forgot-password",
+                "/reset-password",
+                "/projects",
+                "/scenes",
+                "/create",
+                "/review",
+                "/processing",
+                "/subtitle-styles",
+            ].map((p) => [
+                "^" + p + "(?:/|$|\\?)",
+                {
+                    target:
+                        process.env.NODE_APP_ORIGIN || "http://127.0.0.1:8100",
+                    bypass: (req) =>
+                        req.headers.accept?.includes("text/html")
+                            ? "/index.html"
+                            : undefined,
+                },
+            ]),
+        ),
+    },
+    build: { outDir: "dist" },
 });

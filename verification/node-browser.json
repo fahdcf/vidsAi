@@ -1,0 +1,18 @@
+{
+  "checks": [
+    "existing password/account and imported projects",
+    "registration and logout",
+    "React creation and Node processing",
+    "stock regeneration, private replacement upload and source trimming",
+    "Deepgram/NVIDIA/Pexels scene generation and confirmation",
+    "caption editing and persistence",
+    "undo/redo and approved agent operations",
+    "FreeSound search, preview URLs and persisted music selection",
+    "Node durable export and authorized MP4 download"
+  ],
+  "projectId": "15",
+  "downloadBytes": 2076628,
+  "browserErrors": [],
+  "origin": "http://127.0.0.1:8100",
+  "verifiedAt": "2026-11-02T13:49:28.996Z"
+}

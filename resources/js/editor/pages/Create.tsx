@@ -1,8 +1,9 @@
 import React from "react";
-import { useForm } from "@inertiajs/react";
+import { useState } from "react";
+import { api } from "../api";
 import Shell from "../Shell";
 export default function Create() {
-    const f = useForm({
+    const [data, setData] = useState({
         name: "",
         type: "product",
         category: "",
@@ -14,6 +15,34 @@ export default function Create() {
         voiceover_option: "upload",
         voiceover_file: null as File | null,
     });
+    const [processing, setProcessing] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
+    const f = {
+        data,
+        processing,
+        errors,
+        progress: null as { percentage: number } | null,
+        setData: (key: string, value: any) =>
+            setData((old) => ({ ...old, [key]: value })),
+        post: async (_url: string, _options: any) => {
+            setProcessing(true);
+            setErrors({});
+            const form = new FormData();
+            for (const [key, value] of Object.entries(data)) {
+                if (value instanceof File) form.append(key, value);
+                else if (Array.isArray(value))
+                    value.forEach((v, i) => form.append(`${key}[${i}]`, v));
+                else if (value !== null) form.append(key, String(value));
+            }
+            try {
+                const response = await api("/create", form);
+                window.location.href = response.redirect;
+            } catch (error) {
+                setErrors({ request: (error as Error).message });
+                setProcessing(false);
+            }
+        },
+    };
     return (
         <Shell title="Create a video">
             <form

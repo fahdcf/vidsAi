@@ -1,19 +1,7 @@
-name: Migration checks
+name: TypeScript application checks
 on: [push, pull_request, workflow_dispatch]
 jobs:
-  php:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: shivammathur/setup-php@v2
-        with:
-          php-version: '8.4'
-          extensions: pdo_sqlite, sqlite3, mbstring, fileinfo
-      - run: composer install --no-interaction --prefer-dist --no-progress
-      - run: cp .env.example .env && php artisan key:generate
-      - run: php vendor/phpunit/phpunit/phpunit
-  frontend:
-    if: github.event_name == 'workflow_dispatch'
+  application:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -22,13 +10,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: fahdcf/remotion-api
-          ref: migration/react-typescript
-          token: ${{ secrets.REMOTION_REPO_TOKEN }}
+          ref: migration/full-typescript
+          token: ${{ secrets.REMOTION_REPO_TOKEN || github.token }}
           path: remotion-api
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
       - run: npm ci
         working-directory: remotion-api
-      - run: npm ci && npm run typecheck && npm run build
+      - run: npm run build:shared && npm run typecheck && npm test
+        working-directory: remotion-api
+      - run: npm ci
+        working-directory: vidsAi
+      - run: npm run typecheck && npm test && npm run build
         working-directory: vidsAi
