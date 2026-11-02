@@ -45,3 +45,11 @@ The live test used English. Arabic/Darija support and the optional Python alignm
 WAN is intentionally unconfigured and has not been called live. Optional image hosting and unused NVIDIA voice, retrieval, translation and visual-understanding capabilities remain future integrations. Uploaded voiceover is currently required; the first selected canvas is exported, as in the previous working version. SMTP delivery requires SMTP configuration; local recovery uses a private outbox. Production hosting/deployment is separate from this verified local replacement.
 
 For rollback, stop Node services, retain the new database, restore the original folder names from the preserved backup directories and use the original runtime/database and hybrid branch. Do not overwrite either database with the other after new user work has begun; reconcile new data first.
+
+## GitHub checks and default branch
+
+On 2026-11-02 the first GitHub run failed because the application workflow could not read the private worker repository. A dedicated read-only deploy key and encrypted `REMOTION_CI_SSH_KEY` Actions secret now provide that checkout. The first clean install also exposed an undeclared direct esbuild dependency and current npm's native install-script policy. The worker now declares esbuild directly, and both manifests explicitly approve the required installer versions.
+
+The corrected [application check](https://github.com/fahdcf/vidsAi/actions/runs/41465228216) and [worker check](https://github.com/fahdcf/remotion-api/actions/runs/41465202008) both passed on clean Ubuntu runners, including shared builds, TypeScript checks, automated tests, a fresh app database and the production frontend build. These runs require no live provider credentials. `verification/github-ci.json` records the validated commits.
+
+Both repositories now use `migration/full-typescript` as their default branch. GitHub's API tree check confirmed zero PHP/Blade files, Composer files or artisan in those branches. The language panel previously described the old default `main`, even when viewing another branch. Historical source remains on the old branches for rollback; no Linguist overrides were used to hide it. GitHub recomputes the panel after default-branch pushes.
