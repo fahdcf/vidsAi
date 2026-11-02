@@ -31,6 +31,12 @@ class VoiceSceneGenerationTest extends TestCase
         $r->assertRedirect(route('projects.processing', $p));
         Storage::disk('public')->assertExists($p->voiceover_file);
         Queue::assertPushed(GenerateScenesFromVoiceJob::class, fn ($j) => $j->project->id === $p->id);
+        $this->assertFalse(\Illuminate\Support\Facades\Route::has('projects.processing-logs'));
+        $this->withoutExceptionHandling();
+        $this->followRedirects($r)->assertOk()
+            ->assertSee('Processing Your Video Ad')
+            ->assertSee(route('projects.processing-status', $p), false)
+            ->assertDontSee('id="open-logs-btn"', false);
     }
 
     public function test_generation_job_stores_scenes_transcript_and_caption_script(): void
@@ -44,6 +50,30 @@ class VoiceSceneGenerationTest extends TestCase
         $this->assertCount(1, $p->scenes);
         $this->assertCount(2, $p->voiceover_transcript);
         $this->assertEquals(['Hello world'], $p->subtitles_script);
+    }
+
+    public function test_processing_page_keeps_log_controls_when_the_optional_route_exists(): void
+    {
+        \Illuminate\Support\Facades\Route::get('/processing/{project}/logs', [\App\Http\Controllers\ProjectController::class, 'processingLogs'])
+            ->name('projects.processing-logs');
+        \Illuminate\Support\Facades\Route::getRoutes()->refreshNameLookups();
+        $user=User::factory()->create();
+        $project=Project::factory()->create(['user_id'=>$user->id,'status'=>'processing']);
+        $this->withoutExceptionHandling();
+        $this->actingAs($user)->get(route('projects.processing',$project))->assertOk()
+            ->assertSee('id="open-logs-btn"',false)
+            ->assertSee('id="log-modal"',false);
+    }
+
+    public function test_inertia_navigation_opens_the_processing_page_as_a_full_browser_page(): void
+    {
+        $user=User::factory()->create();
+        $project=Project::factory()->create(['user_id'=>$user->id,'status'=>'processing']);
+        $url=route('projects.processing',$project);
+        $this->actingAs($user)->get($url,['X-Inertia'=>'true'])->assertStatus(409)
+            ->assertHeader('X-Inertia-Location',$url);
+        $this->withoutExceptionHandling();
+        $this->get($url)->assertOk()->assertSee('Processing Your Video Ad');
     }
 
     public function test_unimplemented_creation_modes_are_rejected_before_creating_stuck_projects(): void

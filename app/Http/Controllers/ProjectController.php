@@ -125,6 +125,11 @@ class ProjectController extends Controller
     {
         $this->authorize('view', $project);
 
+        // The React form uses Inertia; this legacy progress page needs a full browser navigation.
+        if (request()->header('X-Inertia')) {
+            return \Inertia\Inertia::location(route('projects.processing', $project));
+        }
+
         logger()->info('📄 Processing page accessed', [
             'project_id' => $project->id,
             'project_status' => $project->status,

@@ -344,6 +344,7 @@
 @endpush
 
 @section('content')
+@php($processingLogsUrl = \Illuminate\Support\Facades\Route::has('projects.processing-logs') ? route('projects.processing-logs', $project) : null)
 <div class="processing-shell">
     <div class="processing-wrap">
         <div class="processing-head">
@@ -358,10 +359,12 @@
                 </p>
             </div>
             <div class="processing-actions">
+                @if($processingLogsUrl)
                 <button type="button" class="btn-dark-ui btn-dark-primary" id="open-logs-btn">
                     <i class="bi bi-terminal"></i>
                     Live Logs
                 </button>
+                @endif
                 <button type="button" class="btn-dark-ui" onclick="location.reload()">
                     <i class="bi bi-arrow-clockwise"></i>
                     Refresh
@@ -407,12 +410,17 @@
             </div>
 
             <div class="processing-tip">
+                @if($processingLogsUrl)
                 If processing hangs, open <strong>Live Logs</strong> to inspect exact backend steps in real time.
+                @else
+                You can leave this page and check your project from the dashboard.
+                @endif
             </div>
         </div>
     </div>
 </div>
 
+@if($processingLogsUrl)
 <div class="log-modal" id="log-modal" aria-hidden="true">
     <div class="log-dialog" role="dialog" aria-modal="true" aria-labelledby="log-title">
         <div class="log-head">
@@ -434,6 +442,7 @@
         </div>
     </div>
 </div>
+@endif
 
 <script>
 let statusCheckInterval;
@@ -444,6 +453,7 @@ let logsInterval = null;
 let logsSince = 0;
 let hasLogRows = false;
 let lastStatusErrorMessage = null;
+const processingLogsUrl = @json($processingLogsUrl);
 
 const logModal = document.getElementById('log-modal');
 const logOutput = document.getElementById('log-output');
@@ -493,7 +503,7 @@ function setStatusUI(status, message, errorMessage) {
     if (status === 'failed') {
         statusEl.innerHTML = '<i class="bi bi-x-octagon-fill" style="color: var(--red);"></i> ' + statusLabel;
         banner.className = 'status-banner error';
-        banner.textContent = errorMessage || 'Processing failed. Open logs for details and retry.';
+        banner.textContent = errorMessage || 'Processing failed. Please retry.';
         eta.textContent = 'ETA: blocked';
     } else if (['reviewing', 'subtitle_selection', 'completed'].includes(status)) {
         statusEl.innerHTML = '<i class="bi bi-check-circle-fill" style="color: var(--green);"></i> ' + statusLabel;
@@ -514,7 +524,7 @@ function setStatusUI(status, message, errorMessage) {
 }
 
 function appendLogEntry(entry) {
-    if (!entry || !entry.message) {
+    if (!logOutput || !entry || !entry.message) {
         return;
     }
 
@@ -553,7 +563,8 @@ function appendLogEntry(entry) {
 }
 
 function pollLogs() {
-    fetch('{{ route("projects.processing-logs", $project) }}?since=' + encodeURIComponent(logsSince) + '&limit=80', {
+    if (!processingLogsUrl) return;
+    fetch(processingLogsUrl + '?since=' + encodeURIComponent(logsSince) + '&limit=80', {
         headers: {
             'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
@@ -583,7 +594,7 @@ function pollLogs() {
 }
 
 function startLogPolling() {
-    if (logsInterval) {
+    if (!processingLogsUrl || logsInterval) {
         return;
     }
     pollLogs();
@@ -598,12 +609,14 @@ function stopLogPolling() {
 }
 
 function openLogModal() {
+    if (!logModal) return;
     logModal.classList.add('show');
     logModal.setAttribute('aria-hidden', 'false');
     startLogPolling();
 }
 
 function closeLogModal() {
+    if (!logModal) return;
     logModal.classList.remove('show');
     logModal.setAttribute('aria-hidden', 'true');
     stopLogPolling();
@@ -735,21 +748,21 @@ function retryProject(event) {
     });
 }
 
-document.getElementById('open-logs-btn').addEventListener('click', openLogModal);
-document.getElementById('close-log-modal').addEventListener('click', closeLogModal);
-document.getElementById('clear-log-view').addEventListener('click', () => {
+document.getElementById('open-logs-btn')?.addEventListener('click', openLogModal);
+document.getElementById('close-log-modal')?.addEventListener('click', closeLogModal);
+document.getElementById('clear-log-view')?.addEventListener('click', () => {
     logOutput.innerHTML = '<div class="log-empty">Log view cleared. Streaming new lines...</div>';
     hasLogRows = false;
 });
 
-logModal.addEventListener('click', (event) => {
+logModal?.addEventListener('click', (event) => {
     if (event.target === logModal) {
         closeLogModal();
     }
 });
 
 document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape' && logModal.classList.contains('show')) {
+    if (event.key === 'Escape' && logModal?.classList.contains('show')) {
         closeLogModal();
     }
 });
