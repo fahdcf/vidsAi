@@ -406,7 +406,7 @@ async function main() {
         await page
             .getByRole("button", { name: "Prepare edits", exact: true })
             .click();
-        const apply = page.getByRole("button", { name: /^Apply \d+ changes$/ });
+        const apply = page.getByRole("button", { name: /^Apply \d+ changes?$/ });
         await apply.waitFor({ timeout: 80000 });
         await apply.click();
         await page.getByText(/Saved.*Revision/).waitFor();

@@ -1,0 +1,255 @@
+{
+  "checks": [
+    "Live provider plan, visible approval, reload recovery, explicit apply and saved conversation",
+    "Live proposal discard preserves the video and survives reload",
+    "30-change proposal and long messages scroll independently; approval and composer visible at 1440, 1366, tablet and phone sizes",
+    "Mobile modal, keyboard focus containment, Escape and focus return, discard",
+    "Chat expansion, optional editing tools and caption controls"
+  ],
+  "screenshots": [
+    "editor-desktop.png",
+    "approval-desktop.png",
+    "approval-1440x900.png",
+    "approval-1366x768.png",
+    "approval-1366x600.png",
+    "approval-768x1024.png",
+    "approval-390x844.png",
+    "chat-phone.png",
+    "chat-expanded.png",
+    "editor-tools.png"
+  ],
+  "layouts": [
+    {
+      "name": "live-plan-desktop",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "panel": {
+        "x": 20,
+        "y": 179,
+        "width": 360,
+        "height": 696,
+        "bottom": 875,
+        "right": 380
+      },
+      "actions": {
+        "x": 37,
+        "y": 752,
+        "width": 326,
+        "height": 44,
+        "bottom": 796,
+        "right": 363
+      },
+      "composer": {
+        "x": 21,
+        "y": 808,
+        "width": 358,
+        "height": 66,
+        "bottom": 874,
+        "right": 379
+      },
+      "font": 14,
+      "overflow": false
+    },
+    {
+      "name": "restored-plan",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "panel": {
+        "x": 20,
+        "y": 179,
+        "width": 360,
+        "height": 696,
+        "bottom": 875,
+        "right": 380
+      },
+      "actions": {
+        "x": 37,
+        "y": 752,
+        "width": 326,
+        "height": 44,
+        "bottom": 796,
+        "right": 363
+      },
+      "composer": {
+        "x": 21,
+        "y": 808,
+        "width": 358,
+        "height": 66,
+        "bottom": 874,
+        "right": 379
+      },
+      "font": 14,
+      "overflow": false
+    },
+    {
+      "name": "long-proposal-1440x900",
+      "viewport": {
+        "width": 1440,
+        "height": 900
+      },
+      "panel": {
+        "x": 20,
+        "y": 179,
+        "width": 360,
+        "height": 696,
+        "bottom": 875,
+        "right": 380
+      },
+      "actions": {
+        "x": 37,
+        "y": 752,
+        "width": 326,
+        "height": 44,
+        "bottom": 796,
+        "right": 363
+      },
+      "composer": {
+        "x": 21,
+        "y": 808,
+        "width": 358,
+        "height": 66,
+        "bottom": 874,
+        "right": 379
+      },
+      "font": 14,
+      "overflow": false
+    },
+    {
+      "name": "long-proposal-1366x768",
+      "viewport": {
+        "width": 1366,
+        "height": 768
+      },
+      "panel": {
+        "x": 20,
+        "y": 179,
+        "width": 360,
+        "height": 564,
+        "bottom": 743,
+        "right": 380
+      },
+      "actions": {
+        "x": 37,
+        "y": 620,
+        "width": 326,
+        "height": 44,
+        "bottom": 664,
+        "right": 363
+      },
+      "composer": {
+        "x": 21,
+        "y": 676,
+        "width": 358,
+        "height": 66,
+        "bottom": 742,
+        "right": 379
+      },
+      "font": 14,
+      "overflow": false
+    },
+    {
+      "name": "long-proposal-1366x600",
+      "viewport": {
+        "width": 1366,
+        "height": 600
+      },
+      "panel": {
+        "x": 20,
+        "y": 179,
+        "width": 360,
+        "height": 396,
+        "bottom": 575,
+        "right": 380
+      },
+      "actions": {
+        "x": 35,
+        "y": 463,
+        "width": 330,
+        "height": 44,
+        "bottom": 507,
+        "right": 365
+      },
+      "composer": {
+        "x": 21,
+        "y": 517,
+        "width": 358,
+        "height": 57,
+        "bottom": 574,
+        "right": 379
+      },
+      "font": 14,
+      "overflow": false
+    },
+    {
+      "name": "long-proposal-768x1024",
+      "viewport": {
+        "width": 768,
+        "height": 1024
+      },
+      "panel": {
+        "x": 312,
+        "y": 74,
+        "width": 440,
+        "height": 934,
+        "bottom": 1008,
+        "right": 752
+      },
+      "actions": {
+        "x": 329,
+        "y": 903,
+        "width": 406,
+        "height": 44,
+        "bottom": 947,
+        "right": 735
+      },
+      "composer": {
+        "x": 313,
+        "y": 959,
+        "width": 438,
+        "height": 48,
+        "bottom": 1007,
+        "right": 751
+      },
+      "font": 14,
+      "overflow": false
+    },
+    {
+      "name": "long-proposal-390x844",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "panel": {
+        "x": 8,
+        "y": 8,
+        "width": 374,
+        "height": 828,
+        "bottom": 836,
+        "right": 382
+      },
+      "actions": {
+        "x": 25,
+        "y": 729,
+        "width": 340,
+        "height": 46,
+        "bottom": 775,
+        "right": 365
+      },
+      "composer": {
+        "x": 9,
+        "y": 787,
+        "width": 372,
+        "height": 48,
+        "bottom": 835,
+        "right": 381
+      },
+      "font": 15,
+      "overflow": false
+    }
+  ],
+  "pageErrors": []
+}

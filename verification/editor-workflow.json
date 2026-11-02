@@ -1,0 +1,33 @@
+{
+  "origin": "http://127.0.0.1:8100",
+  "checks": [
+    "Resumed prior local UI verification project",
+    "Visual caption presets, live customization and persisted transitions",
+    "Caption text controls and FreeSound music selection",
+    "Editor caption controls and undo/redo",
+    "Timeline zoom, scene selection, drag reorder and button alternative",
+    "Assistant proposal and explicit application",
+    "Remotion export, authorized MP4 download and reload persistence",
+    "390px phone and 768px tablet layouts, no horizontal overflow, accessible assistant toggle"
+  ],
+  "screenshots": [
+    "styles-desktop.png",
+    "editor-desktop.png",
+    "final-desktop.png",
+    "dashboard-390.png",
+    "create-390.png",
+    "review-390.png",
+    "styles-390.png",
+    "editor-390.png",
+    "dashboard-768.png",
+    "create-768.png",
+    "review-768.png",
+    "styles-768.png",
+    "editor-768.png"
+  ],
+  "projectId": "18",
+  "downloadBytes": 4793637,
+  "revision": 27,
+  "pageErrors": [],
+  "verifiedAt": "2026-11-02T16:06:02.961Z"
+}

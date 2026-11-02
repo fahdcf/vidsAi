@@ -5,11 +5,13 @@ export default function Shell({
     title,
     description,
     actions,
+    editor = false,
 }: {
     children: React.ReactNode;
     title: string;
     description?: string;
     actions?: React.ReactNode;
+    editor?: boolean;
 }) {
     const path = window.location.pathname;
     const projectId =
@@ -39,7 +41,7 @@ export default function Shell({
     ];
     return (
         <div
-            className={`app-shell ${studio ? "studio-shell" : ""} ${publicPage ? "public-shell" : ""}`}
+            className={`app-shell ${editor ? "editor-shell" : ""} ${studio ? "studio-shell" : ""} ${publicPage ? "public-shell" : ""}`}
         >
             <a href="#main-content" className="skip-link">
                 Skip to content

@@ -336,6 +336,12 @@ app.get("/api/page", (req, res) => {
             .all(p.id, d.revision)
             .reverse()
             .map((r: any) => json(r.document, {})),
+        agentHistory: db
+            .prepare(
+                "SELECT id,message,plan,status FROM agent_runs WHERE project_id=? ORDER BY created_at DESC LIMIT 20",
+            )
+            .all(p.id)
+            .reverse(),
         pendingRun: db
             .prepare(
                 "SELECT * FROM agent_runs WHERE project_id=? AND status IN ('planning','planned','failed') ORDER BY created_at DESC LIMIT 1",
