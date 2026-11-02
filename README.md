@@ -69,3 +69,9 @@ Use `NODE_IMPORT_APP_ROOT` to select the original app and `npm run import:media`
 The live browser check covers an English recording. Arabic/Darija fallback alignment is retained and estimated timing is labelled for review; perceptual quality has not been revalidated here. An uploaded voiceover is required. The first selected canvas is exported; selecting all formats retains the choices but does not create three exports automatically. WAN remains untested live because its key is intentionally blank.
 
 Password recovery uses SMTP when configured; development mode writes links to the private `runtime/node-mail-outbox` directory. The local launcher is for local development; production needs the usual HTTPS reverse proxy and persistent storage deployment configuration.
+
+## GitHub checks
+
+The application workflow checks both repositories on a clean Ubuntu runner. `remotion-api` is private, so the app repository has an encrypted `REMOTION_CI_SSH_KEY` Actions secret paired with a dedicated read-only deploy key on the worker repository. The default `GITHUB_TOKEN` cannot read a different private repository. No provider keys or personal access token are passed to these checks. Fork pull requests skip this private integration job because GitHub does not provide the checkout secret to forks.
+
+GitHub language statistics describe the repository's default branch. The earlier `main` and hybrid branches retain the historical PHP source for rollback; `migration/full-typescript` contains the complete replacement and no PHP or Blade files.

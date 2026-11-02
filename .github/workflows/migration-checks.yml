@@ -1,26 +1,41 @@
 name: TypeScript application checks
 on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
 jobs:
   application:
-    runs-on: ubuntu-latest
+    # Fork pull requests cannot read the private companion repository.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - name: Check out application
+        uses: actions/checkout@v7
         with:
           path: vidsAi
-      - uses: actions/checkout@v4
+          persist-credentials: false
+      - name: Check out private Remotion workers (read only)
+        uses: actions/checkout@v7
         with:
           repository: fahdcf/remotion-api
           ref: migration/full-typescript
-          token: ${{ secrets.REMOTION_REPO_TOKEN || github.token }}
+          ssh-key: ${{ secrets.REMOTION_CI_SSH_KEY }}
+          persist-credentials: false
           path: remotion-api
-      - uses: actions/setup-node@v4
+      - name: Set up Node
+        uses: actions/setup-node@v7
         with:
           node-version: '24'
-      - run: npm ci
+          package-manager-cache: false
+      - name: Install worker dependencies
+        run: npm ci
         working-directory: remotion-api
-      - run: npm run build:shared && npm run typecheck && npm test
+      - name: Check shared editing and worker code
+        run: npm run build:shared && npm run typecheck && npm test
         working-directory: remotion-api
-      - run: npm ci
+      - name: Install application dependencies
+        run: npm ci
         working-directory: vidsAi
-      - run: npm run typecheck && npm test && npm run build
+      - name: Check and build the complete TypeScript application
+        run: npm run typecheck && npm run test:fresh && npm run build
         working-directory: vidsAi
