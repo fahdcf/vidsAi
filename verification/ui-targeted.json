@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "Source seconds stay readable and valid",
+    "Saving an unchanged source window preserves exact frame offsets",
+    "Old export is clearly labelled after edits",
+    "Styling saves through the command route",
+    "Mobile preview navigation is visible"
+  ],
+  "pageErrors": 0,
+  "projectId": "18"
+}

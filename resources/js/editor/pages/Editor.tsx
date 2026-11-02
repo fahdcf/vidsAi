@@ -1,3 +1,4 @@
+import usePreviewHeight from "../usePreviewHeight";
 import React, { useEffect, useRef, useState } from "react";
 import { Player, type PlayerRef } from "@remotion/player";
 import { VideoMerger } from "@vidsai/compositions";
@@ -10,6 +11,9 @@ import {
 } from "@vidsai/contracts";
 import { applyOperations } from "@vidsai/editing-core";
 import Shell from "../Shell";
+import Icon from "../Icon";
+import Timeline from "../Timeline";
+import StyleGallery from "../StyleGallery";
 import { operationSummary } from "../operationSummary";
 import { api } from "../api";
 import MusicLibrary from "../MusicLibrary";
@@ -27,14 +31,27 @@ export default function Editor({
     pendingRun?: any;
     history?: Document[];
 }) {
+    const previewHeight = usePreviewHeight();
     const [doc, setDoc] = useState(() => normalizeDocument(initial));
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
     const [save, setSave] = useState("Saved");
     const [selected, setSelected] = useState(doc.tracks.video[0]?.id || "");
     const [tab, setTab] = useState("Scene");
+    const [assistantOpen, setAssistantOpen] = useState(
+        () => window.innerWidth >= 1180,
+    );
+    useEffect(() => {
+        if (assistantOpen && window.innerWidth <= 700)
+            window.requestAnimationFrame(() =>
+                window.document
+                    .querySelector(".assistant")
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" }),
+            );
+    }, [assistantOpen]);
     const [frame, setFrame] = useState(0);
     const player = useRef<PlayerRef>(null);
+    const focusExport = useRef(false);
     const [undo, setUndo] = useState<Document[]>(history);
     const [redo, setRedo] = useState<Document[]>([]);
     const [exportId, setExportId] = useState<string | null>(
@@ -193,7 +210,20 @@ export default function Editor({
                     undefined,
                     "GET",
                 );
-                if (!disposed) setJob(r);
+                if (!disposed) {
+                    setJob(r);
+                    if (focusExport.current) {
+                        focusExport.current = false;
+                        window.requestAnimationFrame(() =>
+                            window.document
+                                .querySelector(".export-panel")
+                                ?.scrollIntoView({
+                                    behavior: "smooth",
+                                    block: "nearest",
+                                }),
+                        );
+                    }
+                }
             } catch (e) {
                 if (!disposed) setError((e as Error).message);
             }
@@ -260,8 +290,19 @@ export default function Editor({
         void edit([{ tool: "reorder_scenes", params: { order } }]);
     }
     return (
-        <Shell title={project.name}>
+        <Shell
+            title={project.name}
+            description="Your story. Your finishing touches."
+        >
             <div className="editor-toolbar">
+                <button
+                    data-assistant-toggle
+                    aria-pressed={assistantOpen}
+                    onClick={() => setAssistantOpen((v) => !v)}
+                >
+                    <Icon name="sparkles" />
+                    Assistant
+                </button>
                 <span aria-live="polite" className="muted">
                     {save} · Revision {doc.revision}
                 </span>
@@ -271,6 +312,7 @@ export default function Editor({
                     }
                     onClick={() => void restore("undo")}
                 >
+                    <Icon name="undo" size={14} />
                     Undo
                 </button>
                 <button
@@ -279,9 +321,11 @@ export default function Editor({
                     }
                     onClick={() => void restore("redo")}
                 >
+                    <Icon name="redo" size={14} />
                     Redo
                 </button>
-                <a href={`/review/${project.id}`}>Review / regenerate media</a>
+                <a href={`/review/${project.id}`}>Review scenes</a>
+                <a href={`/subtitle-styles/${project.id}`}>Style studio</a>
                 <button
                     className="primary"
                     disabled={
@@ -295,13 +339,18 @@ export default function Editor({
                             const r = await api(`${base}/export`, {
                                 requestId: crypto.randomUUID(),
                             });
+                            focusExport.current = true;
+                            setJob({ status: "queued", progress: 0 });
                             setExportId(r.export_id);
                         } catch (e) {
                             setError((e as Error).message);
                         }
                     }}
                 >
-                    Export video
+                    <Icon name="download" size={15} />
+                    {["queued", "rendering"].includes(job?.status)
+                        ? "Rendering video…"
+                        : "Export video"}
                 </button>
             </div>
             {error && (
@@ -309,23 +358,171 @@ export default function Editor({
                     {error}
                 </div>
             )}
-            <div className="editor-grid">
-                <section className="panel preview">
-                    <Player
-                        ref={player}
-                        component={VideoMerger}
-                        inputProps={{ editState: doc }}
-                        durationInFrames={doc.total_frames}
-                        compositionWidth={doc.width}
-                        compositionHeight={doc.height}
-                        fps={doc.fps}
-                        controls
-                        style={{
-                            width: "100%",
-                            maxHeight: 540,
-                            aspectRatio: `${doc.width}/${doc.height}`,
+            <div
+                className={`editor-grid ${assistantOpen ? "assistant-open" : ""}`}
+            >
+                <section className="panel assistant" hidden={!assistantOpen}>
+                    <h2>
+                        <Icon name="sparkles" />
+                        Editing assistant
+                        <button
+                            className="icon-button assistant-close"
+                            aria-label="Close assistant"
+                            onClick={() => {
+                                setAssistantOpen(false);
+                                (
+                                    window.document.querySelector(
+                                        "[data-assistant-toggle]",
+                                    ) as HTMLElement
+                                )?.focus();
+                            }}
+                        >
+                            <Icon name="close" size={12} />
+                        </button>
+                    </h2>
+                    {pendingRun &&
+                        !plan &&
+                        ["planning", "failed"].includes(pendingRun.status) && (
+                            <button
+                                disabled={busy}
+                                onClick={async () => {
+                                    setBusy(true);
+                                    try {
+                                        const r = await api(
+                                            `${base}/agent-runs`,
+                                            {
+                                                runId: pendingRun.id,
+                                                message: pendingRun.message,
+                                            },
+                                        );
+                                        setPlan(r);
+                                    } catch (e) {
+                                        setError((e as Error).message);
+                                    } finally {
+                                        setBusy(false);
+                                    }
+                                }}
+                            >
+                                Resume previous request
+                            </button>
+                        )}
+                    <p className="muted">
+                        Tell me what to change. You approve every edit.
+                    </p>
+                    <div className="quick-requests">
+                        {[
+                            "Make captions bigger",
+                            "Use fade transitions",
+                            "Lower music volume to 20 percent",
+                        ].map((text) => (
+                            <button
+                                key={text}
+                                disabled={busy}
+                                onClick={() => setMessage(text)}
+                            >
+                                {text === "Lower music volume to 20 percent"
+                                    ? "Lower music"
+                                    : text}
+                            </button>
+                        ))}
+                    </div>
+                    <div className="assistant-messages">
+                        {chat.map((c, i) => (
+                            <p
+                                dir="auto"
+                                className={`chat-message ${c.role === "You" ? "user-message" : "assistant-message"}`}
+                                key={i}
+                            >
+                                <strong>{c.role}:</strong> {c.text}
+                            </p>
+                        ))}
+                    </div>
+                    <form
+                        onSubmit={(e) => {
+                            e.preventDefault();
+                            void run();
                         }}
-                    />
+                    >
+                        <label>
+                            Your request
+                            <textarea
+                                rows={3}
+                                value={message}
+                                onChange={(e) => setMessage(e.target.value)}
+                                placeholder="Make captions bigger and use fade transitions"
+                                maxLength={2000}
+                            />
+                        </label>
+                        <button disabled={busy || save === "Unsaved changes"}>
+                            Prepare edits
+                        </button>
+                    </form>
+                    {plan?.plan.operations.length > 0 && (
+                        <div className="assistant-plan">
+                            <ol>
+                                {plan.plan.operations.map(
+                                    (o: Operation, i: number) => (
+                                        <li key={i}>
+                                            {operationSummary(o, doc.fps)}
+                                        </li>
+                                    ),
+                                )}
+                            </ol>
+                            <button
+                                className="primary"
+                                disabled={busy}
+                                onClick={() => void applyPlan()}
+                            >
+                                Apply {plan.plan.operations.length} changes
+                            </button>
+                            <button
+                                onClick={async () => {
+                                    try {
+                                        await api(
+                                            `${base}/agent-runs/${plan.runId}`,
+                                            undefined,
+                                            "DELETE",
+                                        );
+                                        setPlan(null);
+                                    } catch (e) {
+                                        setError((e as Error).message);
+                                    }
+                                }}
+                            >
+                                Discard
+                            </button>
+                        </div>
+                    )}
+                </section>
+                <section className="panel preview">
+                    <div className="preview-topline">
+                        <span>
+                            <span className="live-dot" />
+                            VIDEO PREVIEW
+                        </span>
+                        <span>
+                            {doc.width} × {doc.height}
+                        </span>
+                    </div>
+                    <div className="preview-canvas">
+                        <Player
+                            ref={player}
+                            component={VideoMerger}
+                            inputProps={{ editState: doc }}
+                            durationInFrames={doc.total_frames}
+                            compositionWidth={doc.width}
+                            compositionHeight={doc.height}
+                            fps={doc.fps}
+                            controls
+                            style={{
+                                width: "100%",
+                                maxWidth: Math.round(
+                                    (doc.width / doc.height) * previewHeight,
+                                ),
+                                aspectRatio: `${doc.width}/${doc.height}`,
+                            }}
+                        />
+                    </div>
                     <div className="playhead">
                         <input
                             aria-label="Playhead"
@@ -381,8 +578,14 @@ export default function Editor({
                                             tool: "trim_clip",
                                             params: {
                                                 id: clip.id,
-                                                trim_in: Number(f.get("in")),
-                                                trim_out: Number(f.get("out")),
+                                                trim_in: Math.round(
+                                                    Number(f.get("in")) *
+                                                        doc.fps,
+                                                ),
+                                                trim_out: Math.round(
+                                                    Number(f.get("out")) *
+                                                        doc.fps,
+                                                ),
                                                 speed: Number(f.get("speed")),
                                             },
                                         },
@@ -410,7 +613,8 @@ export default function Editor({
                                 }}
                             >
                                 <h2>Selected scene</h2>
-                                <label>
+                                <label className="upload-tile">
+                                    <Icon name="upload" />
                                     Upload replacement media
                                     <input
                                         type="file"
@@ -421,46 +625,60 @@ export default function Editor({
                                         }}
                                     />
                                 </label>
-                                <p>{clip.id}</p>
-                                <label>
-                                    Media URL
-                                    <input
-                                        name="url"
-                                        type="url"
-                                        required
-                                        defaultValue={clip.clip_url}
-                                    />
-                                </label>
-                                <label>
-                                    Media type
-                                    <select
-                                        name="type"
-                                        defaultValue={clip.media_type}
-                                    >
-                                        {["video", "image", "generated"].map(
-                                            (x) => (
+                                <details>
+                                    <summary>Advanced media settings</summary>
+                                    <label>
+                                        Media URL
+                                        <input
+                                            name="url"
+                                            type="url"
+                                            required
+                                            defaultValue={clip.clip_url}
+                                        />
+                                    </label>
+                                    <label>
+                                        Media type
+                                        <select
+                                            name="type"
+                                            defaultValue={clip.media_type}
+                                        >
+                                            {[
+                                                "video",
+                                                "image",
+                                                "generated",
+                                            ].map((x) => (
                                                 <option key={x}>{x}</option>
-                                            ),
-                                        )}
-                                    </select>
-                                </label>
+                                            ))}
+                                        </select>
+                                    </label>
+                                </details>
                                 <div className="row">
                                     <label>
-                                        Source in (frames)
+                                        Source in (seconds)
                                         <input
                                             name="in"
                                             type="number"
                                             min={0}
-                                            defaultValue={clip.trim_in}
+                                            step="any"
+                                            defaultValue={Number(
+                                                (
+                                                    clip.trim_in / doc.fps
+                                                ).toFixed(3),
+                                            )}
                                         />
                                     </label>
                                     <label>
-                                        Source out (frames)
+                                        Source out (seconds)
                                         <input
                                             name="out"
                                             type="number"
-                                            min={1}
-                                            defaultValue={clip.trim_out}
+                                            min={0.01}
+                                            step="any"
+                                            defaultValue={Number(
+                                                (
+                                                    clip.trim_out / doc.fps
+                                                ).toFixed(3),
+                                            )}
                                         />
                                     </label>
                                 </div>
@@ -538,6 +756,26 @@ export default function Editor({
                                     }}
                                 >
                                     <h2>Caption appearance</h2>
+                                    <StyleGallery
+                                        compact
+                                        value={
+                                            doc.tracks.subtitles[0]?.style ||
+                                            "default"
+                                        }
+                                        disabled={
+                                            busy || save === "Unsaved changes"
+                                        }
+                                        onChoose={(style) => {
+                                            void edit([
+                                                {
+                                                    tool: "set_subtitle_style",
+                                                    params: { style },
+                                                },
+                                            ]).then(() =>
+                                                setFormVersion((v) => v + 1),
+                                            );
+                                        }}
+                                    />
                                     <label>
                                         Style
                                         <select
@@ -954,42 +1192,38 @@ export default function Editor({
                     </fieldset>
                 </aside>
             </div>
-            <section className="panel timeline">
-                <h2>Timeline</h2>
-                <p className="muted">
-                    Captions and narration stay anchored to narration time when
-                    scenes move.
-                </p>
-                <div className="clips">
-                    {doc.tracks.video.map((c, i) => (
-                        <button
-                            className={selected === c.id ? "selected" : ""}
-                            style={{ flexGrow: c.end_frame - c.start_frame }}
-                            key={c.id}
-                            onClick={() => {
-                                flushAutosave();
-                                setSelected(c.id);
-                                setTab("Scene");
-                                player.current?.seekTo(c.start_frame);
-                            }}
-                        >
-                            <strong>Scene {i + 1}</strong>
-                            <small>
-                                {(
-                                    (c.end_frame - c.start_frame) /
-                                    doc.fps
-                                ).toFixed(1)}{" "}
-                                s · {c.media_type}
-                            </small>
-                        </button>
-                    ))}
-                </div>
-            </section>
+            <Timeline
+                document={doc}
+                selected={selected}
+                frame={frame}
+                busy={busy}
+                onSelect={(id) => {
+                    flushAutosave();
+                    setSelected(id);
+                    setTab("Scene");
+                }}
+                onSeek={(n) => {
+                    setFrame(n);
+                    player.current?.seekTo(n);
+                }}
+                onReorder={(order) =>
+                    void edit([{ tool: "reorder_scenes", params: { order } }])
+                }
+            />
             {job && (
-                <section className="panel">
-                    <h2>Export: {job.status}</h2>
-                    <progress max={1} value={job.progress} />
-                    {job.error && <p className="error">{job.error}</p>}
+                <section className="panel export-panel">
+                    <div>
+                        <h2>Export: {job.status}</h2>
+                        {job.status === "done" &&
+                            job.revision !== doc.revision && (
+                                <p className="muted">
+                                    Your latest edits are not in this export.
+                                    Export again to include them.
+                                </p>
+                            )}
+                        <progress max={1} value={job.progress} />
+                        {job.error && <p className="error">{job.error}</p>}
+                    </div>
                     {job.output_url && (
                         <a className="button primary" href={job.output_url}>
                             Download MP4
@@ -1015,96 +1249,6 @@ export default function Editor({
                     )}
                 </section>
             )}
-            <section className="panel assistant">
-                <h2>Editing assistant</h2>
-                {pendingRun &&
-                    !plan &&
-                    ["planning", "failed"].includes(pendingRun.status) && (
-                        <button
-                            disabled={busy}
-                            onClick={async () => {
-                                setBusy(true);
-                                try {
-                                    const r = await api(`${base}/agent-runs`, {
-                                        runId: pendingRun.id,
-                                        message: pendingRun.message,
-                                    });
-                                    setPlan(r);
-                                } catch (e) {
-                                    setError((e as Error).message);
-                                } finally {
-                                    setBusy(false);
-                                }
-                            }}
-                        >
-                            Resume previous request
-                        </button>
-                    )}
-                <p className="muted">
-                    Describe several edits. Review the proposed changes, then
-                    apply them as one undoable step.
-                </p>
-                {chat.map((c, i) => (
-                    <p dir="auto" key={i}>
-                        <strong>{c.role}:</strong> {c.text}
-                    </p>
-                ))}
-                <form
-                    onSubmit={(e) => {
-                        e.preventDefault();
-                        void run();
-                    }}
-                >
-                    <label>
-                        Your request
-                        <input
-                            value={message}
-                            onChange={(e) => setMessage(e.target.value)}
-                            placeholder="Make captions bigger and use fade transitions"
-                            maxLength={2000}
-                        />
-                    </label>
-                    <button disabled={busy || save === "Unsaved changes"}>
-                        Prepare edits
-                    </button>
-                </form>
-                {plan?.plan.operations.length > 0 && (
-                    <div>
-                        <ol>
-                            {plan.plan.operations.map(
-                                (o: Operation, i: number) => (
-                                    <li key={i}>
-                                        {operationSummary(o, doc.fps)}
-                                    </li>
-                                ),
-                            )}
-                        </ol>
-                        <button
-                            className="primary"
-                            disabled={busy}
-                            onClick={() => void applyPlan()}
-                        >
-                            Apply {plan.plan.operations.length} changes
-                        </button>
-                        <button
-                            onClick={async () => {
-                                try {
-                                    await api(
-                                        `${base}/agent-runs/${plan.runId}`,
-                                        undefined,
-                                        "DELETE",
-                                    );
-                                    setPlan(null);
-                                } catch (e) {
-                                    setError((e as Error).message);
-                                }
-                            }}
-                        >
-                            Discard
-                        </button>
-                    </div>
-                )}
-            </section>
         </Shell>
     );
 }

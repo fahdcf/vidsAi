@@ -137,7 +137,12 @@ export async function stock(query: string, exclude: number[] = []) {
         files.find((f: any) => f.height === 1080) ||
         files[0];
     if (!file) throw new Error("No usable stock file");
-    return { id: v.id, url: file.link, duration: v.duration };
+    return {
+        id: v.id,
+        url: file.link,
+        duration: v.duration,
+        image: typeof v.image === "string" ? v.image : null,
+    };
 }
 export async function music(query: string, page = 1, limit = 12) {
     const key = process.env.FREESOUND_API_KEY;

@@ -169,6 +169,7 @@ async function generate(job: any) {
                 script_text: s.phrase,
                 video_url: payload.clips[i].url,
                 duration_seconds: payload.clips[i].duration,
+                thumbnail_path: payload.clips[i].image || null,
                 gemini_duration: s.duration_seconds,
                 start_time: 0,
                 end_time: Math.min(
@@ -214,6 +215,19 @@ async function render(job: any) {
     }
     const result = await worker("/status/" + row.worker_job_id);
     const done = ["done", "failed", "cancelled"].includes(result.status);
+    if (result.status === "failed" && result.error) {
+        const technical = String(result.error);
+        const snapshot = json<any>(row.snapshot, {});
+        const index = (snapshot.tracks?.video || []).findIndex((clip: any) =>
+            technical.includes(clip.clip_url),
+        );
+        result.error =
+            /No frame found|Compositor error|Could not play video/i.test(
+                technical,
+            )
+                ? `${index >= 0 ? "Scene " + (index + 1) : "A source clip"} could not be rendered. Try exporting again. If it repeats, replace that scene’s footage in Review scenes.`
+                : "The export could not finish. Try exporting again, or review the media in your project.";
+    }
     const output_url =
         result.status === "done"
             ? `/projects/${row.project_id}/exports/${row.id}/download`

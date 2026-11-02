@@ -281,7 +281,7 @@ app.get("/api/page", (req, res) => {
             props: {
                 projects: db
                     .prepare(
-                        "SELECT id,name,status,created_at FROM projects WHERE user_id=? ORDER BY id DESC",
+                        "SELECT p.id,p.name,p.status,p.created_at,p.category,p.language,  (SELECT COALESCE(thumbnail_path,video_url) FROM scenes WHERE project_id=p.id ORDER BY scene_number LIMIT 1) AS thumbnail_url,  (SELECT CASE WHEN thumbnail_path IS NOT NULL THEN 'image' ELSE type END FROM scenes WHERE project_id=p.id ORDER BY scene_number LIMIT 1) AS media_type,  COALESCE(CASE WHEN json_valid(p.edit_state) THEN json_extract(p.edit_state,'$.total_frames')*1.0/NULLIF(json_extract(p.edit_state,'$.fps'),0) END,  (SELECT SUM(COALESCE(trimmed_duration,gemini_duration,duration_seconds,0)) FROM scenes WHERE project_id=p.id)) AS duration  FROM projects p WHERE p.user_id=? ORDER BY p.id DESC",
                     )
                     .all(id),
             },
@@ -404,7 +404,39 @@ app.post(
 );
 app.get("/processing/:id/status", (req, res) => {
     const p = own(req, req.params.id);
-    const destinations: any = {
+    const job = db
+        .prepare(
+            "SELECT payload FROM node_jobs WHERE project_id=? AND task='generate' ORDER BY rowid DESC LIMIT 1",
+        )
+        .get(p.id) as any;
+    const payload = json<any>(job?.payload, {});
+    const stages = {
+        transcription: Boolean(payload.transcript),
+        planning: Boolean(payload.plan),
+        footage: Boolean(
+            payload.plan?.phrases?.length &&
+                payload.clips?.length >= payload.plan.phrases.length,
+        ),
+        review: ["reviewing", "subtitle_selection", "completed"].includes(
+            p.status,
+        ),
+    };
+    const progress = stages.review
+        ? 100
+        : Math.min(
+              95,
+              5 +
+                  (stages.transcription ? 30 : 0) +
+                  (stages.planning ? 25 : 0) +
+                  (payload.plan?.phrases?.length
+                      ? Math.round(
+                            ((payload.clips?.length || 0) /
+                                payload.plan.phrases.length) *
+                                30,
+                        )
+                      : 0),
+          );
+    const destinations: Record<string, string> = {
         reviewing: `/review/${p.id}`,
         subtitle_selection: `/subtitle-styles/${p.id}`,
         completed: `/final/${p.id}`,
@@ -412,8 +444,8 @@ app.get("/processing/:id/status", (req, res) => {
     res.json({
         status: p.status,
         error_message: p.error_message,
-        progress:
-            p.status === "completed" ? 100 : p.status === "reviewing" ? 60 : 25,
+        progress,
+        stages,
         redirect_url: destinations[p.status],
         can_retry: p.status === "failed",
     });
@@ -455,6 +487,7 @@ app.post("/review/:id/confirm", (req, res) => {
             ids.add(s.scene_id);
             let mediaType = stored.type;
             let duration = stored.duration_seconds;
+            let thumbnail = stored.thumbnail_path;
             if (s.video_url !== stored.video_url) {
                 const assetId = new URL(s.video_url).pathname.match(
                     /^\/projects\/(\d+)\/assets\/([a-f0-9-]{36})$/,
@@ -476,6 +509,7 @@ app.post("/review/:id/confirm", (req, res) => {
                     fail(422, "Replacement media must belong to this project");
                 mediaType = asset.mime.startsWith("image/") ? "image" : "video";
                 duration = asset.duration_seconds;
+                thumbnail = mediaType === "image" ? s.video_url : null;
             }
             if (
                 mediaType !== "image" &&
@@ -490,6 +524,8 @@ app.post("/review/:id/confirm", (req, res) => {
                 start_time: s.start_time,
                 end_time: s.end_time,
                 trimmed_duration: s.end_time - s.start_time,
+                thumbnail_path: thumbnail,
+                approved: 1,
             });
         }
         const old = p.edit_state ? document(p) : null;
@@ -683,11 +719,19 @@ app.post("/scenes/:scene/regenerate-proxy", async (req, res) => {
         .get(req.params.scene) as any;
     if (!scene) fail(404, "Scene not found");
     const p = own(req, scene.project_id);
+    const previous = String(scene.video_url || "").match(
+        /\/video-files\/(\d+)\//,
+    )?.[1];
     const clip = await stock(
         String(req.body.keywords?.[0] || scene.keywords || scene.script_text),
+        previous ? [Number(previous)] : [],
     );
     update("scenes", scene.id, {
         video_url: clip.url,
+        thumbnail_path: clip.image || null,
+        type: "video",
+        approved: 0,
+        trimmed_duration: Math.min(clip.duration, scene.gemini_duration || 3),
         duration_seconds: clip.duration,
         start_time: 0,
         end_time: Math.min(clip.duration, scene.gemini_duration || 3),

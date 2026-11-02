@@ -1,0 +1,43 @@
+{
+  "origin": "http://127.0.0.1:8100",
+  "checks": [
+    "Existing account, project cards, search and empty state",
+    "Registration and sign out",
+    "Grouped creation form, canvas selection and live Deepgram/NVIDIA/Pexels generation",
+    "Scene slide navigation, confirmation and draft recovery after refresh",
+    "Stock regeneration preserves other scene drafts",
+    "Private replacement upload and complete scene confirmation",
+    "Visual caption presets, live customization and persisted transitions",
+    "Caption text controls and FreeSound music selection",
+    "Editor caption controls and undo/redo",
+    "Timeline zoom, scene selection, drag reorder and button alternative",
+    "Assistant proposal and explicit application",
+    "Remotion export, authorized MP4 download and reload persistence",
+    "390px phone and 768px tablet layouts, no horizontal overflow, accessible assistant toggle"
+  ],
+  "screenshots": [
+    "home-desktop.png",
+    "dashboard-desktop.png",
+    "create-desktop.png",
+    "processing-desktop.png",
+    "review-desktop.png",
+    "styles-desktop.png",
+    "editor-desktop.png",
+    "final-desktop.png",
+    "dashboard-390.png",
+    "create-390.png",
+    "review-390.png",
+    "styles-390.png",
+    "editor-390.png",
+    "dashboard-768.png",
+    "create-768.png",
+    "review-768.png",
+    "styles-768.png",
+    "editor-768.png"
+  ],
+  "projectId": "18",
+  "downloadBytes": 4793637,
+  "revision": 12,
+  "pageErrors": [],
+  "verifiedAt": "2026-11-02T15:37:58.247Z"
+}

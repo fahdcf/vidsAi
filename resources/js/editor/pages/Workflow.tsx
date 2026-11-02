@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import Shell from "../Shell";
 import { api } from "../api";
-import Editor from "./Editor";
-import WanControls from "../WanControls";
+import Icon from "../Icon";
+
 export function Processing({ project }: any) {
     const [state, setState] = useState<any>(project);
     const [error, setError] = useState("");
@@ -30,11 +30,65 @@ export function Processing({ project }: any) {
         };
     }, [project.id]);
     return (
-        <Shell title="Processing Your Video Ad">
-            <section className="panel">
+        <Shell
+            title="Processing Your Video Ad"
+            description="A little creative magic is happening behind the scenes."
+        >
+            <section className="panel processing-card">
+                <div className="processing-emblem">
+                    <Icon
+                        name={state.status === "failed" ? "close" : "sparkles"}
+                    />
+                </div>
+                <span className="eyebrow">
+                    {state.status === "failed"
+                        ? "LET’S GET THIS BACK ON TRACK"
+                        : "YOUR STORY IS TAKING SHAPE"}
+                </span>
                 <h2>{project.name}</h2>
-                <p role="status">{state.status?.replaceAll("_", " ")}</p>
-                <progress max="100" value={state.progress || 10} />
+                <p>
+                    {state.status === "failed"
+                        ? "Something interrupted this project. Your recording and details are saved, so you can retry."
+                        : "We’re listening to your narration, planning your story, and finding footage to bring it to life."}
+                </p>
+                <ol className="processing-track">
+                    {[
+                        {
+                            id: "transcription",
+                            title: "Listen to your narration",
+                        },
+                        {
+                            id: "planning",
+                            title: "Find the rhythm of your story",
+                        },
+                        {
+                            id: "footage",
+                            title: "Match each scene with footage",
+                        },
+                        { id: "review", title: "Prepare your storyboard" },
+                    ].map((stage, i) => (
+                        <li key={stage.id}>
+                            <span>
+                                {state.stages?.[stage.id] ? (
+                                    <Icon name="check" size={15} />
+                                ) : (
+                                    String(i + 1).padStart(2, "0")
+                                )}
+                            </span>
+                            {stage.title}
+                            {state.stages?.[stage.id] && (
+                                <span className="stage-done">Done</span>
+                            )}
+                        </li>
+                    ))}
+                </ol>
+                <progress max="100" value={state.progress || 5} />
+                <div className="processing-bottom">
+                    <span role="status">
+                        {state.status?.replaceAll("_", " ")}
+                    </span>
+                    <strong>{state.progress || 5}%</strong>
+                </div>
                 {(state.error_message || error) && (
                     <p role="alert" className="error">
                         {state.error_message || error}
@@ -42,6 +96,7 @@ export function Processing({ project }: any) {
                 )}
                 {state.status === "failed" && (
                     <button
+                        className="primary"
                         onClick={async () => {
                             try {
                                 const r = await api(
@@ -54,233 +109,72 @@ export function Processing({ project }: any) {
                             }
                         }}
                     >
+                        <Icon name="refresh" />
                         Retry Project
                     </button>
                 )}
-                <p>
-                    You can return to your dashboard while processing continues.
+                <p className="small-text muted">
+                    You can leave this page. We’ll keep working on your video.
                 </p>
+                <a className="button ghost" href="/dashboard">
+                    <Icon name="arrowLeft" />
+                    Back to projects
+                </a>
             </section>
         </Shell>
     );
 }
-export function Review({ project, scenes: initial }: any) {
-    const [rows, setRows] = useState<any[]>(initial);
-    const [error, setError] = useState("");
-    const [busy, setBusy] = useState(false);
-    const edit = (id: number, key: string, value: any) =>
-        setRows((old) =>
-            old.map((s) => (s.id === id ? { ...s, [key]: value } : s)),
-        );
-    async function replace(s: any, file: File) {
-        setBusy(true);
-        setError("");
-        try {
-            const form = new FormData();
-            form.append("file", file);
-            const asset = await api(`/projects/${project.id}/assets`, form);
-            const r = await api(
-                `/projects/${project.id}/edit-state`,
-                undefined,
-                "GET",
-            );
-            await api(`/projects/${project.id}/commands`, {
-                commandId: crypto.randomUUID(),
-                expectedRevision: r.edit_state.revision,
-                operations: [
-                    {
-                        tool: "replace_asset",
-                        params: {
-                            id: `scene_${s.id}`,
-                            url: asset.url,
-                            media_type: asset.media_type,
-                            asset_id: asset.asset_id,
-                        },
-                    },
-                ],
-            });
-            edit(s.id, "video_url", asset.url);
-            edit(s.id, "type", asset.media_type);
-            edit(s.id, "start_time", 0);
-            if (asset.duration_seconds)
-                edit(
-                    s.id,
-                    "end_time",
-                    Math.min(asset.duration_seconds, s.gemini_duration || 3),
-                );
-        } catch (e) {
-            setError((e as Error).message);
-        } finally {
-            setBusy(false);
-        }
-    }
-    return (
-        <Shell title="Review your scenes">
-            {project.timing_warning && (
-                <p role="alert">{project.timing_warning}</p>
-            )}
-            <div className="project-grid">
-                {rows.map((s) => (
-                    <section key={s.id} className="panel">
-                        <h2>Scene {s.scene_number}</h2>
-                        <p>{s.script_text}</p>
-                        {s.type === "image" ? (
-                            <img
-                                alt={"Scene " + s.scene_number}
-                                src={s.video_url}
-                                style={{ width: "100%" }}
-                            />
-                        ) : (
-                            <video
-                                src={s.video_url}
-                                controls
-                                preload="metadata"
-                                style={{ width: "100%" }}
-                            />
-                        )}
-                        <div className="row">
-                            <label>
-                                Start (seconds)
-                                <input
-                                    type="number"
-                                    min="0"
-                                    step=".01"
-                                    value={s.start_time || 0}
-                                    onChange={(e) =>
-                                        edit(
-                                            s.id,
-                                            "start_time",
-                                            Number(e.target.value),
-                                        )
-                                    }
-                                />
-                            </label>
-                            <label>
-                                End (seconds)
-                                <input
-                                    type="number"
-                                    min=".01"
-                                    step=".01"
-                                    value={s.end_time ?? s.gemini_duration}
-                                    onChange={(e) =>
-                                        edit(
-                                            s.id,
-                                            "end_time",
-                                            Number(e.target.value),
-                                        )
-                                    }
-                                />
-                            </label>
-                        </div>
-                        <label>
-                            Search keyword
-                            <input
-                                value={s.keywords || ""}
-                                onChange={(e) =>
-                                    edit(s.id, "keywords", e.target.value)
-                                }
-                            />
-                        </label>
-                        <button
-                            disabled={busy}
-                            onClick={async () => {
-                                setBusy(true);
-                                try {
-                                    await api(
-                                        `/scenes/${s.id}/regenerate-proxy`,
-                                        {
-                                            keywords: [
-                                                s.keywords || s.script_text,
-                                            ],
-                                        },
-                                    );
-                                    window.location.reload();
-                                } catch (e) {
-                                    setError((e as Error).message);
-                                    setBusy(false);
-                                }
-                            }}
-                        >
-                            Find another clip
-                        </button>
-                        <label>
-                            Replace media
-                            <input
-                                type="file"
-                                accept="image/png,image/jpeg,image/webp,video/mp4,video/webm"
-                                disabled={busy}
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) void replace(s, file);
-                                }}
-                            />
-                        </label>
-                        <WanControls scene={s} />
-                    </section>
-                ))}
-            </div>
-            {error && (
-                <p role="alert" className="error">
-                    {error}
-                </p>
-            )}
-            <button
-                className="primary"
-                disabled={busy}
-                onClick={async () => {
-                    setBusy(true);
-                    try {
-                        const r = await api(`/review/${project.id}/confirm`, {
-                            scenes: rows.map((s) => ({
-                                scene_id: s.id,
-                                video_url: s.video_url,
-                                start_time: Number(s.start_time || 0),
-                                end_time: Number(
-                                    s.end_time ?? s.gemini_duration,
-                                ),
-                            })),
-                        });
-                        window.location.href = r.redirect;
-                    } catch (e) {
-                        setError((e as Error).message);
-                        setBusy(false);
-                    }
-                }}
-            >
-                Confirm All Scenes
-            </button>
-        </Shell>
-    );
-}
-export function Subtitles(props: any) {
-    return <Editor {...props} />;
-}
+export { default as Review } from "./Review";
+export { default as Subtitles } from "./StyleStudio";
 export function Final({ project, latestExport }: any) {
     return (
-        <Shell title="Your video is ready">
-            <section className="panel">
-                <h2>{project.name}</h2>
-                {latestExport?.status === "done" ? (
-                    <>
+        <Shell
+            title="Your video is ready"
+            description="From a little idea to something worth sharing."
+        >
+            <div className="final-layout">
+                <section className="panel final-preview">
+                    {latestExport?.status === "done" ? (
                         <video
                             controls
-                            style={{ width: "100%", maxHeight: 540 }}
+                            playsInline
                             src={latestExport.output_url}
                         />
+                    ) : (
+                        <p>No completed export is available yet.</p>
+                    )}
+                </section>
+                <aside className="panel final-summary">
+                    <span className="completion-circle">
+                        <Icon name="check" />
+                    </span>
+                    <span className="eyebrow">READY FOR THE WORLD</span>
+                    <h2>{project.name}</h2>
+                    <p>
+                        Download your video and share your story. Your project
+                        stays here whenever inspiration strikes again.
+                    </p>
+                    {latestExport?.status === "done" && (
                         <a
                             className="button primary"
                             href={latestExport.output_url}
                         >
+                            <Icon name="download" />
                             Download MP4
                         </a>
-                    </>
-                ) : (
-                    <p>No completed export is available yet.</p>
-                )}
-                <a className="button" href={`/projects/${project.id}/editor`}>
-                    Continue editing
-                </a>
-            </section>
+                    )}
+                    <a
+                        className="button"
+                        href={`/projects/${project.id}/editor`}
+                    >
+                        Continue editing
+                        <Icon name="arrowRight" />
+                    </a>
+                    <a className="button ghost" href="/dashboard">
+                        Back to projects
+                    </a>
+                </aside>
+            </div>
         </Shell>
     );
 }

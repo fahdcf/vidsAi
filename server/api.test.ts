@@ -257,6 +257,62 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
         d = document(project(id));
         assert.equal(d.tracks.video[0].clip_url, asset.url);
         assert.equal(d.tracks.video[0].media_type, "image");
+        const stockFetch = globalThis.fetch;
+        const stockKey = process.env.PEXELS_API_KEY;
+        process.env.PEXELS_API_KEY = "test-stock-key";
+        try {
+            globalThis.fetch = async (url, options) =>
+                String(url).includes("api.pexels.com/videos/search")
+                    ? new Response(
+                          JSON.stringify({
+                              videos: [123, 456].map((id) => ({
+                                  id,
+                                  duration: 12,
+                                  image: `https://images.pexels.com/videos/${id}/image.jpeg`,
+                                  video_files: [
+                                      {
+                                          file_type: "video/mp4",
+                                          height: 720,
+                                          link: `https://videos.pexels.com/video-files/${id}/${id}.mp4`,
+                                      },
+                                  ],
+                              })),
+                          }),
+                      )
+                    : stockFetch(url, options);
+            assert.equal(
+                (
+                    await owner.call(`/scenes/${scene.id}/regenerate-proxy`, {
+                        keywords: ["bottle"],
+                    })
+                ).status,
+                200,
+            );
+            assert.equal(
+                scenes(id)[0].type,
+                "video",
+                "Regenerating a replacement image restores video playback",
+            );
+            assert.equal(scenes(id)[0].approved, 0);
+            assert.ok(scenes(id)[0].thumbnail_path.includes("/123/"));
+            assert.equal(
+                (
+                    await owner.call(`/scenes/${scene.id}/regenerate-proxy`, {
+                        keywords: ["bottle"],
+                    })
+                ).status,
+                200,
+            );
+            assert.ok(
+                scenes(id)[0].video_url.includes("/456/"),
+                "Find another clip excludes the current Pexels result",
+            );
+            d = document(project(id));
+        } finally {
+            globalThis.fetch = stockFetch;
+            if (stockKey === undefined) delete process.env.PEXELS_API_KEY;
+            else process.env.PEXELS_API_KEY = stockKey;
+        }
         assert.equal(
             (
                 await owner.call(`/projects/${id}/commands`, {
