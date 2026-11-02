@@ -25,21 +25,21 @@ The original five-model rankings remain in `rankedUseCases` for reference. `vali
 - Audio clients produced WAV files; Active Speaker produced a video. Those endpoint smoke tests do not establish perceptual quality. Body Pose timed out and remains unavailable for recommendation.
 - Magpie, Voicechat, Cosmos generation and Cosmos Transfer were not called because their hosted request contract/access remains unresolved. Their keys stay saved.
 
-## Providers still needed
+## Media-provider configuration
 
-All values below were absent in the local `.env` during this audit. Add private credentials there; never add them to this document.
+Deepgram and FreeSound were subsequently configured from the supplied credentials. The previous Pexels key was recovered from Git history and successfully validated. All credentials are stored in `.env` and in the ignored `nvidia/private/PROVIDER_CREDENTIALS.md`, alongside all 21 NVIDIA models, their keys and request details. No key values belong in this tracked report.
 
 | Provider | Environment settings | Still needed for |
 | --- | --- | --- |
-| Deepgram | `DEEPGRAM_API_KEY`; optional `DEEPGRAM_FALLBACK_API_KEY` | Uploaded voice transcription and word timing, including existing Arabic/Darija alignment path. |
-| Pexels | `PEXELS_API_KEY` | Stock video search and scene footage. NVIDIA language models do not supply licensed stock assets. |
-| WAN AI / DashScope | `WAN_AI_API_KEY` | Optional generated videos and image-to-video. Cosmos is not a verified replacement. |
-| FreeSound | `FREESOUND_API_KEY` | Optional music/sound search. |
+| Deepgram | `DEEPGRAM_API_KEY`; optional `DEEPGRAM_FALLBACK_API_KEY` | Primary key configured: live speech transcription returned 14 words with timing. A separate fallback key remains absent. Arabic/Darija transcription quality needs separate recordings. |
+| Pexels | `PEXELS_API_KEY` | Recovered from historical `config/services.php` changes; live video search returned HTTP 200 with usable results. |
+| WAN AI / DashScope | `WAN_AI_API_KEY` | Blank placeholder retained at the user's request. Optional generated video remains disabled. |
+| FreeSound | `FREESOUND_API_KEY`, `FREESOUND_CLIENT_ID` | Configured: the app's search, popular and trending methods returned HTTP 200, tracks and preview URLs. Client ID is stored for optional OAuth use; current searches use the API key. |
 | ImgBB | `IMGBB_API_KEY` | Optional image-hosting path for external image-to-video services; other hosting routes also exist. |
 | Generic image API | `IMAGE_API_URL`, `IMAGE_API_TOKEN` | Declared configuration for a future/external image service; no active server-side use found in this audit. |
 | Cloudflare AI | `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN` | Declared image configuration; no active server-side use found. |
 
-OpenRouter, Groq and Gemini keys are also absent, but they are no longer required by the two NVIDIA-enabled language-model paths. Registration, local editing and export can work without the missing media-provider keys; creating videos from new narration and stock search cannot be fully verified until Deepgram and Pexels are configured.
+OpenRouter, Groq and Gemini keys are also absent, but they are no longer required by the two NVIDIA-enabled language-model paths. Deepgram, Pexels and FreeSound are now configured and live-tested. Missing ImgBB/image-provider settings remain optional; WAN is intentionally postponed. See the [media-provider verification report](MEDIA_PROVIDER_VALIDATION.md) for the new narration-to-export check.
 
 ## Operation
 

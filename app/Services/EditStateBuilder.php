@@ -533,6 +533,9 @@ class EditStateBuilder
         $voiceoverUrl = $project->voiceover_url
             ?? $project->voiceover_file
             ?? null;
+        if ($project->voiceover_file && Storage::disk('public')->exists($project->voiceover_file)) {
+            $voiceoverUrl = route('projects.voiceover', $project);
+        }
 
         // Ensure voiceover URL is absolute so the browser Player can load it
         if ($voiceoverUrl && !str_starts_with($voiceoverUrl, 'http')) {

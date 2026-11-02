@@ -440,6 +440,7 @@ Route::middleware('auth')->group(function () {
 });
 
 Route::get('/projects/{project}/assets/{asset}', [\App\Http\Controllers\ProjectAssetController::class,'show'])->name('projects.asset');
+Route::get('/projects/{project}/voiceover', [\App\Http\Controllers\ProjectAssetController::class,'voiceover'])->name('projects.voiceover');
 require __DIR__.'/auth.php';
 
 

@@ -12,6 +12,26 @@ use Tests\TestCase;
 
 class ProjectAssetTest extends TestCase
 {
+    public function test_uploaded_voiceover_is_private_and_gets_signed_worker_access_including_saved_legacy_urls(): void
+    {
+        Storage::fake('public');Storage::disk('public')->put('voiceovers/test.wav','wave fixture');
+        $owner=User::factory()->create();$other=User::factory()->create();
+        $p=Project::factory()->create(['user_id'=>$owner->id,'voiceover_file'=>'voiceovers/test.wav']);
+        $url=route('projects.voiceover',$p);
+        $this->get($url)->assertForbidden();
+        $this->actingAs($owner)->get($url)->assertOk();
+        $this->actingAs($other)->get($url)->assertForbidden();
+        $d=json_decode(file_get_contents(base_path('tests/Fixtures/edit-state.json')),true);
+        $d['tracks']['audio']=[['id'=>'voiceover','type'=>'voiceover','url'=>url('/storage/voiceovers/test.wav')]];
+        $signed=ProjectAssetController::renderSnapshot($d,$p->id);
+        $this->assertStringContainsString('/projects/'.$p->id.'/voiceover?', $signed['tracks']['audio'][0]['url']);
+        $this->get($signed['tracks']['audio'][0]['url'])->assertOk();
+        $this->assertStringContainsString('/storage/voiceovers/test.wav',$d['tracks']['audio'][0]['url']);
+        $d['tracks']['audio'][0]['url']=$url;
+        $signed=ProjectAssetController::renderSnapshot($d,$p->id);
+        $this->get($signed['tracks']['audio'][0]['url'])->assertOk();
+    }
+
     use RefreshDatabase;
 
     public function test_private_upload_uses_a_stable_id_and_signed_render_access(): void

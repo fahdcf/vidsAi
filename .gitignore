@@ -69,3 +69,6 @@ __pycache__/
 /find_test_project.php
 /fix_scene_211_duration.php
 /fix_subtitle_timing.php
+
+# Local provider credentials and recovery artifacts; never commit.
+/nvidia/private/

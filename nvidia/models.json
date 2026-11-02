@@ -3,8 +3,8 @@
   "recordedAt": "2026-11-02T00:55:51.589148+00:00",
   "status": "integrated_scene_planning_and_editing_agent_live_smoke_tested",
   "enabled": true,
-  "secretPolicy": "No credentials stored in this JSON or Markdown. Per-model key override or shared key is a future adapter convention, not implemented runtime behavior.",
-  "fallbackPolicy": "Attempt only a compatible input/output model. All orders are stored; no provider calls or automatic application routing are enabled.",
+  "secretPolicy": "No credentials in tracked JSON/Markdown. A complete local credential guide is excluded by /nvidia/private/ in .gitignore.",
+  "fallbackPolicy": "Only task-compatible, live-validated models participate in the active scene and editing routes. Original rankings and all 21 credentials are retained; future workflows remain inactive.",
   "rankedUseCases": {
     "agent": [
       "super_vl",

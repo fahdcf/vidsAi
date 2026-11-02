@@ -34,12 +34,28 @@ class ProjectAssetController extends Controller
         return response()->file(Storage::disk('local')->path($row->path), ['Content-Type' => $row->mime, 'Cache-Control' => 'private, max-age=3600']);
     }
 
+    public function voiceover(Request $r, Project $project)
+    {
+        if (! $r->hasValidSignature()) $this->authorize('view', $project);
+        abort_unless($project->voiceover_file && Storage::disk('public')->exists($project->voiceover_file), 404);
+        return response()->file(Storage::disk('public')->path($project->voiceover_file), ['Cache-Control'=>'private, max-age=3600']);
+    }
+
     public static function renderSnapshot(array $d, int $projectId): array
     {
         foreach (['video' => 'clip_url', 'overlays' => 'src', 'audio' => 'url'] as $track => $field) {
             foreach ($d['tracks'][$track] as &$item) {
                 $url = $item[$field] ?? '';
                 $path = parse_url($url, PHP_URL_PATH);
+                if ($track === 'audio' && ($item['type'] ?? '') === 'voiceover') {
+                    $project = Project::findOrFail($projectId);
+                    $isStableVoiceover = is_string($path) && preg_match('#^/projects/(\d+)/voiceover$#', $path, $voiceoverMatch);
+                    if ($isStableVoiceover) abort_unless((int) $voiceoverMatch[1] === $projectId, 422, 'Voiceover does not belong to this project');
+                    $isLegacyUpload = $project->voiceover_file && $path === '/storage/'.ltrim($project->voiceover_file, '/');
+                    if ($isStableVoiceover || $isLegacyUpload) {
+                        $item[$field] = URL::temporarySignedRoute('projects.voiceover', now()->addDay(), ['project'=>$projectId]);
+                    }
+                }
                 if (is_string($path) && preg_match('#^/projects/(\d+)/assets/([a-f0-9-]{36})$#', $path, $m)) {
                     abort_unless((int) $m[1] === $projectId && DB::table('project_assets')->where('id', $m[2])->where('project_id', $projectId)->exists(), 422, 'Asset does not belong to this project');
                     $item['asset_id'] = $m[2];

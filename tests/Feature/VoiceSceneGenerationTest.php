@@ -53,4 +53,36 @@ class VoiceSceneGenerationTest extends TestCase
             $this->actingAs($u)->postJson('/create', [...$this->input(), 'voiceover_option' => $mode])->assertUnprocessable()->assertJsonValidationErrors('voiceover_option');
         }$this->assertDatabaseCount('projects',0);
     }
+
+    public function test_generated_scene_offsets_are_local_to_each_stock_source_and_can_be_confirmed(): void
+    {
+        $user=User::factory()->create();
+        $project=Project::factory()->create(['user_id'=>$user->id,'status'=>'reviewing']);
+        $data=[
+            ['phrase'=>'Discover our bottle','video_url'=>'https://example.com/one.mp4','duration_seconds'=>20,'source_duration_seconds'=>20,'gemini_duration'=>2,'start_time'=>0,'end_time'=>2],
+            ['phrase'=>'Take it everywhere','video_url'=>'https://example.com/two.mp4','duration_seconds'=>30,'source_duration_seconds'=>30,'gemini_duration'=>2,'start_time'=>2,'end_time'=>4],
+        ];
+        $job=new GenerateScenesFromVoiceJob($project);
+        (new \ReflectionMethod($job,'createScenesFromResponse'))->invoke($job,$project,$data);
+        $scenes=$project->scenes()->orderBy('scene_number')->get();
+        $this->assertEquals(30,$scenes[1]->duration_seconds);
+        $this->assertEquals(0,$scenes[1]->start_time);
+        $this->assertEquals(2,$scenes[1]->end_time);
+        $this->assertEquals(2,$scenes[1]->gemini_duration);
+        $this->actingAs($user)->postJson('/review/'.$project->id.'/confirm',['scenes'=>$scenes->map(fn($s)=>['scene_id'=>$s->id,'video_url'=>$s->video_url,'duration'=>2,'start_time'=>0,'end_time'=>2])->all()])->assertOk();
+    }
+
+    public function test_short_planned_scenes_keep_a_real_stock_source_when_merged(): void
+    {
+        $project=Project::factory()->create();$job=new GenerateScenesFromVoiceJob($project);
+        $data=[
+            ['phrase'=>'A brief opening','video_url'=>'https://example.com/one.mp4','duration_seconds'=>20,'source_duration_seconds'=>20,'gemini_duration'=>.5,'start_time'=>0,'end_time'=>.5],
+            ['phrase'=>'Discover our reusable bottle','video_url'=>'https://example.com/two.mp4','duration_seconds'=>30,'source_duration_seconds'=>30,'gemini_duration'=>2.5,'start_time'=>.5,'end_time'=>3],
+        ];
+        $merged=(new \ReflectionMethod($job,'enforceSceneQualityRules'))->invoke($job,$data,3,1.5);
+        $this->assertCount(1,$merged);
+        $this->assertEquals('https://example.com/two.mp4',$merged[0]['video_url']);
+        $this->assertEquals(30,$merged[0]['source_duration_seconds']);
+        $this->assertEquals(3,$merged[0]['gemini_duration']);
+    }
 }

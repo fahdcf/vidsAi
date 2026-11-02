@@ -626,7 +626,7 @@ class SceneGenerationService
                     $rawText = $this->requestSceneGenerationFromProvider($provider, $prompt);
                     $parsed = $this->parseSceneGenerationResponse($rawText, $provider['label'], $provider['model']);
                     if ($provider['provider'] === 'nvidia') {
-                        $this->validateNvidiaScenes($parsed, $script, $transcriptData);
+                        $parsed = $this->validateNvidiaScenes($parsed, $script, $transcriptData);
                     }
 
                     $this->logToCustomFile('✅ Scene generation provider succeeded', [
@@ -769,24 +769,34 @@ class SceneGenerationService
         return $text;
     }
 
-    private function validateNvidiaScenes(array $parsed, string $script, array $transcript): void
+    private function validateNvidiaScenes(array $parsed, string $script, array $transcript): array
     {
         if (empty($parsed['phrases']) || empty($parsed['subtitles_script'])) throw new \RuntimeException('NVIDIA returned empty scenes or captions');
         $end = 0.0;
-        foreach ($parsed['phrases'] as $phrase) {
+        foreach ($parsed['phrases'] as $index => &$phrase) {
             foreach (['phrase','keywords','start_time','end_time','duration_seconds','prompt'] as $field) {
                 if (!isset($phrase[$field])) throw new \RuntimeException('NVIDIA scene missing '.$field);
             }
             if (!is_array($phrase['keywords']) || empty($phrase['keywords']) || !is_string($phrase['phrase']) || !is_string($phrase['prompt'])) throw new \RuntimeException('NVIDIA scene content has invalid types');
             foreach (['start_time','end_time','duration_seconds'] as $field) if (!is_numeric($phrase[$field]) || !is_finite((float)$phrase[$field])) throw new \RuntimeException('NVIDIA scene timing has invalid types');
+            $firstSpokenWord = (float) ($transcript['words'][0]['start'] ?? 0);
+            if ($index === 0 && $firstSpokenWord > 0 && $phrase['start_time'] > 0
+                && abs($phrase['start_time'] - $firstSpokenWord) <= .15
+                && abs($phrase['end_time'] - $phrase['start_time'] - $phrase['duration_seconds']) <= .15) {
+                // Keep leading narration silence in the first visual, rather than shifting later cuts.
+                $phrase['start_time'] = 0;
+                $phrase['duration_seconds'] = $phrase['end_time'];
+            }
             if (abs($phrase['start_time']-$end)>.15 || $phrase['duration_seconds']<=0 || abs($phrase['end_time']-$phrase['start_time']-$phrase['duration_seconds'])>.15) throw new \RuntimeException('NVIDIA scene timing is inconsistent');
             $end=(float)$phrase['end_time'];
         }
+        unset($phrase);
         $words=$transcript['words']??[];
         $expected=(float)(end($words)['end']??0);
         if ($expected>0 && abs($end-$expected)>.15) throw new \RuntimeException('NVIDIA scenes do not cover narration');
         $normalize=fn($text)=>preg_replace('/[\p{P}\p{Z}\s]+/u','',mb_strtolower($text));
         if ($normalize(implode(' ',array_column($parsed['phrases'],'phrase')))!==$normalize($script)) throw new \RuntimeException('NVIDIA changed script wording');
+        return $parsed;
     }
 
     private function requestOpenRouterSceneGeneration(string $model, string $prompt): string
@@ -1111,6 +1121,7 @@ You are given:
 
 5. Align words to transcript:
     - start_time = first matched word's start time from transcript
+    - EXCEPTION: the FIRST scene must start at 0.0 to include any initial silence before the first spoken word. Keep all later scene boundaries aligned to transcript words.
     - end_time = the start_time of the NEXT scene's first word (not this scene's last word end)
     - For the FINAL scene only: end_time = last word's end time from transcript
     - duration_seconds = end_time - start_time, rounded to 3 decimal places
@@ -1260,6 +1271,7 @@ Transcript Words (with pause annotations - cut_candidate:true means strong cut p
                         'start_time' => $phrase['start_time'] ?? null,
                         'end_time' => $phrase['end_time'] ?? null,
                         'duration_seconds' => $videoData['duration_seconds'], // Use actual video duration from Pexels
+                        'source_duration_seconds' => $videoData['duration_seconds'],
                         'gemini_duration' => $phrase['duration_seconds'], // Store Gemini timing separately
                         'prompt' => $phrase['prompt'] ?? null,
                         'subtitles_script' => $phrase['subtitles_script'] ?? []

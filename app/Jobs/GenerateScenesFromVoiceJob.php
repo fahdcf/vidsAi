@@ -352,14 +352,17 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                 $geminiFallback
             );
 
+            $sourceDuration = max(0, (float) ($sceneData['source_duration_seconds'] ?? $sceneData['duration_seconds'] ?? $transcriptDuration));
+            if ($sourceDuration <= 0) $sourceDuration = $transcriptDuration;
             Scene::create([
                 'project_id' => $project->id,
                 'scene_number' => $sceneNumber,
                 'script_text' => $sceneText,
                 'video_url' => $sceneData['video_url'] ?? '',
-                'start_time' => $sceneData['start_time'] ?? null,
-                'end_time' => $sceneData['end_time'] ?? null,
-                'duration_seconds' => $transcriptDuration,
+                // Transcript positions belong to the timeline; every new stock source starts at zero.
+                'start_time' => 0,
+                'end_time' => min($sourceDuration, $transcriptDuration),
+                'duration_seconds' => $sourceDuration,
                 'gemini_duration' => $transcriptDuration,
                 'keywords' => is_array($sceneData['keywords'] ?? []) ? implode(', ', $sceneData['keywords'] ?? []) : ($sceneData['keywords'] ?? ''),
                 'prompt' => $sceneData['prompt'] ?? null,
@@ -444,6 +447,8 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                                 is_array($scene['subtitles_script'] ?? null) ? $scene['subtitles_script'] : []
                             ))),
                             'cut_reason' => 'merged: connector fragment',
+                            'video_url' => $prev['video_url'] ?? '',
+                            'source_duration_seconds' => $prev['source_duration_seconds'] ?? $prev['duration_seconds'] ?? 0,
                         ];
                         $merged = true;
                         continue;
@@ -469,6 +474,8 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                                 is_array($next['subtitles_script'] ?? null) ? $next['subtitles_script'] : []
                             ))),
                             'cut_reason' => 'merged: scene was too short',
+                            'video_url' => $next['video_url'] ?? '',
+                            'source_duration_seconds' => $next['source_duration_seconds'] ?? $next['duration_seconds'] ?? 0,
                         ];
                         $merged = true;
                         // Skip current scene (merged into next)
@@ -493,6 +500,8 @@ class GenerateScenesFromVoiceJob implements ShouldQueue
                                 is_array($scene['subtitles_script'] ?? null) ? $scene['subtitles_script'] : []
                             ))),
                             'cut_reason' => 'merged: last scene was too short',
+                            'video_url' => $prev['video_url'] ?? '',
+                            'source_duration_seconds' => $prev['source_duration_seconds'] ?? $prev['duration_seconds'] ?? 0,
                         ];
                         $merged = true;
                         continue;

@@ -44,6 +44,7 @@ return [
     ],
 
     'freesound' => [
+        'client_id' => env('FREESOUND_CLIENT_ID'),
         'api_key' => env('FREESOUND_API_KEY'),
     ],
 
