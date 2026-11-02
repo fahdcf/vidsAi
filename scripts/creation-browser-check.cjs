@@ -13,6 +13,12 @@ async function main() {
     const page = await browser.newPage();
     const errors = [];
     const serverErrors = [];
+    const dialogs = [];
+    page.on('dialog', async dialog => {
+        dialogs.push({ type: dialog.type(), message: dialog.message() });
+        if (dialog.type() === 'confirm') await dialog.accept();
+        else await dialog.dismiss();
+    });
     page.on('pageerror', e => errors.push(e.message));
     page.on('response', r => { if (r.url().startsWith(origin) && r.status() >= 500) serverErrors.push({ url: r.url(), status: r.status() }); });
     try {
@@ -21,6 +27,10 @@ async function main() {
         await page.locator('#password').fill(account.password);
         await page.locator('button[type=submit]').click();
         await page.waitForURL('**/dashboard');
+        if (process.env.CREATION_REVIEW_PROJECT_ID) {
+            report.projectId = process.env.CREATION_REVIEW_PROJECT_ID;
+            await page.goto(`${origin}/review/${report.projectId}`);
+        } else {
         await page.goto(origin + '/create');
         await page.getByLabel('Project name').fill('Creation page regression check');
         await page.getByLabel('Category', { exact: true }).fill('Bottle');
@@ -40,12 +50,46 @@ async function main() {
         await page.waitForURL(new RegExp(`/review/${report.projectId}$`), { timeout: 180000 });
         assert.equal(await page.getByText('Internal Server Error', { exact: true }).count(), 0);
         report.checks.push('automatic redirect to generated scene review');
+        }
+        await page.waitForFunction(() => {
+            const videos = [...document.querySelectorAll('video[id^="video-"]')];
+            return videos.length > 0 && videos.every(v => Number.isFinite(v.duration) && v.duration > 0);
+        }, { timeout: 60000 });
+        await page.getByRole('button', { name: 'Confirm All Scenes' }).click();
+        await page.waitForURL(new RegExp(`/subtitle-styles/${report.projectId}$`), { timeout: 30000 });
+        await page.waitForFunction(() => Boolean(window.voiceoverUrl) || document.getElementById('processingSection')?.style.display === 'none');
+        report.checks.push('scene confirmation opens subtitle selection', 'uploaded voiceover preparation');
+        console.log(JSON.stringify({ projectId: report.projectId, subtitlePage: 'passed' }));
+        await page.locator('.style-category[data-style="progressive_highlight"]').click();
+        const generation = page.waitForResponse(r => r.url().endsWith(`/subtitle-styles/${report.projectId}/generate`) && r.request().method() === 'POST');
+        await page.getByRole('button', { name: 'Render Video', exact: true }).click();
+        const submitted = await generation;
+        assert.equal(submitted.status(), 200);
+        await page.waitForURL(new RegExp(`/processing/${report.projectId}$`));
+        report.checks.push('subtitle style selection and render submission');
+        console.log(JSON.stringify({ projectId: report.projectId, renderSubmission: 'passed' }));
+        await page.waitForURL(new RegExp(`/final/${report.projectId}$`), { timeout: 240000 });
+        const downloadLink = page.locator('a.download-btn').first();
+        const downloadResponse = await page.request.get(await downloadLink.getAttribute('href'));
+        assert.equal(downloadResponse.status(), 200);
+        assert.match(downloadResponse.headers()['content-type'], /video\/mp4/);
+        const bytes = await downloadResponse.body();
+        assert.ok(bytes.length > 1000);
+        report.downloadBytes = bytes.length;
+        report.checks.push('completed render opens final page', 'authorized MP4 download');
         assert.deepEqual(serverErrors, []);
         assert.deepEqual(errors, []);
         report.browserErrors = errors;
         report.serverErrors = serverErrors;
         fs.writeFileSync(path.join(root, 'runtime/creation-browser-verification.json'), JSON.stringify(report, null, 2));
         console.log(JSON.stringify(report));
-    } finally { await browser.close(); }
+    } finally {
+        report.lastUrl = page.url();
+        report.browserErrors = errors;
+        report.serverErrors = serverErrors;
+        report.dialogs = dialogs;
+        fs.writeFileSync(path.join(root, 'runtime/creation-browser-verification.json'), JSON.stringify(report, null, 2));
+        await browser.close();
+    }
 }
 main().catch(e => { console.error('Creation browser check failed:', e.message); process.exitCode = 1; });

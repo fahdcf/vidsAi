@@ -1710,91 +1710,17 @@ class ProjectController extends Controller
 
     public function prepareVoiceover(Request $request, Project $project)
     {
-        logger()->info('🚀 prepareVoiceover method called', [
-            'project_id' => $project->id,
-            'user_id' => auth()->id(),
-            'request_method' => $request->method(),
-            'request_headers' => $request->headers->all()
-        ]);
-
         $this->authorize('update', $project);
-
-        logger()->info('✅ Authorization passed, preparing voiceover for subtitle generation', [
-            'project_id' => $project->id,
-            'voiceover_option' => $project->voiceover_option,
-            'voiceover_file' => $project->voiceover_file,
-            'has_voiceover_file' => !empty($project->voiceover_file),
-            'file_exists' => $project->voiceover_file ? Storage::disk('public')->exists($project->voiceover_file) : false
-        ]);
-
-        try {
-            $voiceOverUrl = null;
-
-            // Upload voiceover to external host providers if it's an uploaded file
-            if ($project->voiceover_option === 'upload' && $project->voiceover_file) {
-                logger()->info('🔄 Starting voiceover upload process', [
-                    'project_id' => $project->id,
-                    'file_path' => $project->voiceover_file
-                ]);
-
-                $voiceOverUrl = $this->uploadVoiceoverToExternalHost($project);
-
-                logger()->info('🔍 Upload result', [
-                    'project_id' => $project->id,
-                    'upload_successful' => !empty($voiceOverUrl),
-                    'voiceover_url' => $voiceOverUrl
-                ]);
-
-                if (!$voiceOverUrl) {
-                    logger()->error('❌ Upload returned null/empty URL', [
-                        'project_id' => $project->id
-                    ]);
-
-                    return response()->json([
-                        'success' => false,
-                        'message' => 'Failed to upload voiceover file. Please try again.'
-                    ], 500);
-                }
-
-                // Store the uploaded URL in the project for future use
-                $project->update(['voiceover_url' => $voiceOverUrl]);
-
-                logger()->info('💾 Stored voiceover URL in database', [
-                    'project_id' => $project->id,
-                    'stored_url' => $voiceOverUrl
-                ]);
-            } else {
-                logger()->warning('⚠️ Voiceover preparation skipped', [
-                    'project_id' => $project->id,
-                    'reason' => $project->voiceover_option !== 'upload' ? 'not_upload_option' : 'no_voiceover_file'
-                ]);
+        $voiceoverUrl = $project->voiceover_url;
+        if ($project->voiceover_option === 'upload') {
+            if (!$project->voiceover_file || !Storage::disk('public')->exists($project->voiceover_file)) {
+                return response()->json(['success'=>false, 'message'=>'The uploaded voiceover could not be found.'], 404);
             }
-
-            logger()->info('✅ Voiceover preparation completed', [
-                'project_id' => $project->id,
-                'voiceover_url' => $voiceOverUrl
-            ]);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'Voiceover prepared successfully!',
-                'voiceover_url' => $voiceOverUrl
-            ]);
-
-        } catch (\Exception $e) {
-            logger()->error('❌ Voiceover preparation failed with exception', [
-                'project_id' => $project->id,
-                'error' => $e->getMessage(),
-                'file' => $e->getFile(),
-                'line' => $e->getLine(),
-                'trace' => $e->getTraceAsString()
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'An error occurred while preparing the voiceover: ' . $e->getMessage()
-            ], 500);
+            $voiceoverUrl = route('projects.voiceover', $project);
+            $project->update(['voiceover_url'=>$voiceoverUrl]);
         }
+        if (!$voiceoverUrl) return response()->json(['success'=>false, 'message'=>'Please upload a voiceover first.'], 422);
+        return response()->json(['success'=>true, 'message'=>'Voiceover is ready.', 'voiceover_url'=>$voiceoverUrl]);
     }
 
     public function generateSubtitles(Request $request, Project $project)
