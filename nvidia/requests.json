@@ -1,0 +1,525 @@
+{
+  "super_vl": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b",
+    "credentialEnv": "NVIDIA_SUPER_VL_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe the visible scene."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://assets.ngc.nvidia.com/products/api-catalog/phi-3-5-vision/example1b.jpg"
+              }
+            }
+          ]
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "mistral_large_4": {
+    "source": "https://build.nvidia.com/mistralai/mistral-large-4-1t-a52b",
+    "credentialEnv": "NVIDIA_MISTRAL_LARGE_4_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "mistralai/mistral-large-4-1t-a52b",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe the visible scene."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://assets.ngc.nvidia.com/products/api-catalog/phi-3-5-vision/example1b.jpg"
+              }
+            }
+          ]
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "ultra": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3-ultra-550b-a55b",
+    "credentialEnv": "NVIDIA_ULTRA_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Describe a proposed editing plan. Do not execute it."
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "deepseek_flash": {
+    "source": "https://build.nvidia.com/deepseek-ai/deepseek-v4.1-flash",
+    "credentialEnv": "NVIDIA_DEEPSEEK_FLASH_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "deepseek-ai/deepseek-v4.1-flash",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Describe a proposed editing plan. Do not execute it."
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "gemma_4": {
+    "source": "https://build.nvidia.com/google/gemma-4-31b-it",
+    "credentialEnv": "NVIDIA_GEMMA_4_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "google/gemma-4-31b-it",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe the visible scene."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://assets.ngc.nvidia.com/products/api-catalog/phi-3-5-vision/example1b.jpg"
+              }
+            }
+          ]
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "lightning": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b",
+    "credentialEnv": "NVIDIA_LIGHTNING_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Describe a proposed editing plan. Do not execute it."
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "nano_omni": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+    "credentialEnv": "NVIDIA_NANO_OMNI_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe the visible scene."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://assets.ngc.nvidia.com/products/api-catalog/phi-3-5-vision/example1b.jpg"
+              }
+            }
+          ]
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "cosmos_reasoner": {
+    "source": "https://build.nvidia.com/nvidia/cosmos3-nano-reasoner",
+    "credentialEnv": "NVIDIA_COSMOS_REASONER_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/cosmos3-nano-reasoner",
+      "messages": [
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "text",
+              "text": "Describe the visible scene."
+            },
+            {
+              "type": "image_url",
+              "image_url": {
+                "url": "https://assets.ngc.nvidia.com/products/api-catalog/phi-3-5-vision/example1b.jpg"
+              }
+            }
+          ]
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "riva_translate": {
+    "source": "https://build.nvidia.com/nvidia/riva-translate-4b-instruct-v2",
+    "credentialEnv": "NVIDIA_RIVA_TRANSLATE_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/chat/completions",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/riva-translate-4b-instruct-v2",
+      "messages": [
+        {
+          "role": "system",
+          "content": "You are an expert at translating text from English to French."
+        },
+        {
+          "role": "user",
+          "content": "A person holds a product."
+        }
+      ],
+      "max_tokens": 1024,
+      "stream": false
+    },
+    "notes": "Request shape prepared from public references, not a successful account call. Verify model-specific parameters before use. Image example is sampled-frame analysis, not a complete audio/video request."
+  },
+  "embed_35_1b": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3_5-embed-1b",
+    "credentialEnv": "NVIDIA_EMBED_35_1B_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/embeddings",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3.5-embed-1b",
+      "input": [
+        "A person holds a product."
+      ],
+      "input_type": "passage",
+      "encoding_format": "float",
+      "truncate": "NONE"
+    }
+  },
+  "embed_35_8b": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3_5-embed-8b",
+    "credentialEnv": "NVIDIA_EMBED_35_8B_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/embeddings",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3.5-embed-8b",
+      "input": [
+        "A person holds a product."
+      ],
+      "input_type": "passage",
+      "encoding_format": "float",
+      "truncate": "NONE"
+    }
+  },
+  "rerank_35_8b": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3_5-rerank-8b",
+    "credentialEnv": "NVIDIA_RERANK_35_8B_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://ai.api.nvidia.com/v1/retrieval/nvidia/nemotron-3.5-rerank-8b/reranking",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3.5-rerank-8b",
+      "query": {
+        "text": "A person holding a product"
+      },
+      "passages": [
+        {
+          "text": "A close-up of someone holding a bottle."
+        },
+        {
+          "text": "A street at night."
+        }
+      ],
+      "truncate": "NONE"
+    }
+  },
+  "embed_3_1b": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-3-embed-1b",
+    "credentialEnv": "NVIDIA_EMBED_3_1B_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "method": "POST",
+    "url": "https://integrate.api.nvidia.com/v1/embeddings",
+    "headers": {
+      "Authorization": "Bearer <resolved development credential>",
+      "Content-Type": "application/json"
+    },
+    "body": {
+      "model": "nvidia/nemotron-3-embed-1b",
+      "input": [
+        "A person holds a product."
+      ],
+      "input_type": "passage",
+      "encoding_format": "float",
+      "truncate": "NONE"
+    }
+  },
+  "magpie": {
+    "source": "https://build.nvidia.com/nvidia/magpie-tts-zeroshot",
+    "credentialEnv": "NVIDIA_MAGPIE_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "status": "requires_account_or_deployment_inspection",
+    "url": null,
+    "body": null,
+    "notes": "Catalog shows Apply for Access. Hosted request endpoint, function ID, consent flow and deployed language/version need account inspection. Do not assume the latest self-hosted speech NIM equals this hosted demo."
+  },
+  "voicechat": {
+    "source": "https://build.nvidia.com/nvidia/nemotron-voicechat",
+    "credentialEnv": "NVIDIA_VOICECHAT_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "status": "requires_account_or_deployment_inspection",
+    "url": null,
+    "body": null,
+    "notes": "Early access. Do not treat as an interchangeable batch TTS or transcription endpoint. Protocol and session URL pending account inspection."
+  },
+  "bnr": {
+    "source": "https://build.nvidia.com/nvidia/bnr/api",
+    "credentialEnv": "NVIDIA_BNR_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "protocol": "gRPC over TLS",
+    "target": "grpc.nvcf.nvidia.com:443",
+    "functionId": "c95bfe76-c553-4975-bc18-8ef9d6e2666b",
+    "clientRepository": "https://github.com/NVIDIA-Maxine/nim-clients",
+    "clientDirectory": "bnr/scripts",
+    "exampleArgumentVector": [
+      "python",
+      "bnr.py",
+      "--preview-mode",
+      "--target",
+      "grpc.nvcf.nvidia.com:443",
+      "--function-id",
+      "c95bfe76-c553-4975-bc18-8ef9d6e2666b",
+      "--api-key",
+      "<resolved development credential>",
+      "--ssl-mode",
+      "TLS",
+      "--input",
+      "<input.wav>",
+      "--output",
+      "<output.wav>",
+      "--streaming",
+      "False"
+    ],
+    "notes": "16-bit mono WAV, <=35 MB and <=6 minutes. Use official BNR client with TLS and preview mode."
+  },
+  "studio_voice": {
+    "source": "https://build.nvidia.com/nvidia/studiovoice/api",
+    "credentialEnv": "NVIDIA_STUDIO_VOICE_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "protocol": "gRPC over TLS",
+    "target": "grpc.nvcf.nvidia.com:443",
+    "functionId": "3f0aeba3-6d91-4465-b8cc-cc2aef355186",
+    "clientRepository": "https://github.com/NVIDIA-Maxine/nim-clients",
+    "clientDirectory": "studio-voice/scripts",
+    "exampleArgumentVector": [
+      "python",
+      "studio_voice.py",
+      "--preview-mode",
+      "--target",
+      "grpc.nvcf.nvidia.com:443",
+      "--function-id",
+      "3f0aeba3-6d91-4465-b8cc-cc2aef355186",
+      "--api-key",
+      "<resolved development credential>",
+      "--ssl-mode",
+      "TLS",
+      "--input",
+      "<input.wav>",
+      "--output",
+      "<output.wav>"
+    ],
+    "notes": "16-bit mono WAV, <=32 MB and <=6 minutes. Use official Studio Voice client with TLS and preview mode."
+  },
+  "cosmos_generator": {
+    "source": "https://build.nvidia.com/nvidia/cosmos3-nano",
+    "credentialEnv": "NVIDIA_COSMOS_GENERATOR_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "status": "requires_account_or_deployment_inspection",
+    "url": null,
+    "body": null,
+    "notes": "Public catalog demo does not establish a callable hosted generation API. Keep request URL/schema blank until verified. Preserve required input screening and output watermarking."
+  },
+  "cosmos_transfer": {
+    "source": "https://build.nvidia.com/nvidia/cosmos-transfer2_5-2b",
+    "credentialEnv": "NVIDIA_COSMOS_TRANSFER_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "status": "requires_account_or_deployment_inspection",
+    "url": null,
+    "body": null,
+    "notes": "Requires suitable control inputs. Hosted invocation URL/schema pending account inspection. Not a text-only replacement for all generation requests."
+  },
+  "active_speaker": {
+    "source": "https://build.nvidia.com/nvidia/active-speaker-detection/api",
+    "credentialEnv": "NVIDIA_ACTIVE_SPEAKER_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "protocol": "gRPC over TLS",
+    "target": "grpc.nvcf.nvidia.com:443",
+    "functionId": "f286f937-05c4-454b-8312-fba67a2a6fa7",
+    "clientRepository": "https://github.com/NVIDIA-Maxine/nim-clients",
+    "clientDirectory": "active-speaker-detection/scripts",
+    "exampleArgumentVector": [
+      "python",
+      "active_speaker_detection.py",
+      "--preview-mode",
+      "--target",
+      "grpc.nvcf.nvidia.com:443",
+      "--function-id",
+      "f286f937-05c4-454b-8312-fba67a2a6fa7",
+      "--api-key",
+      "<resolved development credential>",
+      "--video-input",
+      "<input.mp4>",
+      "--output",
+      "<output path>",
+      "--audio-input",
+      "<input.wav>",
+      "--diarization-input",
+      "<diarization.json>"
+    ],
+    "notes": "Official client needs video, audio and diarization inputs; H.264 MP4 <=500 MB."
+  },
+  "body_pose": {
+    "source": "https://build.nvidia.com/nvidia/body-pose/api",
+    "credentialEnv": "NVIDIA_BODY_POSE_API_KEY",
+    "sharedCredentialEnv": "NVIDIA_API_KEY",
+    "liveTested": false,
+    "protocol": "gRPC over TLS",
+    "target": "grpc.nvcf.nvidia.com:443",
+    "functionId": "254b3621-bb66-4b7b-9c89-621c352b4d91",
+    "clientRepository": "https://github.com/NVIDIA-Maxine/nim-clients",
+    "clientDirectory": "body-pose/scripts",
+    "exampleArgumentVector": [
+      "python",
+      "body_pose.py",
+      "--preview-mode",
+      "--target",
+      "grpc.nvcf.nvidia.com:443",
+      "--function-id",
+      "254b3621-bb66-4b7b-9c89-621c352b4d91",
+      "--api-key",
+      "<resolved development credential>",
+      "--video-input",
+      "<input.mp4>",
+      "--output",
+      "<output path>"
+    ],
+    "notes": "Official client accepts H.264 MP4 <=50 MB. Pose estimates alone do not implement cropping or tracking."
+  }
+}

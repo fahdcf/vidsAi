@@ -1,0 +1,438 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-11-02T00:55:51.589148+00:00",
+  "status": "prepared_public_references_credentials_and_account_inspection_pending",
+  "enabled": false,
+  "computerControlError": "failed to write kernel assets: The system cannot find the path specified. (os error 3)",
+  "secretPolicy": "No credentials stored in this JSON or Markdown. Per-model key override or shared key is a future adapter convention, not implemented runtime behavior.",
+  "fallbackPolicy": "Attempt only a compatible input/output model. All orders are stored; no provider calls or automatic application routing are enabled.",
+  "rankedUseCases": {
+    "agent": [
+      "super_vl",
+      "mistral_large_4",
+      "ultra",
+      "deepseek_flash",
+      "gemma_4"
+    ],
+    "writing": [
+      "mistral_large_4",
+      "gemma_4",
+      "super_vl",
+      "deepseek_flash",
+      "lightning"
+    ],
+    "media_understanding": [
+      "nano_omni",
+      "super_vl",
+      "gemma_4",
+      "mistral_large_4",
+      "cosmos_reasoner"
+    ],
+    "translation": [
+      "riva_translate",
+      "gemma_4",
+      "mistral_large_4",
+      "deepseek_flash",
+      "ultra"
+    ],
+    "retrieval": [
+      "embed_35_1b",
+      "embed_35_8b",
+      "rerank_35_8b",
+      "embed_3_1b",
+      "nano_omni"
+    ],
+    "speech_audio_media": [
+      "nano_omni",
+      "magpie",
+      "voicechat",
+      "bnr",
+      "studio_voice",
+      "cosmos_generator",
+      "cosmos_transfer",
+      "active_speaker",
+      "body_pose"
+    ]
+  },
+  "taskRoutes": {
+    "agent_fast": [
+      "lightning",
+      "super_vl",
+      "mistral_large_4",
+      "ultra",
+      "deepseek_flash",
+      "gemma_4"
+    ],
+    "agent_complex": [
+      "super_vl",
+      "mistral_large_4",
+      "ultra",
+      "deepseek_flash",
+      "gemma_4"
+    ],
+    "writing": [
+      "mistral_large_4",
+      "gemma_4",
+      "super_vl",
+      "deepseek_flash",
+      "lightning"
+    ],
+    "media_understanding": [
+      "nano_omni",
+      "super_vl",
+      "gemma_4",
+      "mistral_large_4",
+      "cosmos_reasoner"
+    ],
+    "translation": [
+      "riva_translate",
+      "gemma_4",
+      "mistral_large_4",
+      "deepseek_flash",
+      "ultra"
+    ],
+    "embedding": [
+      "embed_35_1b",
+      "embed_35_8b",
+      "embed_3_1b"
+    ],
+    "reranking": [
+      "rerank_35_8b"
+    ],
+    "media_captioning": [
+      "nano_omni",
+      "super_vl",
+      "gemma_4",
+      "mistral_large_4"
+    ],
+    "english_asr": [
+      "nano_omni"
+    ],
+    "tts": [
+      "magpie"
+    ],
+    "voicechat": [
+      "voicechat"
+    ],
+    "speech_cleanup": [
+      "bnr",
+      "studio_voice"
+    ],
+    "speech_enhancement": [
+      "studio_voice",
+      "bnr"
+    ],
+    "image_generation": [
+      "cosmos_generator"
+    ],
+    "video_generation": [
+      "cosmos_generator"
+    ],
+    "video_transformation": [
+      "cosmos_transfer",
+      "cosmos_generator"
+    ],
+    "speaker_detection": [
+      "active_speaker"
+    ],
+    "pose": [
+      "body_pose"
+    ]
+  },
+  "models": {
+    "super_vl": {
+      "catalogId": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "apiModel": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "credentialEnv": "NVIDIA_SUPER_VL_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "intendedUse": "Complex editing plans and visual reasoning",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": ""
+    },
+    "mistral_large_4": {
+      "catalogId": "mistralai/mistral-large-4-1t-a52b",
+      "apiModel": "mistralai/mistral-large-4-1t-a52b",
+      "credentialEnv": "NVIDIA_MISTRAL_LARGE_4_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/mistralai/mistral-large-4-1t-a52b",
+      "intendedUse": "Planning, writing and image-based review",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": ""
+    },
+    "ultra": {
+      "catalogId": "nvidia/nemotron-3-ultra-550b-a55b",
+      "apiModel": "nvidia/nemotron-3-ultra-550b-a55b",
+      "credentialEnv": "NVIDIA_ULTRA_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3-ultra-550b-a55b",
+      "intendedUse": "Difficult long-context text plans",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": ""
+    },
+    "deepseek_flash": {
+      "catalogId": "deepseek-ai/deepseek-v4.1-flash",
+      "apiModel": "deepseek-ai/deepseek-v4.1-flash",
+      "credentialEnv": "NVIDIA_DEEPSEEK_FLASH_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/deepseek-ai/deepseek-v4.1-flash",
+      "intendedUse": "Reasoning and structured writing",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": ""
+    },
+    "gemma_4": {
+      "catalogId": "google/gemma-4-31b-it",
+      "apiModel": "google/gemma-4-31b-it",
+      "credentialEnv": "NVIDIA_GEMMA_4_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/google/gemma-4-31b-it",
+      "intendedUse": "Multilingual writing and visual analysis",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": ""
+    },
+    "lightning": {
+      "catalogId": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "apiModel": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "credentialEnv": "NVIDIA_LIGHTNING_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b",
+      "intendedUse": "Everyday text editing commands",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Evaluate language and response-format compatibility before activation."
+    },
+    "nano_omni": {
+      "catalogId": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "apiModel": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "credentialEnv": "NVIDIA_NANO_OMNI_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "intendedUse": "Footage descriptions, English transcription and media analysis",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Current model card lists English only; validate media encoding and word timestamps. Do not replace Arabic/Darija transcription automatically."
+    },
+    "cosmos_reasoner": {
+      "catalogId": "nvidia/cosmos3-nano-reasoner",
+      "apiModel": "nvidia/cosmos3-nano-reasoner",
+      "credentialEnv": "NVIDIA_COSMOS_REASONER_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/cosmos3-nano-reasoner",
+      "intendedUse": "Physical actions and motion reasoning",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Specialist for physical-world questions, not a general-purpose media generator."
+    },
+    "riva_translate": {
+      "catalogId": "nvidia/riva-translate-4b-instruct-v2",
+      "apiModel": "nvidia/riva-translate-4b-instruct-v2",
+      "credentialEnv": "NVIDIA_RIVA_TRANSLATE_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "chat",
+      "endpoint": "https://integrate.api.nvidia.com/v1/chat/completions",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/riva-translate-4b-instruct-v2",
+      "intendedUse": "Translation including Arabic/French/English",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Arabic support does not establish Darija quality."
+    },
+    "embed_35_1b": {
+      "catalogId": "nvidia/nemotron-3.5-embed-1b",
+      "apiModel": "nvidia/nemotron-3.5-embed-1b",
+      "credentialEnv": "NVIDIA_EMBED_35_1B_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "embedding",
+      "endpoint": "https://integrate.api.nvidia.com/v1/embeddings",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3_5-embed-1b",
+      "intendedUse": "Primary media-description index",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Native 2048 dimensions. input_type query/passage; images use passage. Never mix embedding spaces."
+    },
+    "embed_35_8b": {
+      "catalogId": "nvidia/nemotron-3.5-embed-8b",
+      "apiModel": "nvidia/nemotron-3.5-embed-8b",
+      "credentialEnv": "NVIDIA_EMBED_35_8B_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "embedding",
+      "endpoint": "https://integrate.api.nvidia.com/v1/embeddings",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3_5-embed-8b",
+      "intendedUse": "Alternative index",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Native 4096 dimensions; use its own matching query vectors and index. Even equal dimensions do not make different model vectors interchangeable."
+    },
+    "rerank_35_8b": {
+      "catalogId": "nvidia/nemotron-3.5-rerank-8b",
+      "apiModel": "nvidia/nemotron-3.5-rerank-8b",
+      "credentialEnv": "NVIDIA_RERANK_35_8B_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "reranking",
+      "endpoint": "https://ai.api.nvidia.com/v1/retrieval/nvidia/nemotron-3.5-rerank-8b/reranking",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3_5-rerank-8b",
+      "intendedUse": "Rank retrieved candidates",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": ""
+    },
+    "embed_3_1b": {
+      "catalogId": "nvidia/nemotron-3-embed-1b",
+      "apiModel": "nvidia/nemotron-3-embed-1b",
+      "credentialEnv": "NVIDIA_EMBED_3_1B_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "embedding",
+      "endpoint": "https://integrate.api.nvidia.com/v1/embeddings",
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-3-embed-1b",
+      "intendedUse": "Older text index alternative",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Text only, 4096-token input limit; separate index required."
+    },
+    "magpie": {
+      "catalogId": "nvidia/magpie-tts-zeroshot",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_MAGPIE_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "pending_access",
+      "endpoint": null,
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/magpie-tts-zeroshot",
+      "intendedUse": "Narration generation",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Catalog shows Apply for Access. Hosted request endpoint, function ID, consent flow and deployed language/version need account inspection. Do not assume the latest self-hosted speech NIM equals this hosted demo."
+    },
+    "voicechat": {
+      "catalogId": "nvidia/nemotron-voicechat",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_VOICECHAT_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "pending_access",
+      "endpoint": null,
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/nemotron-voicechat",
+      "intendedUse": "Future full-duplex voice editor",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Early access. Do not treat as an interchangeable batch TTS or transcription endpoint. Protocol and session URL pending account inspection."
+    },
+    "bnr": {
+      "catalogId": "nvidia/bnr",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_BNR_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "grpc_media",
+      "endpoint": "grpc.nvcf.nvidia.com:443",
+      "functionId": "c95bfe76-c553-4975-bc18-8ef9d6e2666b",
+      "source": "https://build.nvidia.com/nvidia/bnr/api",
+      "intendedUse": "Remove background noise",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "16-bit mono WAV, <=35 MB and <=6 minutes. Use official BNR client with TLS and preview mode."
+    },
+    "studio_voice": {
+      "catalogId": "nvidia/studiovoice",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_STUDIO_VOICE_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "grpc_media",
+      "endpoint": "grpc.nvcf.nvidia.com:443",
+      "functionId": "3f0aeba3-6d91-4465-b8cc-cc2aef355186",
+      "source": "https://build.nvidia.com/nvidia/studiovoice/api",
+      "intendedUse": "Enhance recorded speech",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "16-bit mono WAV, <=32 MB and <=6 minutes. Use official Studio Voice client with TLS and preview mode."
+    },
+    "cosmos_generator": {
+      "catalogId": "nvidia/cosmos3-nano",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_COSMOS_GENERATOR_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "pending_access",
+      "endpoint": null,
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/cosmos3-nano",
+      "intendedUse": "Experimental generated images/video",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Public catalog demo does not establish a callable hosted generation API. Keep request URL/schema blank until verified. Preserve required input screening and output watermarking."
+    },
+    "cosmos_transfer": {
+      "catalogId": "nvidia/cosmos-transfer2.5-2b",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_COSMOS_TRANSFER_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "pending_access",
+      "endpoint": null,
+      "functionId": null,
+      "source": "https://build.nvidia.com/nvidia/cosmos-transfer2_5-2b",
+      "intendedUse": "Controlled video transformation",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Requires suitable control inputs. Hosted invocation URL/schema pending account inspection. Not a text-only replacement for all generation requests."
+    },
+    "active_speaker": {
+      "catalogId": "nvidia/active-speaker-detection",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_ACTIVE_SPEAKER_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "grpc_media",
+      "endpoint": "grpc.nvcf.nvidia.com:443",
+      "functionId": "f286f937-05c4-454b-8312-fba67a2a6fa7",
+      "source": "https://build.nvidia.com/nvidia/active-speaker-detection/api",
+      "intendedUse": "Speaker-aware cuts and framing",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Official client needs video, audio and diarization inputs; H.264 MP4 <=500 MB."
+    },
+    "body_pose": {
+      "catalogId": "nvidia/body-pose",
+      "apiModel": null,
+      "credentialEnv": "NVIDIA_BODY_POSE_API_KEY",
+      "sharedCredentialEnv": "NVIDIA_API_KEY",
+      "family": "grpc_media",
+      "endpoint": "grpc.nvcf.nvidia.com:443",
+      "functionId": "254b3621-bb66-4b7b-9c89-621c352b4d91",
+      "source": "https://build.nvidia.com/nvidia/body-pose/api",
+      "intendedUse": "Pose observations for future reframing",
+      "accountAccess": "not_checked",
+      "liveTested": false,
+      "notes": "Official client accepts H.264 MP4 <=50 MB. Pose estimates alone do not implement cropping or tracking."
+    }
+  }
+}
