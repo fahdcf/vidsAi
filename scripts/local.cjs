@@ -36,12 +36,12 @@ const env = {
 if (c.browserExe) env.BROWSER_EXECUTABLE = c.browserExe;
 for (const line of fs
     .readFileSync(path.join(root, "vidsAi/.env"), "utf8")
-    .split(/\r?\n/)) {
-    const m = line.match(/^([A-Z_]+)=(.*)$/);
+    .split(/[\r\n]+/)) {
+    const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
     if (
         m &&
         m[2].trim() &&
-        /^(WORKER_TOKEN|ASSET_ALLOWED_HOSTS|OPENROUTER_API_KEY|OPENROUTER_BASE_URL|OPENROUTER_MODELS?|OPENROUTER_MODEL[1-5]|GROQ_API_KEY|GROQ_MODEL|GROQ_BASE_URL)$/.test(
+        /^(NVIDIA_[A-Z0-9_]+|WORKER_TOKEN|ASSET_ALLOWED_HOSTS|OPENROUTER_API_KEY|OPENROUTER_BASE_URL|OPENROUTER_MODELS?|OPENROUTER_MODEL[1-5]|GROQ_API_KEY|GROQ_MODEL|GROQ_BASE_URL)$/.test(
             m[1],
         )
     )

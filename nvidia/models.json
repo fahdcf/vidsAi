@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "recordedAt": "2026-11-02T00:55:51.589148+00:00",
-  "status": "development_credentials_created_endpoint_entitlements_and_inference_pending",
-  "enabled": false,
+  "status": "integrated_scene_planning_and_editing_agent_live_smoke_tested",
+  "enabled": true,
   "secretPolicy": "No credentials stored in this JSON or Markdown. Per-model key override or shared key is a future adapter convention, not implemented runtime behavior.",
   "fallbackPolicy": "Attempt only a compatible input/output model. All orders are stored; no provider calls or automatic application routing are enabled.",
   "rankedUseCases": {
@@ -55,39 +55,24 @@
   },
   "taskRoutes": {
     "agent_fast": [
-      "lightning",
       "super_vl",
-      "mistral_large_4",
-      "ultra",
-      "deepseek_flash",
-      "gemma_4"
+      "ultra"
     ],
     "agent_complex": [
       "super_vl",
-      "mistral_large_4",
-      "ultra",
-      "deepseek_flash",
-      "gemma_4"
+      "ultra"
     ],
     "writing": [
-      "mistral_large_4",
-      "gemma_4",
       "super_vl",
-      "deepseek_flash",
       "lightning"
     ],
     "media_understanding": [
       "nano_omni",
       "super_vl",
-      "gemma_4",
-      "mistral_large_4",
-      "cosmos_reasoner"
+      "mistral_large_4"
     ],
     "translation": [
       "riva_translate",
-      "gemma_4",
-      "mistral_large_4",
-      "deepseek_flash",
       "ultra"
     ],
     "embedding": [
@@ -101,7 +86,6 @@
     "media_captioning": [
       "nano_omni",
       "super_vl",
-      "gemma_4",
       "mistral_large_4"
     ],
     "english_asr": [
@@ -149,13 +133,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3.5-super-vl-120b-a12b",
       "intendedUse": "Complex editing plans and visual reasoning",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": true
     },
     "mistral_large_4": {
       "catalogId": "mistralai/mistral-large-4-1t-a52b",
@@ -167,13 +152,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/mistralai/mistral-large-4-1t-a52b",
       "intendedUse": "Planning, writing and image-based review",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "ultra": {
       "catalogId": "nvidia/nemotron-3-ultra-550b-a55b",
@@ -185,13 +171,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3-ultra-550b-a55b",
       "intendedUse": "Difficult long-context text plans",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": true
     },
     "deepseek_flash": {
       "catalogId": "deepseek-ai/deepseek-v4.1-flash",
@@ -203,13 +190,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/deepseek-ai/deepseek-v4.1-flash",
       "intendedUse": "Reasoning and structured writing",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "not_confirmed",
+      "liveTested": true,
       "notes": "",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "gemma_4": {
       "catalogId": "google/gemma-4-31b-it",
@@ -221,13 +209,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/google/gemma-4-31b-it",
       "intendedUse": "Multilingual writing and visual analysis",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "not_confirmed",
+      "liveTested": true,
       "notes": "",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "lightning": {
       "catalogId": "nvidia/nemotron-3.5-lightning-30b-a3b",
@@ -239,13 +228,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3.5-lightning-30b-a3b",
       "intendedUse": "Everyday text editing commands",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Evaluate language and response-format compatibility before activation.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": true
     },
     "nano_omni": {
       "catalogId": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
@@ -257,13 +247,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
       "intendedUse": "Footage descriptions, English transcription and media analysis",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Current model card lists English only; validate media encoding and word timestamps. Do not replace Arabic/Darija transcription automatically.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "cosmos_reasoner": {
       "catalogId": "nvidia/cosmos3-nano-reasoner",
@@ -275,13 +266,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/cosmos3-nano-reasoner",
       "intendedUse": "Physical actions and motion reasoning",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "not_confirmed",
+      "liveTested": true,
       "notes": "Specialist for physical-world questions, not a general-purpose media generator.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "riva_translate": {
       "catalogId": "nvidia/riva-translate-4b-instruct-v2",
@@ -293,13 +285,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/riva-translate-4b-instruct-v2",
       "intendedUse": "Translation including Arabic/French/English",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Arabic support does not establish Darija quality.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "embed_35_1b": {
       "catalogId": "nvidia/nemotron-3.5-embed-1b",
@@ -311,13 +304,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3_5-embed-1b",
       "intendedUse": "Primary media-description index",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Native 2048 dimensions. input_type query/passage; images use passage. Never mix embedding spaces.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "embed_35_8b": {
       "catalogId": "nvidia/nemotron-3.5-embed-8b",
@@ -329,13 +323,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3_5-embed-8b",
       "intendedUse": "Alternative index",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Native 4096 dimensions; use its own matching query vectors and index. Even equal dimensions do not make different model vectors interchangeable.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "rerank_35_8b": {
       "catalogId": "nvidia/nemotron-3.5-rerank-8b",
@@ -347,13 +342,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3_5-rerank-8b",
       "intendedUse": "Rank retrieved candidates",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "embed_3_1b": {
       "catalogId": "nvidia/nemotron-3-embed-1b",
@@ -365,13 +361,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-3-embed-1b",
       "intendedUse": "Older text index alternative",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Text only, 4096-token input limit; separate index required.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "magpie": {
       "catalogId": "nvidia/magpie-tts-zeroshot",
@@ -383,13 +380,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/magpie-tts-zeroshot",
       "intendedUse": "Narration generation",
-      "accountAccess": "not_checked",
+      "accountAccess": "pending_hosted_contract",
       "liveTested": false,
       "notes": "Catalog shows Apply for Access. Hosted request endpoint, function ID, consent flow and deployed language/version need account inspection. Do not assume the latest self-hosted speech NIM equals this hosted demo.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "voicechat": {
       "catalogId": "nvidia/nemotron-voicechat",
@@ -401,13 +399,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/nemotron-voicechat",
       "intendedUse": "Future full-duplex voice editor",
-      "accountAccess": "not_checked",
+      "accountAccess": "pending_hosted_contract",
       "liveTested": false,
       "notes": "Early access. Do not treat as an interchangeable batch TTS or transcription endpoint. Protocol and session URL pending account inspection.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "bnr": {
       "catalogId": "nvidia/bnr",
@@ -419,13 +418,14 @@
       "functionId": "c95bfe76-c553-4975-bc18-8ef9d6e2666b",
       "source": "https://build.nvidia.com/nvidia/bnr/api",
       "intendedUse": "Remove background noise",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "16-bit mono WAV, <=35 MB and <=6 minutes. Use official BNR client with TLS and preview mode.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "studio_voice": {
       "catalogId": "nvidia/studiovoice",
@@ -437,13 +437,14 @@
       "functionId": "3f0aeba3-6d91-4465-b8cc-cc2aef355186",
       "source": "https://build.nvidia.com/nvidia/studiovoice/api",
       "intendedUse": "Enhance recorded speech",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "16-bit mono WAV, <=32 MB and <=6 minutes. Use official Studio Voice client with TLS and preview mode.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "cosmos_generator": {
       "catalogId": "nvidia/cosmos3-nano",
@@ -455,13 +456,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/cosmos3-nano",
       "intendedUse": "Experimental generated images/video",
-      "accountAccess": "not_checked",
+      "accountAccess": "pending_hosted_contract",
       "liveTested": false,
       "notes": "Public catalog demo does not establish a callable hosted generation API. Keep request URL/schema blank until verified. Preserve required input screening and output watermarking.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "cosmos_transfer": {
       "catalogId": "nvidia/cosmos-transfer2.5-2b",
@@ -473,13 +475,14 @@
       "functionId": null,
       "source": "https://build.nvidia.com/nvidia/cosmos-transfer2_5-2b",
       "intendedUse": "Controlled video transformation",
-      "accountAccess": "not_checked",
+      "accountAccess": "pending_hosted_contract",
       "liveTested": false,
       "notes": "Requires suitable control inputs. Hosted invocation URL/schema pending account inspection. Not a text-only replacement for all generation requests.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "active_speaker": {
       "catalogId": "nvidia/active-speaker-detection",
@@ -491,13 +494,14 @@
       "functionId": "f286f937-05c4-454b-8312-fba67a2a6fa7",
       "source": "https://build.nvidia.com/nvidia/active-speaker-detection/api",
       "intendedUse": "Speaker-aware cuts and framing",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "response_received",
+      "liveTested": true,
       "notes": "Official client needs video, audio and diarization inputs; H.264 MP4 <=500 MB.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     },
     "body_pose": {
       "catalogId": "nvidia/body-pose",
@@ -509,13 +513,14 @@
       "functionId": "254b3621-bb66-4b7b-9c89-621c352b4d91",
       "source": "https://build.nvidia.com/nvidia/body-pose/api",
       "intendedUse": "Pose observations for future reframing",
-      "accountAccess": "not_checked",
-      "liveTested": false,
+      "accountAccess": "not_confirmed",
+      "liveTested": true,
       "notes": "Official client accepts H.264 MP4 <=50 MB. Pose estimates alone do not implement cropping or tracking.",
       "credentialCreated": true,
       "credentialActiveVerified": true,
       "credentialExpirationPolicy": "never",
-      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z"
+      "credentialProviderDisplayedExpiration": "2126-11-02T01:03:24.000Z",
+      "activeInApp": false
     }
   },
   "credentialSetup": {
@@ -527,6 +532,62 @@
     "providerDisplayedExpirationYear": 2126,
     "supersededThirtyDayKeysRetired": 2,
     "scope": "General NVIDIA Build serverless credentials labelled per model; model-specific entitlements not verified.",
-    "liveInferenceTested": false
+    "liveInferenceTested": true,
+    "liveInferenceScope": "Partial availability and synthetic smoke checks; four hosted contracts pending"
+  },
+  "validatedUseCases": {
+    "agent": [
+      "super_vl",
+      "ultra"
+    ],
+    "writing": [
+      "super_vl",
+      "lightning"
+    ],
+    "media_understanding": [
+      "nano_omni",
+      "super_vl",
+      "mistral_large_4"
+    ],
+    "translation": [
+      "riva_translate",
+      "ultra"
+    ],
+    "retrieval": {
+      "embedding": [
+        "embed_35_1b",
+        "embed_35_8b",
+        "embed_3_1b"
+      ],
+      "reranking": [
+        "rerank_35_8b"
+      ],
+      "description": [
+        "nano_omni"
+      ]
+    },
+    "speech_audio_media": {
+      "noise_removal": [
+        "bnr",
+        "studio_voice"
+      ],
+      "speech_enhancement": [
+        "studio_voice",
+        "bnr"
+      ],
+      "speaker_detection": [
+        "active_speaker"
+      ]
+    }
+  },
+  "integration": {
+    "activeTasks": [
+      "agent_fast",
+      "agent_complex",
+      "writing"
+    ],
+    "otherTasks": "Stored for later; no new product workflows added",
+    "reasoning": "Disabled for Nemotron in current structured tasks",
+    "qualityBoundary": "Synthetic smoke tests, not a comprehensive quality benchmark. Vision tests are a red-square image, not transcription or video understanding."
   }
 }

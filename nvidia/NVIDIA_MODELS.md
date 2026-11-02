@@ -1,6 +1,6 @@
 # NVIDIA models for VidsAI
 
-Updated 2 November 2026. **21 development credentials created and saved locally with “Never Expire”; endpoint entitlements and live requests not verified.**
+Updated 2 November 2026. **NVIDIA now powers scene planning and editing commands.** See [live validation and current model order](LIVE_VALIDATION.md) and [machine-readable results](LIVE_RESULTS.json). All 21 credentials use the provider's “Never Expire” policy.
 
 ## Current completion boundary
 
@@ -8,9 +8,9 @@ The signed-in NVIDIA Build account was inspected through Chrome mouse and keyboa
 
 The initial 30-day Super VL and Mistral keys were replaced, their replacements were saved, and those two superseded keys were deleted. Other existing account keys were preserved. Key values are absent from this guide, the registry and the request examples.
 
-These are general NVIDIA Build serverless credentials labelled for each model. Creating a key does not grant model-specific early access. No live inference requests were made; model entitlement and request compatibility remain unverified.
+These are general NVIDIA Build serverless credentials labelled for each model. Creating a key does not grant model-specific early access. Live checks subsequently exercised 17 model endpoints; four hosted contracts remain unavailable for testing. Results vary by task and are recorded separately.
 
-The running application is unchanged. This inventory does not enable NVIDIA, implement any provider adapter or replace existing provider keys. `NVIDIA_PROVIDER_ENABLED=false` is an inventory flag for future integration; the current application does not read it.
+With `NVIDIA_PROVIDER_ENABLED=true`, Laravel scene planning uses Super VL → Lightning, and the editing worker uses Super VL → Ultra. Per-model credentials and task routes are consumed by these adapters. The prior OpenRouter/Gemini/Groq paths are bypassed while NVIDIA is enabled and retained for rollback. Other task settings remain stored for future features.
 
 ## Files and credentials
 
@@ -18,11 +18,13 @@ The running application is unchanged. This inventory does not enable NVIDIA, imp
 - `models.env.example` contains every new setting with blank credentials.
 - `models.json` records all 21 unique catalog entries, six ranked lists, compatible task routes, source URLs and account-verification status.
 - `requests.json` records per-model HTTP request shapes or official gRPC client arguments. Unknown hosted request contracts are explicitly blank.
-- Each populated `NVIDIA_<ALIAS>_API_KEY` has matching `_KEY_ID`, `_KEY_LABEL`, `_KEY_EXPIRATION_POLICY=never` and `_KEY_DISPLAYED_EXPIRATION` metadata in the private `.env`. The shared `NVIDIA_API_KEY` uses the current Mistral key. `NVIDIA_CREDENTIAL_STATUS=created_not_live_tested` records setup completion without claiming an inference check.
-- Public examples use the `NVIDIA_API_KEY` variable. A shared credential may cover multiple endpoints, subject to account permissions. The proposed future resolver should prefer a nonempty per-model `NVIDIA_<ALIAS>_API_KEY`, otherwise use `NVIDIA_API_KEY`. This resolver is not yet implemented.
+- Each populated `NVIDIA_<ALIAS>_API_KEY` has matching `_KEY_ID`, `_KEY_LABEL`, `_KEY_EXPIRATION_POLICY=never` and `_KEY_DISPLAYED_EXPIRATION` metadata in the private `.env`. `NVIDIA_CREDENTIAL_STATUS=live_smoke_tested_partial_availability` distinguishes these development checks from comprehensive validation.
+- The editing worker resolves a per-model credential, then the shared key. Laravel resolves the registry's credential variables through cached configuration. No credentials enter client-side assets.
 - A key variable, catalog name or documented endpoint is not evidence of account entitlement or a successful live call. Early access cannot be bypassed by creating additional keys.
 
-## All six recommendation lists
+## Original six recommendation lists
+
+These original orders are retained for traceability. Use `validatedUseCases` in `models.json` and `LIVE_VALIDATION.md` for current recommendations. Only the three active task routes listed above are integrated.
 
 ### 1. Editing assistant / complex planning
 
@@ -92,7 +94,9 @@ This list contains cooperating specialists. Its order is preserved, but it is no
 
 This list contains cooperating specialists. Its order is preserved, but it is not one executable fallback chain. Use the task routes below.
 
-## Primary models and every compatible fallback
+## Stored routes and compatible fallback candidates
+
+The original table below describes candidate routes. The active agent routes have been narrowed to Super VL → Ultra, and writing to Super VL → Lightning after live checks. Other candidates remain inactive.
 
 | Task | Primary | Fallbacks in order |
 | --- | --- | --- |
@@ -156,7 +160,7 @@ Every catalog entry has an entry in `requests.json`. HTTP examples contain no cr
 
 ## Remaining integration and live verification
 
-1. Check each endpoint entitlement. For early-access models, record access status rather than claiming success from a generic key.
+1. Resolve the four pending hosted contracts and access requirements. For early-access models, record access status rather than claiming success from a generic key.
 2. Capture the actual generated request for each hosted version; fill missing Magpie/Voicechat/Cosmos URLs, schemas and function IDs only from observed references. The inventory currently contains 13 HTTP examples, four gRPC client contracts and four pending hosted contracts.
-3. Run scoped development inference checks and record the responses. Key creation and local configuration validation do not establish model availability or output quality.
-4. Implement and verify the provider adapters and compatible fallback routes in a later app update. Enable NVIDIA only after those checks. Current providers and workflows remain active until then.
+3. Broaden the smoke checks into quality evaluations using representative footage, multilingual narration, retrieval relevance and latency samples.
+4. Add adapters for future features only when the product workflow and its quality checks exist. Deepgram, Pexels, WAN and other media services remain separate.

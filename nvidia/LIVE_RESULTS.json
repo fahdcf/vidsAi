@@ -1,0 +1,334 @@
+{
+  "http": [
+    {
+      "case": "agent",
+      "alias": "super_vl",
+      "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "http": 200,
+      "passed": true,
+      "seconds": 2.78
+    },
+    {
+      "case": "agent",
+      "alias": "mistral_large_4",
+      "model": "mistralai/mistral-large-4-1t-a52b",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.05
+    },
+    {
+      "case": "agent",
+      "alias": "ultra",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "http": 200,
+      "passed": true,
+      "seconds": 21.06
+    },
+    {
+      "case": "agent",
+      "alias": "deepseek_flash",
+      "model": "deepseek-ai/deepseek-v4.1-flash",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.05
+    },
+    {
+      "case": "agent",
+      "alias": "gemma_4",
+      "model": "google/gemma-4-31b-it",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.06
+    },
+    {
+      "case": "writing",
+      "alias": "mistral_large_4",
+      "model": "mistralai/mistral-large-4-1t-a52b",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.03
+    },
+    {
+      "case": "writing",
+      "alias": "gemma_4",
+      "model": "google/gemma-4-31b-it",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.06
+    },
+    {
+      "case": "writing",
+      "alias": "super_vl",
+      "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "http": 200,
+      "passed": true,
+      "seconds": 4.95
+    },
+    {
+      "case": "writing",
+      "alias": "deepseek_flash",
+      "model": "deepseek-ai/deepseek-v4.1-flash",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.05
+    },
+    {
+      "case": "writing",
+      "alias": "lightning",
+      "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "http": 200,
+      "passed": false,
+      "error": "JSONDecodeError: Expecting value: line 1 column 1 (char 0)",
+      "seconds": 16.89
+    },
+    {
+      "case": "media_understanding",
+      "alias": "nano_omni",
+      "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+      "http": 200,
+      "passed": true,
+      "seconds": 2.89
+    },
+    {
+      "case": "media_understanding",
+      "alias": "super_vl",
+      "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "http": 200,
+      "passed": true,
+      "seconds": 2.72
+    },
+    {
+      "case": "media_understanding",
+      "alias": "gemma_4",
+      "model": "google/gemma-4-31b-it",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.03
+    },
+    {
+      "case": "media_understanding",
+      "alias": "mistral_large_4",
+      "model": "mistralai/mistral-large-4-1t-a52b",
+      "http": 200,
+      "passed": true,
+      "seconds": 22.27
+    },
+    {
+      "case": "media_understanding",
+      "alias": "cosmos_reasoner",
+      "model": "nvidia/cosmos3-nano-reasoner",
+      "http": 404,
+      "passed": false,
+      "error": "RuntimeError: 404 page not found\n",
+      "seconds": 0.22
+    },
+    {
+      "case": "translation",
+      "alias": "riva_translate",
+      "model": "nvidia/riva-translate-4b-instruct-v2",
+      "http": 200,
+      "passed": true,
+      "seconds": 0.51
+    },
+    {
+      "case": "translation",
+      "alias": "gemma_4",
+      "model": "google/gemma-4-31b-it",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.02
+    },
+    {
+      "case": "translation",
+      "alias": "mistral_large_4",
+      "model": "mistralai/mistral-large-4-1t-a52b",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.05
+    },
+    {
+      "case": "translation",
+      "alias": "deepseek_flash",
+      "model": "deepseek-ai/deepseek-v4.1-flash",
+      "http": 0,
+      "passed": false,
+      "error": "RuntimeError: Network timeout or connection error",
+      "seconds": 30.03
+    },
+    {
+      "case": "translation",
+      "alias": "ultra",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "http": 200,
+      "passed": true,
+      "seconds": 4.42
+    },
+    {
+      "case": "embedding",
+      "alias": "embed_35_1b",
+      "model": "nvidia/nemotron-3.5-embed-1b",
+      "http": 200,
+      "passed": true,
+      "seconds": 0.44
+    },
+    {
+      "case": "embedding",
+      "alias": "embed_35_8b",
+      "model": "nvidia/nemotron-3.5-embed-8b",
+      "http": 200,
+      "passed": true,
+      "seconds": 0.53
+    },
+    {
+      "case": "reranking",
+      "alias": "rerank_35_8b",
+      "model": "nvidia/nemotron-3.5-rerank-8b",
+      "http": 200,
+      "passed": true,
+      "seconds": 0.81
+    },
+    {
+      "case": "embedding",
+      "alias": "embed_3_1b",
+      "model": "nvidia/nemotron-3-embed-1b",
+      "http": 200,
+      "passed": true,
+      "seconds": 0.28
+    }
+  ],
+  "grpc": [
+    {
+      "alias": "bnr",
+      "passed": true,
+      "exit": 0,
+      "seconds": 4.25
+    },
+    {
+      "alias": "studio_voice",
+      "passed": true,
+      "exit": 0,
+      "seconds": 2.17
+    },
+    {
+      "alias": "active_speaker",
+      "passed": true,
+      "exit": 0,
+      "seconds": 17.98
+    },
+    {
+      "alias": "body_pose",
+      "passed": false,
+      "error": "40 second deadline exceeded",
+      "seconds": 40.03
+    }
+  ],
+  "actualScenePlanner": [
+    {
+      "alias": "super_vl",
+      "lang": "en",
+      "passed": true,
+      "seconds": 2.5
+    },
+    {
+      "alias": "super_vl",
+      "lang": "fr",
+      "passed": true,
+      "seconds": 4.73
+    },
+    {
+      "alias": "super_vl",
+      "lang": "ar",
+      "passed": true,
+      "seconds": 2.51
+    },
+    {
+      "alias": "lightning",
+      "lang": "en",
+      "passed": true,
+      "seconds": 4.24
+    },
+    {
+      "alias": "lightning",
+      "lang": "fr",
+      "passed": true,
+      "seconds": 5.22
+    },
+    {
+      "alias": "lightning",
+      "lang": "ar",
+      "passed": true,
+      "seconds": 5.02
+    }
+  ],
+  "actualEditingPlanner": [
+    {
+      "alias": "SUPER_VL",
+      "model": "nvidia/nemotron-3.5-super-vl-120b-a12b",
+      "passed": true,
+      "seconds": 0.828
+    },
+    {
+      "alias": "LIGHTNING",
+      "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+      "passed": false,
+      "seconds": 1.23
+    },
+    {
+      "alias": "ULTRA",
+      "model": "nvidia/nemotron-3-ultra-550b-a55b",
+      "passed": true,
+      "seconds": 1.126
+    }
+  ],
+  "pendingHostedContracts": [
+    "magpie",
+    "voicechat",
+    "cosmos_generator",
+    "cosmos_transfer"
+  ],
+  "limitations": [
+    "Image smoke test does not establish video/ASR quality",
+    "Single-passage embedding/reranking checks establish response shape, not search relevance",
+    "Riva initial prompt translated an instruction prefix; use translation-specific prompt before future integration",
+    "Body Pose exceeded 40-second deadline",
+    "Lightning failed actual editing planner; excluded there despite working for scenes"
+  ],
+  "applicationVerification": {
+    "phpTests": 22,
+    "phpAssertions": 98,
+    "nodeTests": 10,
+    "typecheck": "passed",
+    "liveSceneFallback": "passed",
+    "liveAgentFallback": "passed",
+    "browser": {
+      "projectId": "5",
+      "checks": [
+        "registration",
+        "React dashboard",
+        "React editor",
+        "manual caption edit",
+        "undo",
+        "redo",
+        "multi-step assistant",
+        "reload persistence",
+        "private media upload",
+        "ordered autosave",
+        "real queued export",
+        "authorized MP4 download",
+        "mobile layout",
+        "no browser errors"
+      ],
+      "downloadBytes": 48114
+    },
+    "browserAssistantSource": "nvidia/nemotron-3.5-super-vl-120b-a12b"
+  }
+}

@@ -604,7 +604,7 @@ class SceneGenerationService
 
             $providers = $this->getSceneGenerationProviders();
             if ($providers === []) {
-                throw new \RuntimeException('No scene generation providers are configured. Add OPENROUTER_API_KEY and model(s), or GEMINI_API_KEY as a final fallback.');
+                throw new \RuntimeException('No scene generation providers are configured. Configure the enabled provider and its model credentials.');
             }
 
             $lastError = null;
@@ -625,6 +625,9 @@ class SceneGenerationService
                 try {
                     $rawText = $this->requestSceneGenerationFromProvider($provider, $prompt);
                     $parsed = $this->parseSceneGenerationResponse($rawText, $provider['label'], $provider['model']);
+                    if ($provider['provider'] === 'nvidia') {
+                        $this->validateNvidiaScenes($parsed, $script, $transcriptData);
+                    }
 
                     $this->logToCustomFile('✅ Scene generation provider succeeded', [
                         'provider' => $provider['label'],
@@ -687,6 +690,15 @@ class SceneGenerationService
     private function getSceneGenerationProviders(): array
     {
         $providers = [];
+        if (config('nvidia.enabled')) {
+            foreach (config('nvidia.writing_models', []) as $id) {
+                $settings = config('nvidia.models', [])[$id] ?? [];
+                if (!empty($settings['key']) && !empty($settings['model'])) {
+                    $providers[] = ['provider' => 'nvidia', 'label' => 'NVIDIA', 'model' => $id];
+                }
+            }
+            return $providers;
+        }
         $openRouterApiKey = trim((string) config('services.openrouter.api_key'));
         $openRouterModels = config('services.openrouter.models', []);
 
@@ -731,10 +743,50 @@ class SceneGenerationService
     private function requestSceneGenerationFromProvider(array $provider, string $prompt): string
     {
         return match ($provider['provider']) {
+            'nvidia' => $this->requestNvidiaSceneGeneration($provider['model'], $prompt),
             'openrouter' => $this->requestOpenRouterSceneGeneration($provider['model'], $prompt),
             'gemini' => $this->requestGeminiSceneGeneration($provider['model'], $prompt),
             default => throw new \RuntimeException('Unsupported scene generation provider: ' . $provider['provider']),
         };
+    }
+
+    private function requestNvidiaSceneGeneration(string $model, string $prompt): string
+    {
+        $settings = config('nvidia.models')[$model];
+        $response = Http::withToken($settings['key'])->acceptJson()
+            ->connectTimeout(5)->timeout(config('nvidia.timeout', 12))
+            ->post(config('nvidia.endpoint'), [
+                'model' => $settings['model'], 'messages' => [['role' => 'user', 'content' => $prompt]],
+                'temperature' => 0, 'max_tokens' => 3000, 'stream' => false,
+                ... (str_starts_with($model, 'nvidia/nemotron-') ? ['chat_template_kwargs' => ['enable_thinking' => false]] : []),
+            ]);
+        if (!$response->successful()) {
+            // Provider bodies may contain request details; keep errors credential-free.
+            throw new \RuntimeException('NVIDIA '.$model.' HTTP '.$response->status());
+        }
+        $text = $this->normalizeProviderTextContent($response->json('choices.0.message.content'));
+        if ($text === '') throw new \RuntimeException('NVIDIA '.$model.' returned no final content');
+        return $text;
+    }
+
+    private function validateNvidiaScenes(array $parsed, string $script, array $transcript): void
+    {
+        if (empty($parsed['phrases']) || empty($parsed['subtitles_script'])) throw new \RuntimeException('NVIDIA returned empty scenes or captions');
+        $end = 0.0;
+        foreach ($parsed['phrases'] as $phrase) {
+            foreach (['phrase','keywords','start_time','end_time','duration_seconds','prompt'] as $field) {
+                if (!isset($phrase[$field])) throw new \RuntimeException('NVIDIA scene missing '.$field);
+            }
+            if (!is_array($phrase['keywords']) || empty($phrase['keywords']) || !is_string($phrase['phrase']) || !is_string($phrase['prompt'])) throw new \RuntimeException('NVIDIA scene content has invalid types');
+            foreach (['start_time','end_time','duration_seconds'] as $field) if (!is_numeric($phrase[$field]) || !is_finite((float)$phrase[$field])) throw new \RuntimeException('NVIDIA scene timing has invalid types');
+            if (abs($phrase['start_time']-$end)>.15 || $phrase['duration_seconds']<=0 || abs($phrase['end_time']-$phrase['start_time']-$phrase['duration_seconds'])>.15) throw new \RuntimeException('NVIDIA scene timing is inconsistent');
+            $end=(float)$phrase['end_time'];
+        }
+        $words=$transcript['words']??[];
+        $expected=(float)(end($words)['end']??0);
+        if ($expected>0 && abs($end-$expected)>.15) throw new \RuntimeException('NVIDIA scenes do not cover narration');
+        $normalize=fn($text)=>preg_replace('/[\p{P}\p{Z}\s]+/u','',mb_strtolower($text));
+        if ($normalize(implode(' ',array_column($parsed['phrases'],'phrase')))!==$normalize($script)) throw new \RuntimeException('NVIDIA changed script wording');
     }
 
     private function requestOpenRouterSceneGeneration(string $model, string $prompt): string
