@@ -1,5 +1,6 @@
 import { documentSchema, type Document } from "@vidsai/contracts";
 import { renderBrowserMp4 } from "./render";
+import { inspectBrowserMedia, type BrowserMediaKind } from "./inspect-media";
 
 const fixtureInput = document.querySelector<HTMLInputElement>("#fixture")!;
 const exportButton = document.querySelector<HTMLButtonElement>("#export")!;
@@ -42,9 +43,14 @@ exportButton.addEventListener("click", async () => {
             throw new Error("Select the three-second VidsAI reference fixture.");
         }
         const base = manifest.webkitRelativePath.slice(0, -"project.json".length);
-        const resolve = (src: string) => {
+        const inspected = new Map<File, BrowserMediaKind>();
+        const resolve = async (src: string, kind: BrowserMediaKind) => {
             const file = files.find(({ webkitRelativePath }) => webkitRelativePath === base + src);
             if (!file) throw new Error(`Missing fixture asset: ${src}`);
+            if (inspected.get(file) !== kind) {
+                await inspectBrowserMedia(file, kind, controller.signal);
+                inspected.set(file, kind);
+            }
             let url = urls.get(file);
             if (!url) {
                 url = URL.createObjectURL(file);
@@ -52,9 +58,11 @@ exportButton.addEventListener("click", async () => {
             }
             return url;
         };
-        doc.tracks.video.forEach((clip) => { clip.clip_url = resolve(clip.clip_url); });
-        doc.tracks.audio.forEach((track) => { track.url = resolve(track.url); });
-        doc.tracks.overlays.forEach((overlay) => { overlay.src = resolve(overlay.src); });
+        for (const clip of doc.tracks.video) {
+            clip.clip_url = await resolve(clip.clip_url, clip.media_type === "video" ? "video" : "image");
+        }
+        for (const track of doc.tracks.audio) track.url = await resolve(track.url, "audio");
+        for (const overlay of doc.tracks.overlays) overlay.src = await resolve(overlay.src, "image");
 
         const mp4 = await renderBrowserMp4(doc, controller.signal, (progress) => {
             status.textContent = `Rendering locally… ${Math.round(progress * 100)}%`;

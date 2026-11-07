@@ -14,6 +14,14 @@ export const browserRenderProfile = {
     maxActiveOverlays: 2,
     maxCaptions: 200,
     maxTimedWords: 1000,
+    maxSourceBytes: 100 * 1024 * 1024,
+    maxProjectSourceBytes: 300 * 1024 * 1024,
+    maxSourceSeconds: 120,
+    maxSourceVideoLongEdge: 1920,
+    maxSourceVideoShortEdge: 1080,
+    maxImagePixels: 4_000_000,
+    maxImageEdge: 4096,
+    maxAudioRate: 48000,
 } as const;
 
 export type BrowserRenderIssue = {
