@@ -3,7 +3,7 @@ const path = require("node:path");
 const assert = require("node:assert/strict");
 const { chromium } = require("playwright");
 const root = path.resolve(__dirname, ".."),
-    runtime = path.resolve(root, "../runtime");
+    runtime = process.env.UI_TEST_RUNTIME || path.resolve(root, "../runtime");
 const config = JSON.parse(
     fs.readFileSync(path.join(runtime, "node-local-config.json")),
 );
@@ -21,7 +21,12 @@ async function main() {
     });
     const errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
-    const report = { origin, checks: [], screenshots: [] };
+    const report = {
+        origin,
+        providers: process.env.UI_TEST_PROVIDER_MODE || "configured",
+        checks: [],
+        screenshots: [],
+    };
     let count = 0;
     const directory = path.join(runtime, "ui-verification");
     fs.mkdirSync(directory, { recursive: true });
@@ -182,7 +187,7 @@ async function main() {
                 .getByRole("heading", { name: "Review your scenes" })
                 .waitFor();
             report.checks.push(
-                "Grouped creation form, canvas selection and live Deepgram/NVIDIA/Pexels generation",
+                "Grouped creation form, canvas selection, transcription, planning and stock footage",
             );
             count = await page
                 .getByRole("button", { name: /^Review scene \d+$/ })
@@ -359,11 +364,12 @@ async function main() {
             .click();
         await page.locator("input[name=size]").fill("56");
         await saveClick("Save caption style");
-        await page.getByText(/Saved.*Revision/).waitFor();
+        const saved = page.getByText("Saved", { exact: true });
+        await saved.waitFor();
         await page.getByRole("button", { name: "Undo", exact: true }).click();
         await page.getByRole("button", { name: "Redo", exact: true }).waitFor();
         await page.getByRole("button", { name: "Redo", exact: true }).click();
-        await page.getByText(/Saved.*Revision/).waitFor();
+        await saved.waitFor();
         assert.equal(
             (await state()).edit_state.tracks.subtitles[0].config.fontSize,
             "56px",
@@ -384,7 +390,7 @@ async function main() {
                         exact: true,
                     }),
                 );
-            await page.getByText(/Saved.*Revision/).waitFor();
+            await saved.waitFor();
             const after = (await state()).edit_state.tracks.video.map(
                 (c) => c.id,
             );
@@ -409,7 +415,7 @@ async function main() {
         const apply = page.getByRole("button", { name: /^Apply \d+ changes?$/ });
         await apply.waitFor({ timeout: 80000 });
         await apply.click();
-        await page.getByText(/Saved.*Revision/).waitFor();
+        await saved.waitFor();
         await capture("editor-desktop");
         report.checks.push("Assistant proposal and explicit application");
         const [submitted] = await Promise.all([
@@ -480,7 +486,10 @@ async function main() {
                 [`/projects/${report.projectId}/editor`, "editor"],
             ]) {
                 await page.goto(origin + route);
-                await page.locator("h1").waitFor();
+                if (name === "editor")
+                    await page.getByRole("heading", { name: "Timeline" }).waitFor();
+                else
+                    await page.getByRole("heading", { level: 1 }).waitFor();
                 await capture(name + "-" + viewport.width);
             }
             if (viewport.width === 390) {

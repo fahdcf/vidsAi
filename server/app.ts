@@ -16,7 +16,7 @@ import {
     validSignature,
     rotateSession,
 } from "./security";
-import { document, commit, renderSnapshot } from "./document";
+import { document, commit, normalizeExisting, renderSnapshot } from "./document";
 import { enqueue, worker, mediaFile } from "./jobs";
 import { music, stock } from "./providers";
 import { requestReset, resetPassword } from "./recovery";
@@ -459,8 +459,28 @@ app.get("/processing/:id/status", (req, res) => {
 app.post("/projects/:id/retry", (req, res) => {
     const p = own(req, req.params.id);
     if (p.status !== "failed") fail(409, "Only failed projects can retry");
-    update("projects", p.id, { status: "processing", error_message: null });
-    enqueue(p.id, "generate");
+    const lastJob = db.prepare(
+        "SELECT task, status FROM node_jobs WHERE project_id=? AND task IN ('generate','render') ORDER BY rowid DESC LIMIT 1",
+    ).get(p.id) as { task: string; status: string } | undefined;
+    const latestExport = db.prepare(
+        "SELECT snapshot, status FROM video_exports WHERE project_id=? ORDER BY rowid DESC LIMIT 1",
+    ).get(p.id) as { snapshot: string; status: string } | undefined;
+    const generationFailed = lastJob?.task === "generate" && lastJob.status === "failed";
+    if (!generationFailed && latestExport?.status === "failed") {
+        const id = crypto.randomUUID();
+        queueExport(p, id, normalizeExisting(latestExport.snapshot));
+        return res.status(202).json({
+            success: true,
+            export_id: id,
+            redirect: `/projects/${p.id}/editor`,
+        });
+    }
+    if (lastJob?.task === "render")
+        fail(409, "No failed export is available to retry");
+    db.transaction(() => {
+        update("projects", p.id, { status: "processing", error_message: null });
+        enqueue(p.id, "generate");
+    })();
     res.json({ success: true, redirect: `/processing/${p.id}` });
 });
 app.get("/projects/:id/edit-state", (req, res) => {
@@ -536,7 +556,7 @@ app.post("/review/:id/confirm", (req, res) => {
         }
         const old = p.edit_state ? document(p) : null;
         update("projects", p.id, { edit_state: null });
-        const next = document(project(p.id));
+        let next = document(project(p.id), old?.fps);
         if (old) {
             next.revision = old.revision + 1;
             next.version = next.revision;
@@ -546,7 +566,25 @@ app.post("/review/:id/confirm", (req, res) => {
             next.tracks.motion_graphics = old.tracks.motion_graphics;
             next.width = old.width;
             next.height = old.height;
+            const clipsById = new Map(next.tracks.video.map((clip) => [clip.id, clip]));
+            const video = [];
+            for (const previous of old.tracks.video) {
+                const clip = clipsById.get(previous.id);
+                if (!clip) continue;
+                video.push(clip);
+                clipsById.delete(previous.id);
+            }
+            video.push(...clipsById.values());
+            const sceneDurations = new Map(rows.map((row) => [
+                "scene_" + row.scene_id,
+                Math.round((row.end_time - row.start_time) * next.fps),
+            ]));
+            let frame = 0;
+            next.tracks.video = video;
             for (const clip of next.tracks.video) {
+                clip.start_frame = frame;
+                frame += sceneDurations.get(clip.id)!;
+                clip.end_frame = frame;
                 const previous = old.tracks.video.find((c) => c.id === clip.id);
                 if (previous)
                     for (const key of [
@@ -558,7 +596,14 @@ app.post("/review/:id/confirm", (req, res) => {
                     ] as const)
                         (clip as any)[key] = previous[key];
             }
+            // Keep absolute caption, narration, music, and overlay timing.
+            // The last scene covers any tail beyond the trimmed source windows.
+            for (const track of [next.tracks.audio, next.tracks.subtitles, next.tracks.overlays])
+                for (const item of track)
+                    next.total_frames = Math.max(next.total_frames, item.end_frame);
+            next.tracks.video.at(-1)!.end_frame = next.total_frames;
         }
+        next = normalizeExisting(next);
         for (const d of [old, next].filter(Boolean) as any[])
             db.prepare(
                 "INSERT OR IGNORE INTO edit_revisions(project_id,revision,document,created_at,updated_at) VALUES(?,?,?,?,?)",
@@ -857,24 +902,8 @@ app.post("/projects/:id/agent-runs/:run/execute", (req, res) => {
         }),
     );
 });
-app.post("/projects/:id/export", (req, res) => {
-    const p = own(req, req.params.id);
-    const id = uuid.parse(req.body.requestId || crypto.randomUUID());
-    const d = document(p);
+function queueExport(p: any, id: string, d: ReturnType<typeof document>) {
     if (!d.tracks.video.length) fail(422, "No clips to render");
-    const active = db
-        .prepare(
-            "SELECT * FROM video_exports WHERE project_id=? AND status IN ('queued','rendering')",
-        )
-        .get(p.id) as any;
-    if (active) return res.status(202).json({ export_id: active.id });
-    const existing = db
-        .prepare("SELECT * FROM video_exports WHERE id=?")
-        .get(id) as any;
-    if (existing) {
-        if (existing.project_id !== p.id) fail(409, "Export ID already used");
-        return res.status(202).json({ export_id: id });
-    }
     db.transaction(() => {
         insert("video_exports", {
             id,
@@ -891,6 +920,24 @@ app.post("/projects/:id/export", (req, res) => {
             error_message: null,
         });
     })();
+}
+app.post("/projects/:id/export", (req, res) => {
+    const p = own(req, req.params.id);
+    const id = uuid.parse(req.body.requestId || crypto.randomUUID());
+    const active = db
+        .prepare(
+            "SELECT * FROM video_exports WHERE project_id=? AND status IN ('queued','rendering')",
+        )
+        .get(p.id) as any;
+    if (active) return res.status(202).json({ export_id: active.id });
+    const existing = db
+        .prepare("SELECT * FROM video_exports WHERE id=?")
+        .get(id) as any;
+    if (existing) {
+        if (existing.project_id !== p.id) fail(409, "Export ID already used");
+        return res.status(202).json({ export_id: id });
+    }
+    queueExport(p, id, document(p));
     res.status(202).json({ export_id: id, status: "queued" });
 });
 app.get("/projects/:id/exports/:export", (req, res) => {
@@ -903,7 +950,7 @@ app.get("/projects/:id/exports/:export", (req, res) => {
         row.output_url = `/projects/${p.id}/exports/${row.id}/download`;
     res.json(row);
 });
-app.delete("/projects/:id/exports/:export", async (req, res) => {
+app.delete("/projects/:id/exports/:export", (req, res) => {
     const p = own(req, req.params.id);
     const row = db
         .prepare("SELECT * FROM video_exports WHERE id=? AND project_id=?")
@@ -911,15 +958,11 @@ app.delete("/projects/:id/exports/:export", async (req, res) => {
     if (!row) fail(404, "Export not found");
     if (["done", "failed", "cancelled"].includes(row.status))
         return res.json({ success: true });
-    if (row.worker_job_id)
-        await worker(
-            "/renders/" + row.worker_job_id,
-            undefined,
-            false,
-            "DELETE",
-        );
-    update("video_exports", row.id, { status: "cancelled" });
-    update("projects", p.id, { status: "subtitle_selection" });
+    db.transaction(() => {
+        update("video_exports", row.id, { status: "cancelled", updated_at: now() });
+        update("projects", p.id, { status: "subtitle_selection" });
+        enqueue(p.id, "cancel_render", { exportId: row.id });
+    })();
     res.json({ success: true });
 });
 app.get("/projects/:id/exports/:export/download", async (req, res) => {

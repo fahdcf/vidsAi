@@ -205,15 +205,24 @@ async function render(job: any) {
         .get(json<any>(job.payload, {}).exportId) as any;
     if (!row || ["done", "failed", "cancelled"].includes(row.status))
         return true;
+    let result;
     if (!row.worker_job_id) {
         const submitted = await worker("/render", {
             requestId: row.id,
             editState: json(row.snapshot, {}),
         });
-        row.worker_job_id = submitted.jobId;
-        update("video_exports", row.id, { worker_job_id: row.worker_job_id });
+        const activeExport = db.prepare(
+            "SELECT 1 FROM video_exports WHERE id=? AND status IN ('queued','rendering')",
+        ).get(row.id);
+        if (!activeExport) return true;
+        if (submitted.status === "cancelled") {
+            result = submitted;
+        } else {
+            row.worker_job_id = submitted.jobId;
+            update("video_exports", row.id, { worker_job_id: row.worker_job_id });
+        }
     }
-    const result = await worker("/status/" + row.worker_job_id);
+    result ??= await worker("/status/" + row.worker_job_id);
     const done = ["done", "failed", "cancelled"].includes(result.status);
     if (result.status === "failed" && result.error) {
         const technical = String(result.error);
@@ -232,13 +241,10 @@ async function render(job: any) {
         result.status === "done"
             ? `/projects/${row.project_id}/exports/${row.id}/download`
             : null;
-    update("video_exports", row.id, {
-        status: result.status,
-        progress: result.progress || 0,
-        error: result.error || null,
-        output_url,
-        updated_at: now(),
-    });
+    const saved = db.prepare(
+        "UPDATE video_exports SET status=?,progress=?,error=?,output_url=?,updated_at=? WHERE id=? AND status IN ('queued','rendering')",
+    ).run(result.status, result.progress || 0, result.error || null, output_url, now(), row.id);
+    if (!saved.changes) return true;
     if (
         done &&
         db
@@ -249,7 +255,7 @@ async function render(job: any) {
             .get(row.project_id) === row.id
     )
         update("projects", row.project_id, {
-            status: result.status === "done" ? "completed" : "failed",
+            status: result.status === "done" ? "completed" : result.status === "cancelled" ? "subtitle_selection" : "failed",
             final_video_path: output_url,
             error_message: result.error || null,
             processing_completed_at: now(),
@@ -281,13 +287,14 @@ async function wan(job: any) {
                 params: {
                     id: "scene_" + scene.id,
                     url: status.video_url,
-                    media_type: "generated",
+                    media_type: "video",
                 },
             },
         ],
     });
     update("scenes", scene.id, {
         video_url: status.video_url,
+        type: "video",
         status: "completed",
         start_time: 0,
         end_time: Math.min(Number(scene.gemini_duration) || 3, 5),
@@ -335,6 +342,13 @@ export async function tick() {
                         "Background operation exceeded its time limit. Please retry.",
                     ),
                     { deadline: true },
+                );
+            if (job.task === "cancel_render")
+                await worker(
+                    "/render-requests/" + encodeURIComponent(payload.exportId),
+                    undefined,
+                    false,
+                    "DELETE",
                 );
             const complete =
                 job.task === "generate"
@@ -384,16 +398,21 @@ export async function tick() {
             if (exhausted) {
                 if (job.task === "wan")
                     update("scenes", payload.sceneId, { status: "failed" });
-                else
+                else if (job.task === "generate")
                     update("projects", job.project_id, {
                         status: "failed",
                         error_message: message,
                     });
-                if (job.task === "render")
-                    update("video_exports", payload.exportId, {
-                        status: "failed",
-                        error: message,
-                    });
+                else if (job.task === "render") {
+                    const failed = db.prepare(
+                        "UPDATE video_exports SET status='failed',error=?,updated_at=? WHERE id=? AND status IN ('queued','rendering')",
+                    ).run(message, now(), payload.exportId);
+                    if (failed.changes)
+                        update("projects", job.project_id, {
+                            status: "failed",
+                            error_message: message,
+                        });
+                }
             }
         }
     } finally {

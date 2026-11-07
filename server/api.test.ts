@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { app } from "./app";
 import { db, project, scenes } from "./database";
 import { document, renderSnapshot } from "./document";
+import { tick } from "./jobs";
 test("Node account, CSRF, ownership, private media and editing contracts", async () => {
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>((r) => server.once("listening", r));
@@ -109,6 +110,14 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
         const created = await owner.call("/create", form);
         assert.equal(created.status, 201);
         const id = ((await created.json()) as any).project_id;
+        db.prepare("UPDATE node_jobs SET status='failed' WHERE project_id=? AND task='generate'").run(id);
+        db.prepare("UPDATE projects SET status='failed' WHERE id=?").run(id);
+        const generationRetry = await owner.call(`/projects/${id}/retry`, {});
+        assert.equal(generationRetry.status, 200);
+        assert.equal((await generationRetry.json() as any).redirect, `/processing/${id}`);
+        assert.equal(db.prepare(
+            "SELECT task FROM node_jobs WHERE project_id=? ORDER BY rowid DESC LIMIT 1",
+        ).pluck().get(id), "generate");
         assert.equal(
             (await other.call(`/projects/${id}/edit-state`)).status,
             404,
@@ -156,6 +165,24 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             ).json()) as any
         ).edit_state;
         assert.equal(d.tracks.video[0].trim_in, 30);
+        const reconfirmed = await owner.call(`/review/${id}/confirm`, {
+            scenes: [{
+                scene_id: scene.id,
+                video_url: scene.video_url,
+                start_time: 1.5,
+                end_time: 2,
+            }],
+        });
+        assert.equal(reconfirmed.status, 200);
+        const reopened = await owner.call(`/projects/${id}/edit-state`);
+        assert.equal(reopened.status, 200);
+        const reviewed = (await reopened.json() as any).edit_state;
+        assert.deepEqual(reviewed.tracks.subtitles, d.tracks.subtitles);
+        assert.deepEqual(reviewed.tracks.audio, d.tracks.audio);
+        assert.equal(reviewed.tracks.video[0].trim_in, 45);
+        assert.equal(reviewed.tracks.video[0].trim_out, 60);
+        assert.equal(reviewed.total_frames, d.total_frames);
+        d = reviewed;
         const command = {
             commandId: crypto.randomUUID(),
             expectedRevision: d.revision,
@@ -458,16 +485,68 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             (await other.call(`/projects/${id}/exports/${requestId}`)).status,
             404,
         );
-        assert.equal(
-            (
-                await owner.call(
-                    `/projects/${id}/exports/${requestId}`,
-                    undefined,
-                    "DELETE",
-                )
-            ).status,
-            200,
+        const failedExport = db.prepare(
+            "SELECT revision,snapshot FROM video_exports WHERE id=?",
+        ).get(requestId) as { revision: number; snapshot: string };
+        db.prepare("UPDATE video_exports SET status='failed' WHERE id=?").run(requestId);
+        db.prepare("UPDATE projects SET status='failed' WHERE id=?").run(id);
+        const newerEdit = await owner.call(`/projects/${id}/commands`, {
+            commandId: crypto.randomUUID(),
+            expectedRevision: failedExport.revision,
+            operations: [{ tool: "set_format", params: { width: 960, height: 540 } }],
+        });
+        assert.equal(newerEdit.status, 200);
+        const beforeRetry = scenes(id);
+        const retried = await owner.call(`/projects/${id}/retry`, {});
+        assert.equal(retried.status, 202);
+        const retry = await retried.json() as { export_id: string; redirect: string };
+        assert.equal(retry.redirect, `/projects/${id}/editor`);
+        assert.notEqual(retry.export_id, requestId);
+        const retriedExport = db.prepare(
+            "SELECT revision,snapshot FROM video_exports WHERE id=?",
+        ).get(retry.export_id) as typeof failedExport;
+        assert.equal(retriedExport.revision, failedExport.revision);
+        assert.equal(document(project(id)).width, 960);
+        assert.equal(JSON.parse(retriedExport.snapshot).width, JSON.parse(failedExport.snapshot).width);
+        assert.deepEqual(
+            JSON.parse(retriedExport.snapshot).tracks.video,
+            JSON.parse(failedExport.snapshot).tracks.video,
         );
+        assert.equal(db.prepare(
+            "SELECT task FROM node_jobs WHERE project_id=? ORDER BY rowid DESC LIMIT 1",
+        ).pluck().get(id), "render");
+        assert.deepEqual(scenes(id), beforeRetry);
+        db.prepare("UPDATE node_jobs SET available=? WHERE project_id=?").run(Number.MAX_SAFE_INTEGER, id);
+        db.prepare("UPDATE node_jobs SET available=0 WHERE project_id=? AND json_extract(payload, '$.exportId')=?")
+            .run(id, retry.export_id);
+        const realFetch = globalThis.fetch;
+        const workerCalls: string[] = [];
+        const exportPath = `/projects/${id}/exports/${retry.export_id}`;
+        try {
+            globalThis.fetch = async (url, init) => {
+                const pathname = new URL(String(url)).pathname;
+                if (pathname === "/render") {
+                    workerCalls.push(pathname);
+                    const cancelled = await owner.call(exportPath, undefined, "DELETE");
+                    assert.equal(cancelled.status, 200);
+                    return Response.json({ status: "rendering", jobId: crypto.randomUUID() });
+                }
+                if (pathname.startsWith("/render-requests/")) {
+                    workerCalls.push(pathname);
+                    assert.equal(init?.method, "DELETE");
+                    return Response.json({ status: "cancelled" });
+                }
+                assert.ok(!pathname.startsWith("/status/"), "cancelled export should not be polled");
+                return realFetch(url, init);
+            };
+            await tick();
+            await tick();
+        } finally {
+            globalThis.fetch = realFetch;
+        }
+        assert.deepEqual(workerCalls, ["/render", `/render-requests/${retry.export_id}`]);
+        assert.equal((await (await owner.call(exportPath)).json() as any).status, "cancelled");
+        assert.equal(project(id).status, "subtitle_selection");
         assert.equal(
             (
                 await owner.call(

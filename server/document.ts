@@ -14,13 +14,13 @@ const {
 import { json, db, scenes, project, insert, update, now } from "./database";
 import { origin } from "./env";
 import { fail, hash, signed } from "./security";
-export function normalizeExisting(value: any): Document {
+export function normalizeExisting(value: unknown): Document {
     return normalizeDocument(json(value, {}));
 }
 export function applyEdit(current: Document, operations: any[]) {
     return applyOperations(current, operations);
 }
-export function document(p: any): Document {
+export function document(p: any, fps?: number): Document {
     let d: any;
     if (p.edit_state) d = json(p.edit_state, {});
     else {
@@ -47,6 +47,7 @@ export function document(p: any): Document {
         });
         d = legacyPayloadToEditState({
             projectId: String(p.id),
+            fps,
             clips: clips.map((s) => s.video_url),
             clipDurations: clips.map((s) =>
                 Number(

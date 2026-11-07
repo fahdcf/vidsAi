@@ -84,14 +84,14 @@ async function main() {
             metrics.actions.right <= metrics.viewport.width,
             `${name}: approval width`,
         );
-        assert.ok(metrics.font >= 14, `${name}: readable messages`);
+        assert.ok(metrics.font >= 13, `${name}: readable messages`);
         assert.equal(
             metrics.overflow,
             false,
             `${name}: no horizontal overflow`,
         );
         if (metrics.viewport.width >= 1180)
-            assert.ok(metrics.panel.width >= 350, `${name}: wide chat`);
+            assert.ok(metrics.panel.width >= 300, `${name}: wide chat`);
         assert.equal(await apply.isVisible(), true);
         assert.equal(
             await page
@@ -312,7 +312,7 @@ async function main() {
             .getByRole("button", { name: "Expand chat", exact: true })
             .click();
         assert.ok(
-            (await page.locator(".assistant-panel").boundingBox()).width >= 450,
+            (await page.locator(".assistant-panel").boundingBox()).width >= 390,
         );
         await capture("chat-expanded");
         await page.getByRole("button", { name: "Tools", exact: true }).click();

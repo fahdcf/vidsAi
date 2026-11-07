@@ -45,7 +45,7 @@ export default function AssistantPanel({
 }) {
     const panel = useRef<HTMLElement>(null),
         conversation = useRef<HTMLDivElement>(null),
-        input = useRef<HTMLTextAreaElement>(null);
+        input = useRef<HTMLInputElement>(null);
     const hasPlan = Boolean(plan?.plan?.operations?.length);
     useLayoutEffect(() => {
         const log = conversation.current;
@@ -73,7 +73,7 @@ export default function AssistantPanel({
         if (e.key === "Tab") {
             const items = Array.from(
                 panel.current?.querySelectorAll<HTMLElement>(
-                    "button:not(:disabled),textarea:not(:disabled),a[href]",
+                    "button:not(:disabled),input:not(:disabled),a[href]",
                 ) || [],
             ).filter((el) => el.getClientRects().length);
             const first = items[0],
@@ -298,48 +298,11 @@ export default function AssistantPanel({
                         <form
                             onSubmit={(e) => {
                                 e.preventDefault();
-                                onSend();
+                                if (!busy && message.trim()) onSend();
                             }}
                         >
-                            <label htmlFor="assistant-request">
-                                Your request
-                            </label>
-                            <textarea
-                                ref={input}
-                                id="assistant-request"
-                                rows={3}
-                                value={message}
-                                onChange={(e) => onMessage(e.target.value)}
-                                placeholder="Describe the edit you have in mind…"
-                                maxLength={2000}
-                                disabled={planning || applying}
-                                onKeyDown={(e) => {
-                                    if (
-                                        e.key === "Enter" &&
-                                        (e.ctrlKey || e.metaKey)
-                                    ) {
-                                        e.preventDefault();
-                                        if (!busy && message.trim()) onSend();
-                                    }
-                                }}
-                            />
-                            <div className="assistant-composer-actions">
-                                <span>
-                                    {hasPlan
-                                        ? "Apply or discard your proposal first."
-                                        : "You review every change."}
-                                </span>
-                                <button
-                                    className="primary"
-                                    disabled={
-                                        busy || !message.trim() || hasPlan
-                                    }
-                                    type="submit"
-                                >
-                                    {planning ? "Preparing…" : "Prepare edits"}
-                                    <Icon name="arrowRight" size={15} />
-                                </button>
-                            </div>
+                            <input ref={input} id="assistant-request" aria-label="Your request" type="text" value={message} onChange={e=>onMessage(e.target.value)} placeholder="Describe an edit..." maxLength={2000} disabled={planning||applying} onKeyDown={e=>{if(e.key==='Enter'&&e.nativeEvent.isComposing)e.preventDefault();}}/>
+                            <button className="primary" aria-label="Prepare edits" title="Send request (Enter)" disabled={busy||!message.trim()} type="submit"><Icon name="arrowRight" size={17}/></button>
                         </form>
                     )}
                 </div>
