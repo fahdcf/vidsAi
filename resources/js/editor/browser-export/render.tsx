@@ -6,6 +6,7 @@ import { CompositionMedia, VideoMerger } from "@vidsai/compositions";
 import { documentSchema, type Document } from "@vidsai/contracts";
 import type { ComponentProps, ContextType } from "react";
 import { prepareBrowserAudio } from "./audio";
+import { BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
 
 type VideoProps = ComponentProps<ContextType<typeof CompositionMedia>["Video"]>;
 
@@ -31,9 +32,8 @@ export async function renderBrowserMp4(
 ) {
     signal.throwIfAborted();
     const editState = documentSchema.parse(structuredClone(snapshot)) as Document;
-    if (!editState.tracks.video.length) {
-        throw new Error("Add a video clip or image before exporting.");
-    }
+    const issues = validateBrowserRenderProfile(editState);
+    if (issues.length) throw new BrowserRenderProfileError(issues);
     const sources = [
         ...editState.tracks.video.map((clip) => clip.clip_url),
         ...editState.tracks.audio.map((track) => track.url),
