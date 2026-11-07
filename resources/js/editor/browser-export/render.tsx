@@ -1,3 +1,5 @@
+/// <reference types="vite/client" />
+
 import { Audio, Video } from "@remotion/media";
 import { canRenderMediaOnWeb, renderMediaOnWeb } from "@remotion/web-renderer";
 import { CompositionMedia, VideoMerger } from "@vidsai/compositions";
@@ -79,7 +81,8 @@ export async function renderBrowserMp4(
         onProgress: ({ progress }) => onProgress(progress),
         pageResponsiveness: "high",
         mediaCacheSizeInBytes: 64 * 1024 * 1024,
-        isProduction: false,
+        licenseKey: "free-license",
+        isProduction: import.meta.env.PROD,
     });
     signal.throwIfAborted();
     return result.getBlob();
