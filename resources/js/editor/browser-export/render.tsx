@@ -3,6 +3,7 @@ import { canRenderMediaOnWeb, renderMediaOnWeb } from "@remotion/web-renderer";
 import { CompositionMedia, VideoMerger } from "@vidsai/compositions";
 import { documentSchema, type Document } from "@vidsai/contracts";
 import type { ComponentProps, ContextType } from "react";
+import { prepareBrowserAudio } from "./audio";
 
 type VideoProps = ComponentProps<ContextType<typeof CompositionMedia>["Video"]>;
 
@@ -60,6 +61,8 @@ export async function renderBrowserMp4(
     if (!support.canRender) {
         throw new Error(support.issues.map(({ message }) => message).join(" "));
     }
+    if (!muted) await prepareBrowserAudio(editState, signal);
+    signal.throwIfAborted();
     const result = await renderMediaOnWeb({
         ...options,
         composition: {

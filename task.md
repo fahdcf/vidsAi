@@ -46,7 +46,7 @@ This evidence covers a small fixture. Audio levels differ from the worker refere
 
 Baseline evidence and the dependency inventory are recorded in [the browser export baseline](docs/BROWSER_EXPORT_BASELINE.md).
 - [x] A3. Make `browser-export/render.tsx` consume a validated immutable project snapshot and resolved assets without fixture IDs or hardcoded dimensions. Keep the composition in `remotion-api/remotion/VideoMerger.tsx` and its shared package. Use browser media adapters for video/audio and resolve blob URLs safely. Keep Node-only dependencies and server credentials out of browser imports.
-- [ ] A4. Resolve the measured audio difference. Compare source levels, channel layout, gain, fades, sequence offsets, and playback speed. Establish the expected mono/stereo mix semantics and implement them consistently. Verify both narration and music against source signals and the baseline. Avoid applying an unexplained global gain correction.
+- [x] A4. Resolve the measured audio difference. Compare source levels, channel layout, gain, fades, sequence offsets, and playback speed. Establish the expected mono/stereo mix semantics and implement them consistently. Verify both narration and music against source signals and the baseline. Avoid applying an unexplained global gain correction.
 - [ ] A5. Make all existing caption presets and transitions browser-compatible. Cover `default`, `progressive_highlight`, `tiktok_trending`, `arabic_banner`, `rectangular`, `rounded_progressive`, and `rectangular_banner`. Cover cuts, fades, zooms, slide directions, and clip zoom animation. Fix unsupported CSS, fonts, RTL/mixed-direction layout, and time-based animation using the shared frame timing model. Preserve the visual design.
 - [ ] A6. Record the pinned renderer's production license eligibility, telemetry behavior, and expected cost. Resolve configuration before production use. Do not infer eligibility from a development render succeeding.
 
@@ -124,9 +124,10 @@ After E5, collect consented beta export results and track the roadmap's reliabil
 
 ## Progress record
 
-Next executable task is A4. P1–P2 and A1–A3 are complete. Checkpoint A remains open.
+Next executable task is A5. P1–P2 and A1–A4 are complete. Checkpoint A remains open.
 
 - 2026-11-07 — Verified the starting version for A1–A2. Both repositories passed type checks, 18 app and worker tests passed, the generated contract matched, and the production application built. UI baseline screenshots and prior prototype evidence are archived in `../runtime/browser-migration-baseline`. Continue with A3.
 - 2026-11-07 — Verified A3 with one focused Chrome run and the app's browser type check. The renderer exported the original H.264/AAC fixture and a different 480×270 video-only project. Mutating the caller's project during export did not change the resulting MP4. Unresolved media was rejected. Evidence is in `../runtime/browser-render-snapshot-4JiHob/verification.json`. Continue with A4.
+- 2026-11-07 — Resolved A4's measured mono gain difference with a per-source equal-power correction. A focused Chrome export and PCM comparison put the two fixture tones within 0.31 dB of the server reference. Stereo source channels matched their expected gains within 0.02 dB. Narration onset matched within the measurement window. The browser type check passed. Evidence is in `../runtime/browser-render-snapshot-JHGunO/verification.json`. The full fade/speed and caption/transition fixture matrix remains part of Checkpoint A. Continue with A5.
 
 At each checkpoint, append one concise entry with the date, completed task IDs, verification result/artifact path, and the next task or exact blocker. This keeps future work resumable without rerunning already valid verification.
