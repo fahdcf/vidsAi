@@ -1,5 +1,6 @@
 import type { StreamTargetChunk } from "mediabunny";
 import { mp4Encoding } from "./capabilities";
+import { exportDirectoryName, removeExportDirectory } from "./storage";
 
 export type BrowserExportArtifact = {
     file: File;
@@ -18,7 +19,13 @@ function storageError(error: unknown) {
     return error;
 }
 
-export async function openBrowserOutput(seconds: number, muted: boolean, signal: AbortSignal) {
+export async function openBrowserOutput(
+    seconds: number,
+    muted: boolean,
+    signal: AbortSignal,
+    id: string = crypto.randomUUID(),
+    onFinalizing?: () => Promise<void>,
+) {
     const storage = navigator.storage;
     if (!storage?.getDirectory) throw new Error("This browser cannot save a local export file.");
     const estimate = await storage.estimate().catch(() => ({} as StorageEstimate));
@@ -30,7 +37,7 @@ export async function openBrowserOutput(seconds: number, muted: boolean, signal:
     }
     signal.throwIfAborted();
     const root = await storage.getDirectory().catch((error: unknown) => { throw storageError(error); });
-    const name = `vidsai-export-output-${crypto.randomUUID()}`;
+    const name = exportDirectoryName("output", id);
     let directory: FileSystemDirectoryHandle | undefined;
     let file: FileSystemFileHandle | undefined;
     let writer: FileSystemWritableFileStream | undefined;
@@ -41,7 +48,7 @@ export async function openBrowserOutput(seconds: number, muted: boolean, signal:
     async function release() {
         if (released) return;
         if (!finalized) await writer?.abort().catch(() => {});
-        if (directory) await root.removeEntry(name, { recursive: true });
+        if (directory) await removeExportDirectory(root, "output", id);
         released = true;
     }
 
@@ -67,6 +74,9 @@ export async function openBrowserOutput(seconds: number, muted: boolean, signal:
         },
         async close() {
             try {
+                signal.throwIfAborted();
+                await onFinalizing?.();
+                signal.throwIfAborted();
                 await writer.close();
                 finalized = true;
             } catch (error) {

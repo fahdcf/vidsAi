@@ -31,6 +31,11 @@ export async function renderBrowserMp4(
     snapshot: Document,
     signal: AbortSignal,
     onProgress: (progress: number) => void,
+    lifecycle?: {
+        id: string;
+        onRendering: () => Promise<void>;
+        onFinalizing: () => Promise<void>;
+    },
 ) {
     signal.throwIfAborted();
     const editState = documentSchema.parse(structuredClone(snapshot)) as Document;
@@ -58,8 +63,12 @@ export async function renderBrowserMp4(
     await checkBrowserOutput({ ...options, width, height, fps, outputTarget: "web-fs" }, signal);
     if (!muted) await prepareBrowserAudio(editState, signal);
     signal.throwIfAborted();
-    const output = await openBrowserOutput(total_frames / fps, muted, signal);
+    const output = await openBrowserOutput(
+        total_frames / fps, muted, signal, lifecycle?.id, lifecycle?.onFinalizing,
+    );
     try {
+        await lifecycle?.onRendering();
+        signal.throwIfAborted();
         await renderMediaOnWeb({
             ...options,
             outputWritable: output.writable,

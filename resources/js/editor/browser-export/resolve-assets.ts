@@ -1,6 +1,7 @@
 import { documentSchema, type Document } from "@vidsai/contracts";
 import { inspectBrowserMedia, type BrowserMediaKind } from "./inspect-media";
 import { browserRenderProfile, BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
+import { exportDirectoryName, removeExportDirectory } from "./storage";
 
 type AssetRequest = {
     projectId: string;
@@ -8,7 +9,7 @@ type AssetRequest = {
     kind: BrowserMediaKind;
 };
 
-type AssetResolverOptions = {
+export type AssetResolverOptions = {
     readLocal?: (asset: AssetRequest, signal: AbortSignal) => Promise<Blob | null>;
     refreshUrl?: (asset: AssetRequest, signal: AbortSignal) => Promise<string | null>;
 };
@@ -38,6 +39,7 @@ export async function resolveBrowserAssets(
     snapshot: Document,
     options: AssetResolverOptions,
     signal: AbortSignal,
+    id: string = crypto.randomUUID(),
 ) {
     signal.throwIfAborted();
     const document = documentSchema.parse(structuredClone(snapshot)) as Document;
@@ -51,7 +53,7 @@ export async function resolveBrowserAssets(
     let totalBytes = 0;
     let root: FileSystemDirectoryHandle | undefined;
     let directory: FileSystemDirectoryHandle | undefined;
-    const directoryName = `vidsai-export-media-${crypto.randomUUID()}`;
+    const directoryName = exportDirectoryName("media", id);
     const { maxProjectSourceBytes, maxSourceBytes } = browserRenderProfile;
 
     const release = async () => {
@@ -61,7 +63,7 @@ export async function resolveBrowserAssets(
         downloaded.clear();
         inspected.clear();
         if (root && directory) {
-            await root.removeEntry(directoryName, { recursive: true });
+            await removeExportDirectory(root, "media", id);
             directory = undefined;
         }
     };
