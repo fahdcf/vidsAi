@@ -1,12 +1,13 @@
 /// <reference types="vite/client" />
 
 import { Audio, Video } from "@remotion/media";
-import { canRenderMediaOnWeb, renderMediaOnWeb } from "@remotion/web-renderer";
+import { renderMediaOnWeb } from "@remotion/web-renderer";
 import { CompositionMedia, VideoMerger } from "@vidsai/compositions";
 import { documentSchema, type Document } from "@vidsai/contracts";
 import type { ComponentProps, ContextType } from "react";
 import { prepareBrowserAudio } from "./audio";
 import { BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
+import { checkBrowserOutput, invalidateBrowserOutputProbe, mp4Encoding } from "./capabilities";
 
 type VideoProps = ComponentProps<ContextType<typeof CompositionMedia>["Video"]>;
 
@@ -49,20 +50,13 @@ export async function renderBrowserMp4(
             (clip) => clip.media_type === "video" && clip.volume > 0,
         );
     const options = {
-        container: "mp4",
-        videoCodec: "h264",
+        ...mp4Encoding,
         audioCodec: muted ? null : "aac",
         muted,
-        videoBitrate: 4_000_000,
-        audioBitrate: 128_000,
         // Only the three-second fixture uses this buffered prototype output.
         outputTarget: "arraybuffer",
     } as const;
-    const support = await canRenderMediaOnWeb({ ...options, width, height });
-    signal.throwIfAborted();
-    if (!support.canRender) {
-        throw new Error(support.issues.map(({ message }) => message).join(" "));
-    }
+    await checkBrowserOutput({ ...options, width, height, fps }, signal);
     if (!muted) await prepareBrowserAudio(editState, signal);
     signal.throwIfAborted();
     const result = await renderMediaOnWeb({
@@ -83,6 +77,9 @@ export async function renderBrowserMp4(
         mediaCacheSizeInBytes: 64 * 1024 * 1024,
         licenseKey: "free-license",
         isProduction: import.meta.env.PROD,
+    }).catch((error: unknown) => {
+        if (!signal.aborted) invalidateBrowserOutputProbe();
+        throw error;
     });
     signal.throwIfAborted();
     return result.getBlob();

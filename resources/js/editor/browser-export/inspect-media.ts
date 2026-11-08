@@ -1,5 +1,6 @@
 import {
-    ADTS, BlobSource, EncodedPacketSink, Input, MP3, MP4, WAVE,
+    ADTS, AudioSampleSink, BlobSource, EncodedPacketSink, Input, MP3, MP4,
+    VideoSampleSink, WAVE,
     type InputAudioTrack, type InputVideoTrack,
 } from "mediabunny";
 import { browserRenderProfile as profile } from "./profile";
@@ -115,6 +116,11 @@ export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, 
             width * height > profile.maxImagePixels) {
             throw new Error("Use an image up to 4 megapixels and 4,096 pixels on either side.");
         }
+        const image = await createImageBitmap(source).catch((error: unknown) => {
+            throw new Error("This browser could not decode the image.", { cause: error });
+        });
+        image.close();
+        signal.throwIfAborted();
         return { kind, width, height };
     }
 
@@ -143,6 +149,21 @@ export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, 
         }
         const video = videos.length ? await videoInfo(videos[0], signal) : null;
         const audio = audios.length ? await audioInfo(audios[0]) : null;
+        if (videos[0]) {
+            const track = videos[0];
+            const frame = await track.canDecode() &&
+                await new VideoSampleSink(track).getSample(await track.getFirstTimestamp());
+            if (!frame) throw new Error("This browser could not decode the source video.");
+            frame.close();
+        }
+        signal.throwIfAborted();
+        if (audios[0]) {
+            const track = audios[0];
+            const sample = await track.canDecode() &&
+                await new AudioSampleSink(track).getSample(await track.getFirstTimestamp());
+            if (!sample) throw new Error("This browser could not decode the source audio.");
+            sample.close();
+        }
         signal.throwIfAborted();
         return { kind, duration, video, audio };
     } finally {
