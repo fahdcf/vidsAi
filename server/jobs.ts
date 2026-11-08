@@ -7,30 +7,21 @@ import { modelJson, transcribe, stock } from "./providers";
 import { submitWan, pollWan } from "./wan";
 import { commit, document } from "./document";
 import { alignScript } from "./alignment";
-export async function worker(
-    route: string,
-    data?: any,
-    agent = false,
-    method = data ? "POST" : "GET",
-) {
-    const url =
-        (agent ? process.env.NODE_AGENT_URL : process.env.NODE_RENDER_URL) ||
-        (agent ? "http://127.0.0.1:5212" : "http://127.0.0.1:5211");
+export async function requestAgent(data: unknown) {
+    const url = process.env.NODE_AGENT_URL || "http://127.0.0.1:5212";
     let response: Response;
     try {
-        response = await fetch(url + route, {
-            method,
+        response = await fetch(url + "/agent/plan", {
+            method: "POST",
             headers: {
                 Authorization: `Bearer ${process.env.WORKER_TOKEN}`,
                 "Content-Type": "application/json",
             },
-            body: data === undefined ? undefined : JSON.stringify(data),
+            body: JSON.stringify(data),
             signal: AbortSignal.timeout(65000),
         });
     } catch (error: any) {
-        throw new Error(
-            "Worker connection failed: " + (error.cause?.code || error.name),
-        );
+        throw new Error("Worker connection failed: " + (error.cause?.code || error.name));
     }
     if (!response.ok) throw new Error(`Editing worker HTTP ${response.status}`);
     return response.json() as Promise<any>;
@@ -107,6 +98,7 @@ async function generate(job: any) {
                 if (
                     !Array.isArray(value.phrases) ||
                     !value.phrases.length ||
+                    value.phrases.length > 20 ||
                     !Array.isArray(value.subtitles_script)
                 )
                     throw new Error("Missing scenes or captions");
@@ -199,69 +191,6 @@ async function generate(job: any) {
         });
     })();
 }
-async function render(job: any) {
-    const row = db
-        .prepare("SELECT * FROM video_exports WHERE id=?")
-        .get(json<any>(job.payload, {}).exportId) as any;
-    if (!row || ["done", "failed", "cancelled"].includes(row.status))
-        return true;
-    let result;
-    if (!row.worker_job_id) {
-        const submitted = await worker("/render", {
-            requestId: row.id,
-            editState: json(row.snapshot, {}),
-        });
-        const activeExport = db.prepare(
-            "SELECT 1 FROM video_exports WHERE id=? AND status IN ('queued','rendering')",
-        ).get(row.id);
-        if (!activeExport) return true;
-        if (submitted.status === "cancelled") {
-            result = submitted;
-        } else {
-            row.worker_job_id = submitted.jobId;
-            update("video_exports", row.id, { worker_job_id: row.worker_job_id });
-        }
-    }
-    result ??= await worker("/status/" + row.worker_job_id);
-    const done = ["done", "failed", "cancelled"].includes(result.status);
-    if (result.status === "failed" && result.error) {
-        const technical = String(result.error);
-        const snapshot = json<any>(row.snapshot, {});
-        const index = (snapshot.tracks?.video || []).findIndex((clip: any) =>
-            technical.includes(clip.clip_url),
-        );
-        result.error =
-            /No frame found|Compositor error|Could not play video/i.test(
-                technical,
-            )
-                ? `${index >= 0 ? "Scene " + (index + 1) : "A source clip"} could not be rendered. Try exporting again. If it repeats, replace that scene’s footage in Review scenes.`
-                : "The export could not finish. Try exporting again, or review the media in your project.";
-    }
-    const output_url =
-        result.status === "done"
-            ? `/projects/${row.project_id}/exports/${row.id}/download`
-            : null;
-    const saved = db.prepare(
-        "UPDATE video_exports SET status=?,progress=?,error=?,output_url=?,updated_at=? WHERE id=? AND status IN ('queued','rendering')",
-    ).run(result.status, result.progress || 0, result.error || null, output_url, now(), row.id);
-    if (!saved.changes) return true;
-    if (
-        done &&
-        db
-            .prepare(
-                "SELECT id FROM video_exports WHERE project_id=? ORDER BY created_at DESC LIMIT 1",
-            )
-            .pluck()
-            .get(row.project_id) === row.id
-    )
-        update("projects", row.project_id, {
-            status: result.status === "done" ? "completed" : result.status === "cancelled" ? "subtitle_selection" : "failed",
-            final_video_path: output_url,
-            error_message: result.error || null,
-            processing_completed_at: now(),
-        });
-    return done;
-}
 let active = false;
 async function wan(job: any) {
     const payload = json<any>(job.payload, {});
@@ -308,11 +237,11 @@ export async function tick() {
     try {
         const job = db.transaction(() => {
             db.prepare(
-                "UPDATE node_jobs SET status='queued' WHERE status='running' AND lease<?",
+                "UPDATE node_jobs SET status='queued' WHERE status='running' AND task IN ('generate','wan') AND lease<?",
             ).run(Date.now());
             const next = db
                 .prepare(
-                    "SELECT * FROM node_jobs WHERE status='queued' AND available<=? ORDER BY available LIMIT 1",
+                    "SELECT * FROM node_jobs WHERE status='queued' AND task IN ('generate','wan') AND available<=? ORDER BY available LIMIT 1",
                 )
                 .get(Date.now()) as any;
             if (next)
@@ -331,7 +260,7 @@ export async function tick() {
                     ? 15 * 60000
                     : Math.max(
                           60,
-                          Number(process.env.RENDER_DEADLINE_SECONDS) || 7200,
+                          Number(process.env.WAN_DEADLINE_SECONDS) || 7200,
                       ) * 1000;
             if (
                 payload._enqueuedAt &&
@@ -343,21 +272,7 @@ export async function tick() {
                     ),
                     { deadline: true },
                 );
-            if (job.task === "cancel_render")
-                await worker(
-                    "/render-requests/" + encodeURIComponent(payload.exportId),
-                    undefined,
-                    false,
-                    "DELETE",
-                );
-            const complete =
-                job.task === "generate"
-                    ? (await generate(job), true)
-                    : job.task === "render"
-                      ? await render(job)
-                      : job.task === "wan"
-                        ? await wan(job)
-                        : true;
+            const complete = job.task === "generate" ? (await generate(job), true) : await wan(job);
             const saved = json<any>(
                 (
                     db
@@ -403,21 +318,29 @@ export async function tick() {
                         status: "failed",
                         error_message: message,
                     });
-                else if (job.task === "render") {
-                    const failed = db.prepare(
-                        "UPDATE video_exports SET status='failed',error=?,updated_at=? WHERE id=? AND status IN ('queued','rendering')",
-                    ).run(message, now(), payload.exportId);
-                    if (failed.changes)
-                        update("projects", job.project_id, {
-                            status: "failed",
-                            error_message: message,
-                        });
-                }
             }
         }
     } finally {
         active = false;
     }
+}
+export function retireLegacyRenderJobs() {
+    const message = "Server export was interrupted. Retry in the editor to export in your browser.";
+    db.transaction(() => {
+        db.prepare(`
+            UPDATE projects SET status='subtitle_selection', error_message=NULL, updated_at=?
+            WHERE status='subtitle_generating' OR (
+                status='failed'
+                AND (SELECT status FROM video_exports WHERE project_id=projects.id ORDER BY rowid DESC LIMIT 1)='failed'
+                AND COALESCE((SELECT task || ':' || status FROM node_jobs
+                    WHERE project_id=projects.id AND task IN ('generate','render') ORDER BY rowid DESC LIMIT 1), '') != 'generate:failed'
+            )
+        `).run(now());
+        db.prepare("UPDATE video_exports SET status='failed', error=?, updated_at=? WHERE status IN ('queued','rendering')")
+            .run(message, now());
+        db.prepare("UPDATE node_jobs SET status='cancelled', error=?, lease=NULL WHERE task IN ('render','cancel_render') AND status IN ('queued','running')")
+            .run(message);
+    })();
 }
 export function startJobs() {
     return setInterval(() => void tick(), 500);

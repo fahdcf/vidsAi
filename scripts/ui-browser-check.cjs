@@ -13,7 +13,9 @@ const narration =
     "Discover our reusable bottle. Take it on adventures. Keep your water cold all day.";
 async function main() {
     const browser = await chromium.launch({
-        executablePath: config.browserExe,
+        ...(process.env.UI_TEST_BROWSER_CHANNEL
+            ? { channel: process.env.UI_TEST_BROWSER_CHANNEL }
+            : { executablePath: config.browserExe }),
         headless: true,
     });
     const page = await browser.newPage({

@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Shell from "../Shell";
 import Icon from "../Icon";
 import { api } from "../api";
 export default function Create() {
+    const requestId = useRef<string | undefined>(undefined);
     const [data, setData] = useState({
         name: "",
         type: "product",
@@ -32,6 +33,8 @@ export default function Create() {
         setBusy(true);
         setError("");
         const form = new FormData();
+        requestId.current ??= crypto.randomUUID();
+        form.append("request_id", requestId.current);
         for (const [k, v] of Object.entries(data)) {
             if (v instanceof File) form.append(k, v);
             else if (Array.isArray(v))
@@ -39,6 +42,11 @@ export default function Create() {
             else if (v !== null) form.append(k, String(v));
         }
         try {
+            const { inspectBrowserMedia } = await import("../browser-export/inspect-media");
+            const media = await inspectBrowserMedia(data.voiceover_file, "audio", new AbortController().signal);
+            if (!("duration" in media) || !media.duration || media.duration > 60) {
+                throw new Error("Use a voiceover of 60 seconds or less.");
+            }
             const r = await api("/create", form);
             window.location.href = r.redirect;
         } catch (e) {

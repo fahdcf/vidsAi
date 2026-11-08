@@ -100,6 +100,8 @@ export default function Review({ project, scenes: initial }: any) {
         setBusy(true);
         setError("");
         try {
+            const { inspectBrowserMedia } = await import("../browser-export/inspect-media");
+            await inspectBrowserMedia(file, /\.(png|jpe?g)$/i.test(file.name) ? "image" : "video", new AbortController().signal);
             const form = new FormData();
             form.append("file", file);
             const asset = await api(`/projects/${project.id}/assets`, form);

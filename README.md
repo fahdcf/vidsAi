@@ -1,6 +1,6 @@
 # VidsAI
 
-VidsAI creates and edits narrated videos with React, a TypeScript/Express control server, SQLite, a separate editing agent and Remotion rendering. This branch runs entirely on Node.js. PHP, Laravel, Blade, Inertia and Composer are removed.
+VidsAI creates and edits narrated videos with React, a TypeScript/Express control server, SQLite, and a separate editing agent. The existing editor renders and encodes new MP4 exports in the browser.
 
 ## What works
 
@@ -9,13 +9,13 @@ VidsAI creates and edits narrated videos with React, a TypeScript/Express contro
 - Scene review, footage regeneration, source trimming and private image/video replacement uploads.
 - Remotion preview, seven caption styles, caption text/appearance, transitions, scene order, animation, overlays, audio gain/timing, music search/preview/selection and canvas settings.
 - Ordered autosave, revision conflicts, undo/redo and agent plans that require explicit application and can be cancelled.
-- Persistent export jobs, progress/cancellation, immutable render snapshots, signed media access and authenticated MP4 downloads.
+- Local export progress, cancellation, saved-revision retry, and MP4 downloads. Historical server exports remain available through authenticated links.
 
 WAN model configuration and UI remain available but require a key. AI voice generation, visual understanding, retrieval and other unused NVIDIA capabilities remain reserved for future development. The catalogue keeps all 21 models; the active fallback chains contain models validated for each existing task.
 
 ## Setup
 
-Use Node 24 and npm. Clone this repository as `vidsAi` beside `remotion-api`, both on `migration/full-typescript`:
+Use Node 24 and npm. Clone this repository as `vidsAi` beside `remotion-api`, both on `codex/browser-rendering` for this migration:
 
 ```text
 workspace/
@@ -50,9 +50,9 @@ npm run build
 npm run local:start
 ```
 
-The Windows local launcher starts the control server at `http://127.0.0.1:8100`, render worker at 5211 and agent worker at 5212. It uses Node only. Stop/status commands are `npm run local:stop` and `npm run local:status`. On another OS, run `npm start` here and the two worker entry points separately with the same private environment; bind private workers to loopback.
+The Windows local launcher starts the control server at `http://127.0.0.1:8100` and the editing agent at 5212. Stop/status commands are `npm run local:stop` and `npm run local:status`. On another OS, run `npm start` here and `npm run start:agent` in the companion repo with the same private environment. Bind the agent to loopback. Deploy the website over HTTPS for browser export.
 
-An optional `runtime/node-local-config.json` selects the Node executable, browser, temporary directory, origin and database path. Copy `local-config.example.json` there and adapt paths. Install a compatible browser with Remotion or point `browserExe` at the existing browser executable. The launcher inherits the provider settings from `.env` for all three services.
+An optional `runtime/node-local-config.json` selects the Node executable, temporary directory, origin, and database path. Copy `local-config.example.json` there and adapt paths. The browser executable setting is used by local verification. Start the companion repository's `start:render-reference` command only for development comparisons.
 
 `npm run dev` watches the control server; run `npm run build` after UI edits. `npm run dev:ui` serves the React frontend with API requests proxied to port 8100. Shared editing/composition changes in the worker need `npm run build` here to rebuild the shared packages.
 
@@ -62,11 +62,15 @@ The default database is `runtime/node-database.sqlite`; a missing database is in
 
 Use `NODE_IMPORT_APP_ROOT` to select the original app and `npm run import:media` to copy its public/private media and render history. The original copy and the prior `migration/react-typescript` branch provide rollback. See `FULL_TYPESCRIPT_MIGRATION.md` for local cutover paths and verification evidence.
 
+Point `NODE_LEGACY_RENDER_OUTPUT_DIR` at the retired worker's existing output directory when it differs from `../runtime/node-renders`. The app serves those files directly after checking ownership. Startup retires old queued server exports and keeps their snapshots available for browser retry.
+
 ## Verification and limits
 
 `npm test` uses a disposable database/media directory. Worker checks run with `npm run typecheck && npm test` in `remotion-api`. The opt-in `npm run test:browser` performs real generation and export using configured provider keys and the private local test recording/account fixtures. Ordinary automated checks require no live provider calls.
 
 The live browser check covers an English recording. Arabic/Darija fallback alignment is retained and estimated timing is labelled for review; perceptual quality has not been revalidated here. An uploaded voiceover is required. The first selected canvas is exported; selecting all formats retains the choices but does not create three exports automatically. WAN remains untested live because its key is intentionally blank.
+
+Browser export targets desktop Chrome and Edge on the tested Windows configuration. The initial profile allows up to 60 seconds, 30 FPS, and 720p-class H.264/AAC MP4. Larger project canvases keep their editing coordinates and are scaled for export. The Export button shows the output dimensions. Local exports use browser storage and do not consume AI usage allowances. The server applies rolling daily allowances per account and globally to generation, planning, stock, music, and optional AI video requests.
 
 Password recovery uses SMTP when configured; development mode writes links to the private `runtime/node-mail-outbox` directory. The local launcher is for local development; production needs the usual HTTPS reverse proxy and persistent storage deployment configuration.
 

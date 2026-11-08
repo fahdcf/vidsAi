@@ -4,10 +4,9 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Readable } from "node:stream";
 import { z } from "zod";
 import { browserPlanningLimitsSchema } from "../../remotion-api/packages/contracts/index";
-import { root, origin, mediaRoot } from "./env";
+import { root, origin, mediaRoot, runtime } from "./env";
 import { db, insert, update, project, scenes, json, now } from "./database";
 import {
     session,
@@ -17,12 +16,13 @@ import {
     validSignature,
     rotateSession,
 } from "./security";
-import { document, commit, normalizeExisting, renderSnapshot } from "./document";
-import { enqueue, worker, mediaFile } from "./jobs";
+import { document, commit, normalizeExisting } from "./document";
+import { enqueue, requestAgent, mediaFile } from "./jobs";
 import { music, stock } from "./providers";
 import { requestReset, resetPassword } from "./recovery";
 import { wanModels, wanPayload } from "./wan";
 import { mediaDuration } from "./media";
+import { reserveProviderRequest } from "./provider-budget";
 const uuid = z.string().uuid();
 const projectInput = z.object({
     name: z.string().trim().min(1).max(255),
@@ -104,8 +104,13 @@ app.post("/scenes/:scene/ai-video", (req, res) => {
         })
         .parse(req.body);
     wanPayload(input);
-    const id = enqueue(p.id, "wan", { sceneId: scene.id, input });
-    update("scenes", scene.id, { status: "regenerating", job_id: id });
+    const id = db.transaction(() => {
+        if (scene.status === "regenerating" && scene.job_id) return scene.job_id;
+        reserveProviderRequest(user(req), "video", crypto.randomUUID());
+        const id = enqueue(p.id, "wan", { sceneId: scene.id, input });
+        update("scenes", scene.id, { status: "regenerating", job_id: id });
+        return id;
+    })();
     res.status(202).json({ job_id: id, status: "queued" });
 });
 app.get("/scenes/:scene/ai-status", (req, res) => {
@@ -370,8 +375,19 @@ app.post(
         next();
     },
     upload.single("voiceover_file"),
-    (req, res) => {
+    async (req, res) => {
         const input = projectInput.parse(req.body);
+        const accountId = user(req);
+        const requestKey = uuid.optional().parse(req.body.request_id);
+        const existing = () => requestKey
+            ? db.prepare("SELECT project_id FROM node_create_requests WHERE account_id=? AND request_key=?")
+                .pluck().get(accountId, requestKey) as number | undefined
+            : undefined;
+        const respond = (id: number) => res.status(201).json({
+            success: true, project_id: id, redirect: `/processing/${id}`,
+        });
+        const previous = existing();
+        if (previous !== undefined) return respond(previous);
         if (input.script_option === "paste" && !input.custom_script?.trim())
             fail(422, "Script is required");
         if (
@@ -387,26 +403,39 @@ app.post(
         if (!["16:9", "9:16", "1:1", "all"].includes(format))
             fail(422, "Invalid format");
         const file = saveFile(req.file, "voiceovers");
-        const id = Number(
-            insert("projects", {
-                ...input,
-                user_id: user(req),
-                voiceover_file: file.filename,
-                video_format: JSON.stringify(
-                    format === "all" ? ["16:9", "9:16", "1:1"] : [format],
-                ),
-                status: "processing",
-                processing_started_at: now(),
-                created_at: now(),
-                updated_at: now(),
-            }),
-        );
-        enqueue(id, "generate");
-        res.status(201).json({
-            success: true,
-            project_id: id,
-            redirect: `/processing/${id}`,
-        });
+        let id: number;
+        let reused = false;
+        try {
+            const duration = await mediaDuration(mediaFile(file.filename), file.mime);
+            if (!duration || duration > 60) fail(422, "Use a voiceover of 60 seconds or less.");
+            id = db.transaction(() => {
+                const duplicate = existing();
+                if (duplicate !== undefined) {
+                    reused = true;
+                    return duplicate;
+                }
+                reserveProviderRequest(accountId, "generate", requestKey ?? crypto.randomUUID());
+                const id = Number(insert("projects", {
+                    ...input,
+                    user_id: accountId,
+                    voiceover_file: file.filename,
+                    video_format: JSON.stringify(format === "all" ? ["16:9", "9:16", "1:1"] : [format]),
+                    status: "processing",
+                    processing_started_at: now(),
+                    created_at: now(),
+                    updated_at: now(),
+                }));
+                if (requestKey) db.prepare("INSERT INTO node_create_requests VALUES (?,?,?)")
+                    .run(accountId, requestKey, id);
+                enqueue(id, "generate");
+                return id;
+            }).immediate();
+        } catch (error) {
+            fs.unlinkSync(mediaFile(file.filename));
+            throw error;
+        }
+        if (reused) fs.unlinkSync(mediaFile(file.filename));
+        return respond(id);
     },
 );
 app.get("/processing/:id/status", (req, res) => {
@@ -476,6 +505,7 @@ app.post("/projects/:id/retry", (req, res) => {
     if (lastJob?.task === "render")
         fail(409, "No failed export is available to retry");
     db.transaction(() => {
+        reserveProviderRequest(user(req), "generate", crypto.randomUUID());
         update("projects", p.id, { status: "processing", error_message: null });
         enqueue(p.id, "generate");
     })();
@@ -723,7 +753,7 @@ app.get("/api/music/categories", (req, res) => {
 app.get(
     ["/api/music/search", "/api/music/popular", "/api/music/trending"],
     async (req, res) => {
-        user(req);
+        reserveProviderRequest(user(req), "music", crypto.randomUUID());
         res.json(
             await music(
                 String(
@@ -771,6 +801,7 @@ app.post("/scenes/:scene/regenerate-proxy", async (req, res) => {
     const previous = String(scene.video_url || "").match(
         /\/video-files\/(\d+)\//,
     )?.[1];
+    reserveProviderRequest(user(req), "stock", crypto.randomUUID());
     const clip = await stock(
         String(req.body.keywords?.[0] || scene.keywords || scene.script_text),
         previous ? [Number(previous)] : [],
@@ -831,6 +862,7 @@ app.post("/projects/:id/agent-runs", async (req, res) => {
         if (input.expectedRevision !== undefined && input.expectedRevision !== d.revision) {
             fail(409, "The project changed. Reload before requesting a proposal.");
         }
+        reserveProviderRequest(user(req), "plan", input.runId);
         insert("agent_runs", {
             id: input.runId,
             project_id: p.id,
@@ -846,16 +878,12 @@ app.post("/projects/:id/agent-runs", async (req, res) => {
             .get(input.runId) as any;
     }
     try {
-        const result = await worker(
-            "/agent/plan",
-            {
+        const result = await requestAgent({
                 runId: run.id,
                 message: run.message,
                 document: json(run.snapshot, {}),
                 browserRenderProfile: input.browserRenderProfile,
-            },
-            true,
-        );
+        });
         const current = db
             .prepare("SELECT status FROM agent_runs WHERE id=?")
             .pluck()
@@ -911,43 +939,9 @@ app.post("/projects/:id/agent-runs/:run/execute", (req, res) => {
         }),
     );
 });
-function queueExport(p: any, id: string, d: ReturnType<typeof document>) {
-    if (!d.tracks.video.length) fail(422, "No clips to render");
-    db.transaction(() => {
-        insert("video_exports", {
-            id,
-            project_id: p.id,
-            revision: d.revision,
-            snapshot: JSON.stringify(renderSnapshot(d, p)),
-            status: "queued",
-            created_at: now(),
-            updated_at: now(),
-        });
-        enqueue(p.id, "render", { exportId: id });
-        update("projects", p.id, {
-            status: "subtitle_generating",
-            error_message: null,
-        });
-    })();
-}
 app.post("/projects/:id/export", (req, res) => {
-    const p = own(req, req.params.id);
-    const id = uuid.parse(req.body.requestId || crypto.randomUUID());
-    const active = db
-        .prepare(
-            "SELECT * FROM video_exports WHERE project_id=? AND status IN ('queued','rendering')",
-        )
-        .get(p.id) as any;
-    if (active) return res.status(202).json({ export_id: active.id });
-    const existing = db
-        .prepare("SELECT * FROM video_exports WHERE id=?")
-        .get(id) as any;
-    if (existing) {
-        if (existing.project_id !== p.id) fail(409, "Export ID already used");
-        return res.status(202).json({ export_id: id });
-    }
-    queueExport(p, id, document(p));
-    res.status(202).json({ export_id: id, status: "queued" });
+    own(req, req.params.id);
+    res.status(410).json({ message: "Open the editor to export in your browser." });
 });
 app.get("/projects/:id/exports/:export", (req, res) => {
     const p = own(req, req.params.id);
@@ -959,37 +953,18 @@ app.get("/projects/:id/exports/:export", (req, res) => {
         row.output_url = `/projects/${p.id}/exports/${row.id}/download`;
     res.json(row);
 });
-app.delete("/projects/:id/exports/:export", (req, res) => {
+app.get("/projects/:id/exports/:export/download", (req, res) => {
     const p = own(req, req.params.id);
     const row = db
         .prepare("SELECT * FROM video_exports WHERE id=? AND project_id=?")
         .get(req.params.export, p.id) as any;
-    if (!row) fail(404, "Export not found");
-    if (["done", "failed", "cancelled"].includes(row.status))
-        return res.json({ success: true });
-    db.transaction(() => {
-        update("video_exports", row.id, { status: "cancelled", updated_at: now() });
-        update("projects", p.id, { status: "subtitle_selection" });
-        enqueue(p.id, "cancel_render", { exportId: row.id });
-    })();
-    res.json({ success: true });
-});
-app.get("/projects/:id/exports/:export/download", async (req, res) => {
-    const p = own(req, req.params.id);
-    const row = db
-        .prepare("SELECT * FROM video_exports WHERE id=? AND project_id=?")
-        .get(req.params.export, p.id) as any;
-    if (!row || row.status !== "done") fail(404, "Export is not ready");
-    const response = await fetch(
-        (process.env.NODE_RENDER_URL || "http://127.0.0.1:5211") +
-            "/downloads/" +
-            row.worker_job_id +
-            ".mp4",
-        { headers: { Authorization: `Bearer ${process.env.WORKER_TOKEN}` } },
-    );
-    if (!response.ok || !response.body) fail(502, "Download unavailable");
-    res.type("video/mp4").attachment(`vidsai-${p.id}.mp4`);
-    Readable.fromWeb(response.body as any).pipe(res);
+    if (!row || row.status !== "done" || !uuid.safeParse(row.worker_job_id).success) {
+        fail(404, "Export is not ready");
+    }
+    const folder = path.resolve(process.env.NODE_LEGACY_RENDER_OUTPUT_DIR || path.join(runtime, "node-renders"));
+    const file = path.join(folder, row.worker_job_id + ".mp4");
+    if (!fs.existsSync(file)) fail(404, "This historical export file is unavailable. Export the project again in the editor.");
+    res.type("video/mp4").attachment(`vidsai-${p.id}.mp4`).sendFile(file);
 });
 app.use(
     "/migration-fixtures",

@@ -195,6 +195,8 @@ export default function Editor({
         setError("");
 
         try {
+            const { inspectBrowserMedia } = await import("../browser-export/inspect-media");
+            await inspectBrowserMedia(file, /\.(png|jpe?g)$/i.test(file.name) ? "image" : "video", new AbortController().signal);
             const data = new FormData();
 
             data.append("file", file);

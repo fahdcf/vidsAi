@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
 import { app } from "./app";
 import { db, project, scenes } from "./database";
 import { document, renderSnapshot } from "./document";
-import { tick } from "./jobs";
 test("Node account, CSRF, ownership, private media and editing contracts", async () => {
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>((r) => server.once("listening", r));
@@ -102,14 +103,32 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             "video_format[0]": "16:9",
         }))
             form.append(k, v);
+        const wav = Buffer.alloc(44 + 16000 * 4);
+        wav.write("RIFF", 0);
+        wav.writeUInt32LE(wav.length - 8, 4);
+        wav.write("WAVEfmt ", 8);
+        wav.writeUInt32LE(16, 16);
+        wav.writeUInt16LE(1, 20);
+        wav.writeUInt16LE(1, 22);
+        wav.writeUInt32LE(16000, 24);
+        wav.writeUInt32LE(32000, 28);
+        wav.writeUInt16LE(2, 32);
+        wav.writeUInt16LE(16, 34);
+        wav.write("data", 36);
+        wav.writeUInt32LE(wav.length - 44, 40);
+        form.append("request_id", crypto.randomUUID());
         form.append(
             "voiceover_file",
-            new Blob(["RIFFxxxxWAVEdata"], { type: "audio/wav" }),
+            new Blob([new Uint8Array(wav)], { type: "audio/wav" }),
             "test.wav",
         );
         const created = await owner.call("/create", form);
         assert.equal(created.status, 201);
         const id = ((await created.json()) as any).project_id;
+        const duplicate = await owner.call("/create", form);
+        assert.equal(duplicate.status, 201);
+        assert.equal((await duplicate.json() as any).project_id, id);
+        assert.equal(db.prepare("SELECT COUNT(*) FROM node_jobs WHERE project_id=? AND task='generate'").pluck().get(id), 1);
         db.prepare("UPDATE node_jobs SET status='failed' WHERE project_id=? AND task='generate'").run(id);
         db.prepare("UPDATE projects SET status='failed' WHERE id=?").run(id);
         const generationRetry = await owner.call(`/projects/${id}/retry`, {});
@@ -469,38 +488,29 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             "explicit shortening survives a subsequent read",
         );
         const requestId = crypto.randomUUID();
-        const exported = await owner.call(`/projects/${id}/export`, {
-            requestId,
-        });
-        assert.equal(exported.status, 202);
-        assert.equal(
-            (
-                (await (
-                    await owner.call(`/projects/${id}/export`, { requestId })
-                ).json()) as any
-            ).export_id,
-            requestId,
-        );
-        assert.equal(
-            (await other.call(`/projects/${id}/exports/${requestId}`)).status,
-            404,
-        );
-        const failedExport = db.prepare(
-            "SELECT revision,snapshot FROM video_exports WHERE id=?",
-        ).get(requestId) as { revision: number; snapshot: string };
+        const exported = await owner.call(`/projects/${id}/export`, { requestId });
+        assert.equal(exported.status, 410);
+        assert.equal(db.prepare("SELECT COUNT(*) FROM video_exports WHERE project_id=?").pluck().get(id), 0);
+        assert.equal(db.prepare("SELECT COUNT(*) FROM node_jobs WHERE project_id=? AND task='render'").pluck().get(id), 0);
+        const historicalWorkerId = crypto.randomUUID();
+        const historicalDir = path.join(process.env.NODE_MEDIA_ROOT!, "historical");
+        process.env.NODE_LEGACY_RENDER_OUTPUT_DIR = historicalDir;
+        fs.mkdirSync(historicalDir, {recursive:true});
+        fs.writeFileSync(path.join(historicalDir, historicalWorkerId + ".mp4"), "historical bytes");
+        const historical = document(project(id));
+        db.prepare("INSERT INTO video_exports(id,project_id,revision,snapshot,status,worker_job_id) VALUES(?,?,?,?,?,?)")
+            .run(requestId, id, historical.revision, JSON.stringify(historical), "done", historicalWorkerId);
+        const downloadPath = `/projects/${id}/exports/${requestId}/download`;
+        assert.equal((await other.call(downloadPath)).status, 404);
+        const oldFile = await owner.call(downloadPath);
+        assert.equal(oldFile.status, 200);
+        assert.equal(await oldFile.text(), "historical bytes");
         db.prepare("UPDATE video_exports SET status='failed' WHERE id=?").run(requestId);
         db.prepare("UPDATE projects SET status='failed' WHERE id=?").run(id);
-        const newerEdit = await owner.call(`/projects/${id}/commands`, {
-            commandId: crypto.randomUUID(),
-            expectedRevision: failedExport.revision,
-            operations: [{ tool: "set_format", params: { width: 960, height: 540 } }],
-        });
-        assert.equal(newerEdit.status, 200);
         const beforeRetry = scenes(id);
         const retried = await owner.call(`/projects/${id}/retry`, {});
         assert.equal(retried.status, 200);
         assert.deepEqual(await retried.json(), { success: true, redirect: `/projects/${id}/editor` });
-        assert.equal(document(project(id)).width, 960);
         assert.equal(db.prepare("SELECT COUNT(*) FROM video_exports WHERE project_id=?").pluck().get(id), 1);
         assert.deepEqual(scenes(id), beforeRetry);
         assert.equal(

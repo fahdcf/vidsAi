@@ -1,6 +1,7 @@
 import { app } from "./app";
-import { startJobs } from "./jobs";
+import { retireLegacyRenderJobs, startJobs } from "./jobs";
 import { origin } from "./env";
+retireLegacyRenderJobs();
 const server = app.listen(
     Number(new URL(origin).port) || 8100,
     "127.0.0.1",

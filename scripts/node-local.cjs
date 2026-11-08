@@ -72,12 +72,8 @@ async function main() {
             process.env.NODE_APP_ORIGIN ||
             config.origin ||
             "http://127.0.0.1:8100",
-        NODE_RENDER_URL: "http://127.0.0.1:5211",
         NODE_AGENT_URL: "http://127.0.0.1:5212",
         HOST: "127.0.0.1",
-        MAX_CONCURRENT: "1",
-        FRAME_CONCURRENCY: "1",
-        BROWSER_EXECUTABLE: config.browserExe,
     };
     for (const line of fs
         .readFileSync(path.join(root, ".env"), "utf8")
@@ -93,7 +89,6 @@ async function main() {
         );
     for (const port of [
         Number(new URL(env.NODE_APP_ORIGIN).port) || 8100,
-        5211,
         5212,
     ])
         await new Promise((resolve, reject) => {
@@ -110,21 +105,6 @@ async function main() {
             cwd: root,
             args: ["--import", "tsx", path.join(root, "server/start.ts")],
             env,
-        },
-        {
-            name: "Render",
-            cwd: renderer,
-            args: [
-                "--import",
-                "tsx",
-                path.join(renderer, "apps/render-worker/server.ts"),
-            ],
-            env: {
-                ...env,
-                PORT: "5211",
-                RENDER_DATA_DIR: path.join(runtime, "node-render"),
-                RENDER_OUTPUT_DIR: path.join(runtime, "node-renders"),
-            },
         },
         {
             name: "Agent",
@@ -159,7 +139,6 @@ async function main() {
     }
     for (const url of [
         env.NODE_APP_ORIGIN + "/health",
-        "http://127.0.0.1:5211/health",
         "http://127.0.0.1:5212/health",
     ]) {
         let ok = false;

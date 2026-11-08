@@ -1,9 +1,19 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { db, insert, update, now } from "./database";
-import { enqueue, tick } from "./jobs";
-test("export polling recovers a connection failure and an expired lease without resubmission", async () => {
+import { db, insert, now } from "./database";
+import { enqueue, retireLegacyRenderJobs, tick } from "./jobs";
+import { reserveProviderRequest } from "./provider-budget";
+
+test("provider budget counts distinct requests and permits an idempotent replay", () => {
+    const account = 987654;
+    for (let i = 0; i < 5; i++) reserveProviderRequest(account, "generate", String(i));
+    reserveProviderRequest(account, "generate", "0");
+    assert.throws(() => reserveProviderRequest(account, "generate", "new"), { status: 429 });
+    assert.equal(db.prepare("SELECT COUNT(*) FROM node_provider_requests WHERE account_id=?").pluck().get(account), 5);
+    db.prepare("DELETE FROM node_provider_requests WHERE account_id=?").run(account);
+});
+test("legacy server render jobs retire without resubmission", async () => {
     const original = globalThis.fetch;
     const userId = Number(
         insert("users", {
@@ -39,63 +49,16 @@ test("export polling recovers a connection failure and an expired lease without 
         updated_at: now(),
     });
     const job = enqueue(projectId, "render", { exportId });
-    let submissions = 0;
-    let checks = 0;
     try {
-        globalThis.fetch = async (url, options) => {
-            if (String(url).endsWith("/render")) {
-                submissions++;
-                assert.equal(
-                    JSON.parse(String(options?.body)).requestId,
-                    exportId,
-                );
-                return new Response(
-                    JSON.stringify({ jobId: "persisted-render" }),
-                );
-            }
-            if (++checks === 1) throw new TypeError("fetch failed");
-            return new Response(
-                JSON.stringify({ status: "done", progress: 1 }),
-            );
-        };
+        globalThis.fetch = async () => { throw new Error("No renderer may be contacted"); };
         await tick();
-        let row = db
-            .prepare("SELECT * FROM node_jobs WHERE id=?")
-            .get(job) as any;
-        assert.equal(row.status, "queued");
-        assert.equal(
-            (
-                db
-                    .prepare(
-                        "SELECT worker_job_id FROM video_exports WHERE id=?",
-                    )
-                    .get(exportId) as any
-            ).worker_job_id,
-            "persisted-render",
-        );
-        update("node_jobs", job, {
-            status: "running",
-            lease: Date.now() - 1,
-            available: 0,
-        });
-        await tick();
-        row = db.prepare("SELECT * FROM node_jobs WHERE id=?").get(job) as any;
-        assert.equal(row.status, "done");
-        assert.equal(submissions, 1);
-        assert.equal(
-            db
-                .prepare("SELECT status FROM projects WHERE id=?")
-                .pluck()
-                .get(projectId),
-            "completed",
-        );
-        assert.equal(
-            db
-                .prepare("SELECT snapshot FROM video_exports WHERE id=?")
-                .pluck()
-                .get(exportId),
-            "{}",
-        );
+        assert.equal(db.prepare("SELECT status FROM node_jobs WHERE id=?").pluck().get(job), "queued");
+        retireLegacyRenderJobs();
+        retireLegacyRenderJobs();
+        assert.equal(db.prepare("SELECT status FROM node_jobs WHERE id=?").pluck().get(job), "cancelled");
+        assert.equal(db.prepare("SELECT status FROM video_exports WHERE id=?").pluck().get(exportId), "failed");
+        assert.equal(db.prepare("SELECT status FROM projects WHERE id=?").pluck().get(projectId), "subtitle_selection");
+        assert.equal(db.prepare("SELECT snapshot FROM video_exports WHERE id=?").pluck().get(exportId), "{}");
     } finally {
         globalThis.fetch = original;
         db.prepare("DELETE FROM node_jobs WHERE project_id=?").run(projectId);
