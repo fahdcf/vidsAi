@@ -113,7 +113,7 @@ async function main() {
             await page.waitForURL("**/dashboard");
             await page
                 .getByRole("heading", {
-                    name: "Your video projects",
+                    name: "Your workspace",
                     exact: true,
                 })
                 .waitFor();

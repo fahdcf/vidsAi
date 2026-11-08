@@ -306,15 +306,14 @@ export default function Create() {
                     </fieldset>
                 </form>
                 <aside className="create-aside">
-                    <Icon name="sparkles" size={26} />
+                    <img className="creation-art" src="/studio/story-sculpture.webp" alt="" width={1024} height={1024} />
                     <span className="eyebrow">
-                        {" "}
-                        A LITTLE DIRECTION. YOUR VISION.
+                        YOUR STORY, STEP BY STEP
                     </span>
                     <h2>
-                        From a few words
+                        From your voice
                         <br />
-                        to something worth watching.
+                        to the final frame.
                     </h2>
                     <p>
                         You’re in control at every step. Think of us as your

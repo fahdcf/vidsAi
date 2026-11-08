@@ -29,8 +29,8 @@ export default function Dashboard({ projects }: { projects: any[] }) {
     );
     return (
         <Shell
-            title="Your video projects"
-            description="A home for your ideas, works in progress, and next great video."
+            title="Your workspace"
+            description="Pick up where you left off, or start something new."
             actions={
                 <a className="button primary" href="/create">
                     <Icon name="plus" />
@@ -39,15 +39,16 @@ export default function Dashboard({ projects }: { projects: any[] }) {
             }
         >
             <section className="dashboard-intro">
-                <div>
+                <img className="dashboard-art" src="/studio/story-glass.webp" alt="" width={1536} height={1024} />
+                <div className="dashboard-intro-copy">
                     <span className="eyebrow">
-                        START WITH A LITTLE INSPIRATION
+                        MADE FOR YOUR NEXT IDEA
                     </span>
-                    <h2>Your next story starts here.</h2>
+                    <h2>Make a story.<br /><em>Make it yours.</em></h2>
                     <p>
-                        A voiceover, a few ideas, and a video that feels like
-                        you.
+                        Turn your narration into a video worth watching.
                     </p>
+                    <a className="button primary" href="/create"><Icon name="plus" /> New project</a>
                 </div>
                 <div className="project-stats">
                     <span>
@@ -64,6 +65,10 @@ export default function Dashboard({ projects }: { projects: any[] }) {
                     </span>
                 </div>
             </section>
+            <div className="section-bar dashboard-project-heading">
+                <h2>Your projects</h2>
+                <span className="muted small-text">{projects.length} in your workspace</span>
+            </div>
             <div className="dashboard-tools">
                 <nav className="filter-tabs" aria-label="Filter projects">
                     {["All projects", "In progress", "Ready", "Drafts"].map(

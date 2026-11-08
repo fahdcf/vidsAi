@@ -117,11 +117,8 @@ export default function Shell({
                     </nav>
                     <div className="sidebar-note">
                         <Icon name="sparkles" />
-                        <strong>
-                            A little idea.
-                            <br />A lot of possibility.
-                        </strong>
-                        <p>Bring your next story to life.</p>
+                        <strong>Your next story<br />starts with a voice.</strong>
+                        <p>Bring the idea. Make it yours.</p>
                         <a href="/create">
                             Create a video <Icon name="arrowRight" size={14} />
                         </a>

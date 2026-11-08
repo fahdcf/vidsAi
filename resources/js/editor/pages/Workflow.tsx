@@ -32,10 +32,11 @@ export function Processing({ project }: any) {
     }, [project.id]);
     return (
         <Shell
-            title="Processing Your Video Ad"
-            description="A little creative magic is happening behind the scenes."
+            title="Building your storyboard"
+            description="Follow your project from narration to scenes."
         >
             <section className="panel processing-card">
+                <img className="processing-art" src="/studio/story-sculpture.webp" alt="" width={1024} height={1024} />
                 <div className="processing-emblem">
                     <Icon
                         name={state.status === "failed" ? "close" : "sparkles"}
@@ -68,7 +69,7 @@ export function Processing({ project }: any) {
                         },
                         { id: "review", title: "Prepare your storyboard" },
                     ].map((stage, i) => (
-                        <li key={stage.id}>
+                        <li key={stage.id} className={state.stages?.[stage.id] ? "stage-complete" : ""}>
                             <span>
                                 {state.stages?.[stage.id] ? (
                                     <Icon name="check" size={15} />
