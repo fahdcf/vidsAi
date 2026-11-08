@@ -1,5 +1,40 @@
 import React, { useState, useEffect } from "react";
 import { api } from "./api";
+
+type Track = {
+    id: number;
+    name: string;
+    artist: string;
+    duration: number;
+    license: string;
+    preview_url: string;
+};
+type TrackList = { tracks: Track[]; total: number };
+type Browse = {
+    mode: "search" | "popular" | "trending";
+    query: string;
+    category: string;
+    page: number;
+};
+const pageSize = 12;
+const resultHeadings = {
+    search: "Search results",
+    popular: "Popular tracks",
+    trending: "Featured tracks",
+};
+let suggestedTracks: { expiresAt: number; request: Promise<TrackList> } | undefined;
+
+function getSuggestions() {
+    if (!suggestedTracks || suggestedTracks.expiresAt <= Date.now()) {
+        const request = api<TrackList>("/api/music/popular?per_page=4", undefined, "GET");
+        suggestedTracks = { expiresAt: Date.now() + 5 * 60_000, request };
+        void request.catch(() => {
+            if (suggestedTracks?.request === request) suggestedTracks = undefined;
+        });
+    }
+    return suggestedTracks.request;
+}
+
 export default function MusicLibrary({
     busy,
     onChoose,
@@ -7,31 +42,54 @@ export default function MusicLibrary({
     busy: boolean;
     onChoose: (url: string) => void;
 }) {
-    const [categories, setCategories] = useState<string[]>([]);
+    const [categories, setCategories] = useState(["music"]);
     const [category, setCategory] = useState("music");
+    const [suggestions, setSuggestions] = useState<Track[] | null>(null);
     useEffect(() => {
-        api("/api/music/categories", undefined, "GET")
-            .then((r) => setCategories(r.categories))
+        let mounted = true;
+        void api<{ categories: string[] }>("/api/music/categories", undefined, "GET")
+            .then(({ categories }) => {
+                if (mounted) setCategories(categories);
+            })
             .catch(() => {});
+        void getSuggestions().then(
+            ({ tracks }) => {
+                if (mounted) setSuggestions(tracks.filter((track) => track.preview_url));
+            },
+            () => {
+                if (mounted) setSuggestions([]);
+            },
+        );
+        return () => {
+            mounted = false;
+        };
     }, []);
     const [query, setQuery] = useState("");
-    const [tracks, setTracks] = useState<any[]>([]);
+    const [results, setResults] = useState<(TrackList & { browse: Browse }) | null>(null);
     const [error, setError] = useState("");
     const [loading, setLoading] = useState(false);
-    const [page, setPage] = useState(1);
-    const [total, setTotal] = useState(0);
-    async function search(next = 1, mode = "search") {
+    const tracks = results?.tracks ?? suggestions;
+
+    function browseFirstPage(mode: Browse["mode"]) {
+        void search({ mode, query: query.trim(), category, page: 1 });
+    }
+
+    async function search(browse: Browse) {
         setLoading(true);
         setError("");
+        const params = new URLSearchParams({
+            query: browse.query,
+            category: browse.category,
+            page: String(browse.page),
+            per_page: String(pageSize),
+        });
         try {
-            const r = await api(
-                `/api/music/${mode}?query=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&page=${next}&per_page=12`,
+            const list = await api<TrackList>(
+                `/api/music/${browse.mode}?${params}`,
                 undefined,
                 "GET",
             );
-            setTracks(r.tracks);
-            setTotal(r.total || 0);
-            setPage(next);
+            setResults({ ...list, browse });
         } catch (e) {
             setError((e as Error).message);
         } finally {
@@ -39,12 +97,11 @@ export default function MusicLibrary({
         }
     }
     return (
-        <section id="music-library" data-no-autosave>
-            <h2>Music library</h2>
+        <section id="music-library" aria-label="Music library" data-no-autosave>
             <form
                 onSubmit={(e) => {
                     e.preventDefault();
-                    void search();
+                    browseFirstPage("search");
                 }}
             >
                 <label>
@@ -63,6 +120,7 @@ export default function MusicLibrary({
                 <label>
                     Search music
                     <input
+                        placeholder="e.g. ambient piano"
                         value={query}
                         onChange={(e) => setQuery(e.target.value)}
                     />
@@ -71,14 +129,14 @@ export default function MusicLibrary({
                 <button
                     type="button"
                     disabled={loading}
-                    onClick={() => void search(1, "popular")}
+                    onClick={() => browseFirstPage("popular")}
                 >
                     Popular tracks
                 </button>
                 <button
                     type="button"
                     disabled={loading}
-                    onClick={() => void search(1, "trending")}
+                    onClick={() => browseFirstPage("trending")}
                 >
                     Featured tracks
                 </button>
@@ -88,13 +146,28 @@ export default function MusicLibrary({
                     {error}
                 </p>
             )}
-            {tracks.map((track) => (
+            <h3 className="music-results-title">
+                {results ? resultHeadings[results.browse.mode] : "Suggested tracks"}
+            </h3>
+            {loading || tracks === null ? (
+                <p role="status" className="muted">Loading {loading ? "tracks" : "suggestions"}…</p>
+            ) : tracks.length === 0 && (
+                <p role="status" className="muted">
+                    {results ? "No tracks found. Try another search." : "No suggestions available. Search for music or try Popular tracks."}
+                </p>
+            )}
+            {tracks?.map((track) => (
                 <article key={track.id}>
                     <h3>{track.name}</h3>
                     <p>
                         {track.artist} · {Math.round(track.duration)} seconds
                     </p>
-                    <audio controls preload="none" src={track.preview_url} />
+                    <audio
+                        controls
+                        preload="none"
+                        src={track.preview_url}
+                        aria-label={`Preview ${track.name}`}
+                    />
                     <p>
                         <a
                             href={track.license}
@@ -113,19 +186,19 @@ export default function MusicLibrary({
                     </button>
                 </article>
             ))}
-            {tracks.length > 0 && (
+            {results && (results.browse.page > 1 || results.total > pageSize) && (
                 <div className="row">
                     <button
                         type="button"
-                        disabled={page <= 1 || loading}
-                        onClick={() => void search(page - 1)}
+                        disabled={results.browse.page <= 1 || loading}
+                        onClick={() => void search({ ...results.browse, page: results.browse.page - 1 })}
                     >
                         Previous tracks
                     </button>
                     <button
                         type="button"
-                        disabled={page * 12 >= total || loading}
-                        onClick={() => void search(page + 1)}
+                        disabled={results.browse.page * pageSize >= results.total || loading}
+                        onClick={() => void search({ ...results.browse, page: results.browse.page + 1 })}
                     >
                         Next tracks
                     </button>

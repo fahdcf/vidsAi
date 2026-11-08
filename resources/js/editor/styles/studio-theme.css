@@ -157,7 +157,7 @@ main:has(> .create-options) > .page-heading h1 { font-size: clamp(30px, 3vw, 42p
 .completion-circle { background: var(--accent-soft); border-color: var(--accent-border); color: var(--accent); }
 .workflow-footer { background: transparent; padding-top: 20px; }
 
-/* Caption preset artwork is intentionally not recolored by the application theme. */
+/* Gallery samples use the studio palette. Project captions use their saved colors. */
 .style-studio { gap: 22px; }
 .style-browser, .style-preview { border-radius: 18px; }
 .studio-tabs { padding: 8px; gap: 5px; background: #ffffff02; }

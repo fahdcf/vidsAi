@@ -59,8 +59,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(ellipse at 25% 25%, #3e4e48 0, transparent 55%),
-        linear-gradient(135deg, #1d3434, #253328 55%, #1d2427);
+    background: radial-gradient(ellipse at 20% 0%, #ff986c24, transparent 72%),
+        linear-gradient(135deg, #343035, #202023 72%);
     isolation: isolate;
 }
 .sample-scene {
@@ -71,7 +71,7 @@
     border-radius: 50%;
     top: -28px;
     right: 10px;
-    background: linear-gradient(50deg, #94ad8d33, transparent 75%);
+    background: linear-gradient(50deg, #ffbe9d22, transparent 75%);
     filter: blur(3px);
     z-index: -1;
 }
@@ -86,7 +86,7 @@
 }
 .sample-words em {
     font-style: normal;
-    color: #d4f77b;
+    color: #ffb494;
 }
 .preset-tiktok_trending .sample-words {
     text-transform: uppercase;
@@ -96,15 +96,15 @@
     text-shadow: 1px 2px 0 #000;
 }
 .preset-tiktok_trending em {
-    color: #fcf161;
+    color: #ffae86;
 }
 .preset-progressive_highlight em {
-    background: #dcff5c;
-    color: #152017;
+    background: #ff986c;
+    color: #25130c;
     padding: 1px 4px;
 }
 .preset-rectangular .sample-words {
-    background: #050908cc;
+    background: #111114e6;
     padding: 6px 12px;
     font-size: 16px;
 }
@@ -113,31 +113,30 @@
 }
 .preset-rounded_progressive .sample-words {
     background: #f6f4f0;
-    color: #18241b;
+    color: #211a1a;
     border-radius: 12px;
     padding: 3px 10px;
     font-size: 16px;
 }
 .preset-rounded_progressive em {
-    color: #7455db;
+    color: #a44427;
 }
 .preset-arabic_banner .sample-words {
     width: 90%;
-    background: #16111da9;
-    border-top: 2px solid #d4f77b;
-    border-bottom: 2px solid #d4f77b;
+    background: #19171be8;
+    border-block: 2px solid #ff986c;
     padding: 8px;
     font-size: 22px;
 }
 .preset-rectangular_banner .sample-words {
-    background: #dee4d3;
-    color: #1d2920;
+    background: #efddd4;
+    color: #292024;
     width: 100%;
     font-size: 15px;
     padding: 5px;
 }
 .preset-rectangular_banner em {
-    color: #516e35;
+    color: #963e24;
 }
 .preset-default .sample-words {
     font-weight: 400;

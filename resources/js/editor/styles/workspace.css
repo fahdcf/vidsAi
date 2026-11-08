@@ -456,9 +456,6 @@
 .export-panel .primary {
     margin-left: auto;
 }
-#music-library > h2 {
-    display: none;
-}
 #music-library > form {
     display: flex;
     flex-wrap: wrap;
@@ -479,21 +476,33 @@
 #music-library > form > button:first-of-type {
     background: var(--accent);
     border-color: var(--accent);
-    color: #17200d;
+    color: #25130c;
+}
+#music-library .music-results-title {
+    margin: 0 0 12px;
+    font-size: 14px;
+}
+#music-library > [role="status"] {
+    font-size: 12px;
+    margin-bottom: 12px;
 }
 #music-library article {
     display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 6px 12px;
-    border-top: 1px solid var(--border);
-    padding: 15px 0;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #ffffff03;
+    padding: 12px;
+    margin-bottom: 8px;
 }
 #music-library article h3 {
-    font-size: 12px;
+    font-size: 13px;
     grid-column: 1/-1;
+    overflow-wrap: anywhere;
 }
 #music-library article > p {
-    font-size: 9px;
+    font-size: 11px;
     color: var(--muted);
     margin: 0;
 }
@@ -513,8 +522,8 @@
 #music-library > .row {
     margin-top: 16px;
 }
-.inspector #music-library article {
-    gap: 6px;
+.inspector #music-library > .row {
+    flex-wrap: wrap;
 }
 .inspector #music-library > form > label {
     min-width: 100%;
