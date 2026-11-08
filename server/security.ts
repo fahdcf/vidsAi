@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { Request, Response, NextFunction } from "express";
 import { db, insert } from "./database";
-import { origin, secret } from "./env";
+import { origin } from "./env";
 export function fail(status: number, message: string): never {
     throw Object.assign(new Error(message), { status });
 }
@@ -77,25 +77,4 @@ export function own(req: Request, id: any) {
         .get(id, user(req)) as any;
     if (!p) fail(404, "Project not found");
     return p;
-}
-export function signed(path: string) {
-    const expires = Date.now() + 86400000;
-    const sig = crypto
-        .createHmac("sha256", secret!)
-        .update(path + ":" + expires)
-        .digest("hex");
-    return `${origin}${path}?expires=${expires}&signature=${sig}`;
-}
-export function validSignature(req: Request) {
-    const expires = String(req.query.expires || "");
-    if (Number(expires) < Date.now()) return false;
-    const expected = crypto
-        .createHmac("sha256", secret!)
-        .update(req.path + ":" + expires)
-        .digest("hex");
-    const got = String(req.query.signature || "");
-    return (
-        got.length === expected.length &&
-        crypto.timingSafeEqual(Buffer.from(got), Buffer.from(expected))
-    );
 }

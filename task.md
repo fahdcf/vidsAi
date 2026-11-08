@@ -18,7 +18,7 @@ The supported export workload is the deliberate product limit agreed in the road
 | Area | Location |
 | --- | --- |
 | Browser app and backend | `D:/VidsAI-migration/full-typescript/vidsAi` |
-| Shared composition, contract, editing core, workers | `D:/VidsAI-migration/full-typescript/remotion-api` |
+| Shared composition, contract, editing core and planner | `shared/` and `server/agent/` inside VidsAI |
 | Portable fixture and server reference | `D:/VidsAI-migration/full-typescript/fixtures/iphone-export-reference` |
 | Verification artifacts | `D:/VidsAI-migration/full-typescript/runtime` |
 
@@ -45,7 +45,7 @@ This evidence covers a small fixture. Audio levels differ from the worker refere
 - [x] A2. Inventory every export entry point and dependency. Inspect `resources/js/editor/pages/Editor.tsx`, `api.ts`, `server/app.ts`, `server/jobs.ts`, `server/document.ts`, worker render routes, and any workflow recovery links. Record where submit, retry, poll, cancel, download, old export history, and startup recovery currently depend on the worker. Include server FFmpeg preprocessing and thumbnail/proxy creation if export requires them.
 
 Baseline evidence and the dependency inventory are recorded in [the browser export baseline](docs/BROWSER_EXPORT_BASELINE.md).
-- [x] A3. Make `browser-export/render.tsx` consume a validated immutable project snapshot and resolved assets without fixture IDs or hardcoded dimensions. Keep the composition in `remotion-api/remotion/VideoMerger.tsx` and its shared package. Use browser media adapters for video/audio and resolve blob URLs safely. Keep Node-only dependencies and server credentials out of browser imports.
+- [x] A3. Make `browser-export/render.tsx` consume a validated immutable project snapshot and resolved assets without fixture IDs or hardcoded dimensions. Keep the composition in `shared/compositions/VideoMerger.tsx`. Use browser media adapters for video/audio and resolve blob URLs safely. Keep Node-only dependencies and server credentials out of browser imports.
 - [x] A4. Resolve the measured audio difference. Compare source levels, channel layout, gain, fades, sequence offsets, and playback speed. Establish the expected mono/stereo mix semantics and implement them consistently. Verify both narration and music against source signals and the baseline. Avoid applying an unexplained global gain correction.
 - [x] A5. Make all existing caption presets and transitions browser-compatible. Cover `default`, `progressive_highlight`, `tiktok_trending`, `arabic_banner`, `rectangular`, `rounded_progressive`, and `rectangular_banner`. Cover cuts, fades, zooms, slide directions, and clip zoom animation. Fix unsupported CSS, fonts, RTL/mixed-direction layout, and time-based animation using the shared frame timing model. Preserve the visual design.
 - [x] A6. Record the pinned renderer's production license eligibility, telemetry behavior, and expected cost. Resolve configuration before production use. Do not infer eligibility from a development render succeeding.
@@ -153,5 +153,7 @@ P1–P2 and all migration tasks through E5 are complete. The follow-up scope beg
 - 2026-11-08 — Fixed an export failure for a 50 FPS stock clip. The browser accepts constant-frame-rate sources up to 60 FPS and prepares a temporary 30 FPS copy before rendering. Chrome and Edge exported the original project as a 186-frame H.264/AAC MP4 at 30 FPS with zero server render requests. Evidence is in `../runtime/browser-stock-fps-ppuu0I/verification.json`.
 
 - 2026-11-08 — Upgraded the browser to Remotion 4.0.541 with the Windows decoder stall fix. Export now reads the original high-frame-rate media directly and encodes at the project frame rate. Repeated tests started exports while the preview was playing. The stress fixture used two 1080p/60 FPS sources with a transition in a 60-second timeline. Evidence is in `../runtime/browser-decoder-stall-verification/verification.json`.
+
+- 2026-11-08 — Made VidsAI self-contained. The shared timeline and composition code now live in `shared/`, and the editing planner runs inside the app server. A fresh standalone install passed both type checks, all 19 tests, and the production build. Chrome and Edge exported the existing project with pixel-identical video compared with the prior build. The assistant prepared and applied an edit without a separate worker. Local startup uses only port 8100. Evidence is in `../runtime/standalone-clean-check/verification.json`.
 
 At each checkpoint, append one concise entry with the date, completed task IDs, verification result/artifact path, and the next task or exact blocker. This keeps future work resumable without rerunning already valid verification.

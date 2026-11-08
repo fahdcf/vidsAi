@@ -1,6 +1,6 @@
 # Browser MVP with local rendering
 
-Updated 2026-11-08. The browser rendering migration passed local acceptance on the development PC. The existing editor creates new MP4s in Chrome and Edge, and production startup uses the control server and standalone editing agent. Public beta evidence and broader device coverage remain follow-up work before expanding support.
+Updated 2026-11-08. The browser rendering migration passed local acceptance on the development PC. The existing editor creates new MP4s in Chrome and Edge, and VidsAI starts one server for the app, editing agent, and other AI provider calls. Public beta evidence and broader device coverage remain follow-up work before expanding support.
 
 Execute the migration using [task.md](../task.md). Its ordered tasks and grouped verification checkpoints govern implementation. Final acceptance requires the existing website and working editing features to export fully in the browser with server rendering unavailable.
 
@@ -8,7 +8,7 @@ Execute the migration using [task.md](../task.md). Its ordered tasks and grouped
 
 Build a short-video editor in the existing browser app. Manual editing, preview, and MP4 export run on the user's computer. Keep backend accounts, project synchronization, provider credentials, AI planning, transcription, stock searches, generated media, and usage enforcement. Local rendering removes our server's video encoding workload, but AI, media delivery, storage, and software licensing can still cost money.
 
-Preserve the existing VidsAI website design, editor layout, navigation, and Create → Review → Style → Edit workflow. Switch the rendering implementation behind the existing Export control. Reuse the current export UI for progress, cancellation, errors, and download. Add messages within that UI when a browser or project exceeds supported limits. The standalone prototype is a development test page outside the product flow.
+Preserve the existing VidsAI website design, editor layout, navigation, and Create → Review → Style → Edit workflow. Switch the rendering implementation behind the existing Export control. Reuse the current export UI for progress, cancellation, errors, and download. Add messages within that UI when a browser or project exceeds supported limits.
 
 Ship desktop Chrome and Edge first. Treat mobile browsers, including the user's iPhone, as a separate experimental compatibility tier until tested. A responsive page does not establish reliable mobile export. After a usable browser beta, start a separate native iPhone repository and reuse the document contract, commands, fixtures, backend, and product lessons.
 
@@ -19,13 +19,9 @@ Continue development on Windows. No Mac is required for this browser milestone.
 | Location | Role in this roadmap |
 | --- | --- |
 | `D:/VidsAI-migration/full-typescript/vidsAi` | Active browser UI, backend, local project storage, capability checks, export controller |
-| `D:/VidsAI-migration/full-typescript/remotion-api` | Shared contracts, editing operations, compositions, agent worker, existing server renderer as a development comparison |
-| `remotion-api/packages/contracts/spec/v1` | Generated project/command schemas and editing conformance fixtures |
 | `D:/VidsAI-migration/full-typescript/fixtures/iphone-export-reference` | Existing portable synthetic fixture, reusable for browser export despite its historical name |
 
-Keep these repositories. A repository named remotion-api can supply browser-safe packages without running its render service in production. Do not bundle Node-only imports, SQLite, FFmpeg, server environment variables, or provider credentials into browser packages. Pin compatible shared package revisions and aligned Remotion versions.
-
-Before migration, the browser preview used Remotion and exports ran through `server/jobs.ts` and the worker's `/render` endpoint. The shared composition now uses browser media adapters for export. Its original renderer remains available for development comparisons, including caption timing and RTL layout.
+VidsAI owns the shared document contract, editing operations, compositions, and server-side planner. Keep SQLite, server environment variables, and provider credentials outside the browser bundle. The browser uses the shared composition with browser media adapters.
 
 Existing stabilization work and portable fixtures remain useful. Previous end-to-end evidence covered simulated AI providers and a real server-rendered MP4. It does not prove browser rendering or live provider reliability. Preserve all uncommitted editor work and record a baseline before renderer changes.
 
@@ -151,9 +147,7 @@ Create the separate `vidsai-ios` repository after Gate 6. Pin the shared contrac
 
 Keep the browser product maintained while native work proceeds. Add iPhone parity in small tested groups, then expand mobile editing and agentic workflows. Android and desktop packaging remain later decisions. Do not delay iPhone indefinitely to add unrestricted duration, 4K, or advanced multi-track editing to the browser.
 
-## First implementation batch
-
-The development prototype uses the app’s pinned Remotion version and the shared composition with browser-specific media components. Run `node scripts/build-shared.cjs` and `npm run dev:ui` from the VidsAI clone with Node 24. Open `/browser-export-prototype.html` at the local Vite address and select the `fixtures/iphone-export-reference` folder. Export, cancel, and download are available on that development page. The final app and prototype write file-backed MP4s to browser storage.
+## Historical verification
 
 On the Windows development PC, Chrome and Edge each cancelled an active render and exported twice in the same tab. FFprobe verified H.264/AAC, 360×640, 30 FPS, and 90 video frames. Downloads took about 1.5–1.7 seconds and the sampled JavaScript heap peaked at 18.8 MiB. That measurement excludes native codec and GPU memory. Both browsers exported with external requests blocked and without a render-worker request. Remotion attempted usage telemetry, which the verification blocked. Review license eligibility and production usage costs before rollout. [Remotion licensing](https://www.remotion.dev/docs/licensing)
 

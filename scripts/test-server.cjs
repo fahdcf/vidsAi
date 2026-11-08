@@ -1,6 +1,5 @@
 const path = require("node:path");
 const fs = require("node:fs");
-const crypto = require("node:crypto");
 const { spawnSync } = require("node:child_process");
 const runtime = path.resolve(__dirname, "../../runtime");
 fs.mkdirSync(runtime, { recursive: true });
@@ -16,7 +15,6 @@ const result = spawnSync(
             NODE_MEDIA_ROOT: path.join(directory, "media"),
             NODE_MAIL_OUTBOX: path.join(directory, "outbox"),
             MAIL_MAILER: "log",
-            APP_KEY: crypto.randomBytes(32).toString("hex"),
             NODE_SKIP_LEGACY_IMPORT: process.argv.includes("--fresh")
                 ? "1"
                 : "0",

@@ -1,6 +1,6 @@
 # VidsAI
 
-VidsAI creates and edits narrated videos with React, a TypeScript/Express control server, SQLite, and a separate editing agent. The existing editor renders and encodes new MP4 exports in the browser.
+VidsAI creates and edits narrated videos with React, a TypeScript/Express server, SQLite, and a server-side editing agent. The existing editor renders and encodes new MP4 exports in the browser.
 
 ## What works
 
@@ -15,30 +15,7 @@ WAN model configuration and UI remain available but require a key. AI voice gene
 
 ## Setup
 
-Use Node 24 and npm. Clone this repository as `vidsAi` beside `remotion-api`, both on `codex/browser-rendering` for this migration:
-
-```text
-workspace/
-  vidsAi/
-  remotion-api/
-  runtime/       # created locally; private databases, media, logs and mail outbox
-```
-
-Install and build the worker first, then the app:
-
-```sh
-cd remotion-api
-npm ci
-npm run build:shared
-cd ../vidsAi
-npm ci
-```
-
-Copy `.env.example` to `.env`. Generate two different random secrets for `APP_KEY` and `WORKER_TOKEN`, for example by running this command twice:
-
-```sh
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-```
+Use Node 24 and npm. Clone VidsAI, run `npm ci` from this repository, and copy `.env.example` to `.env`.
 
 Set the NVIDIA route credentials, Deepgram, Pexels and FreeSound keys in `.env`. The full inventory and endpoint contracts are in `nvidia/models.json`, `nvidia/requests.json` and `nvidia/NVIDIA_MODELS.md`. Real keys belong only in `.env` and `nvidia/private/`; both are ignored by Git.
 
@@ -50,23 +27,23 @@ npm run build
 npm run local:start
 ```
 
-The Windows local launcher starts the control server at `http://127.0.0.1:8100` and the editing agent at 5212. Stop/status commands are `npm run local:stop` and `npm run local:status`. On another OS, run `npm start` here and `npm run start:agent` in the companion repo with the same private environment. Bind the agent to loopback. Deploy the website over HTTPS for browser export.
+The Windows local launcher starts VidsAI at `http://127.0.0.1:8100`. Use `npm run local:stop` and `npm run local:status` to manage it. On another OS, run `npm start`. The server handles the editing agent and provider calls. Deploy the website over HTTPS for browser export.
 
-An optional `runtime/node-local-config.json` selects the Node executable, temporary directory, origin, and database path. Copy `local-config.example.json` there and adapt paths. The browser executable setting is used by local verification. Start the companion repository's `start:render-reference` command only for development comparisons.
+The optional `../runtime/node-local-config.json` selects the Node executable, temporary directory, origin, and database path. Copy `local-config.example.json` there and adapt paths.
 
-`npm run dev` watches the control server; run `npm run build` after UI edits. `npm run dev:ui` serves the React frontend with API requests proxied to port 8100. Shared editing/composition changes in the worker need `npm run build` here to rebuild the shared packages.
+`npm run dev` watches the server. `npm run dev:ui` serves the frontend and proxies API requests to port 8100. Contracts, editing logic, and compositions are in `shared/`. The planner is in `server/agent/`. Run `npm run build` to build the production frontend.
 
 ## Data and migration
 
 The default database is `runtime/node-database.sqlite`; a missing database is initialized automatically. If the historical `runtime/database.sqlite` exists, the server makes a SQLite backup first and opens the copy. Original files are never modified by that import. `NODE_DATABASE_PATH` and `NODE_MEDIA_ROOT` override the destinations.
 
-Use `NODE_IMPORT_APP_ROOT` to select the original app and `npm run import:media` to copy its public/private media and render history. The original copy and the prior `migration/react-typescript` branch provide rollback. See `FULL_TYPESCRIPT_MIGRATION.md` for local cutover paths and verification evidence.
+Use `NODE_IMPORT_APP_ROOT` to select the original app and `npm run import:media` to copy its public/private media. Set `NODE_IMPORT_RENDER_ROOT` to copy historical MP4s from a specific directory. The original copy and the prior `migration/react-typescript` branch provide rollback. See `FULL_TYPESCRIPT_MIGRATION.md` for local cutover paths and verification evidence.
 
 Point `NODE_LEGACY_RENDER_OUTPUT_DIR` at the retired worker's existing output directory when it differs from `../runtime/node-renders`. The app serves those files directly after checking ownership. Startup retires old queued server exports and keeps their snapshots available for browser retry.
 
 ## Verification and limits
 
-`npm test` uses a disposable database/media directory. Worker checks run with `npm run typecheck && npm test` in `remotion-api`. The opt-in `npm run test:browser` performs real generation and export using configured provider keys and the private local test recording/account fixtures. Ordinary automated checks require no live provider calls.
+`npm test` uses a disposable database/media directory. The suite includes contract, planner, and API checks. The opt-in `npm run test:browser` performs real generation and export using configured provider keys and the private local test recording/account fixtures. Ordinary automated checks require no live provider calls.
 
 The live browser check covers an English recording. Arabic/Darija fallback alignment is retained and estimated timing is labelled for review; perceptual quality has not been revalidated here. An uploaded voiceover is required. The first selected canvas is exported; selecting all formats retains the choices but does not create three exports automatically. WAN remains untested live because its key is intentionally blank.
 
@@ -76,9 +53,7 @@ Password recovery uses SMTP when configured; development mode writes links to th
 
 ## GitHub checks
 
-The application workflow checks both repositories on a clean Ubuntu runner. `remotion-api` is private, so the app repository has an encrypted `REMOTION_CI_SSH_KEY` Actions secret paired with a dedicated read-only deploy key on the worker repository. The default `GITHUB_TOKEN` cannot read a different private repository. No provider keys or personal access token are passed to these checks. Both manifests pin the approved native/build installer versions in `allowScripts`, so newer npm versions can install SQLite and build tools on a clean runner. Review those entries when changing the corresponding locked dependency versions. Fork pull requests skip this private integration job because GitHub does not provide the checkout secret to forks.
-
-GitHub language statistics describe the repository's default branch. The application now uses `main` for the complete TypeScript replacement, including the editor improvements. The worker repository uses `migration/full-typescript`. The hybrid branches retain historical PHP source for rollback; the active application contains no PHP or Blade files. GitHub refreshes its language panel after analyzing a push to the default branch.
+GitHub Actions installs dependencies, type-checks the app, runs tests with a fresh SQLite database, and builds the frontend from this repository.
 
 ## Studio workflow
 

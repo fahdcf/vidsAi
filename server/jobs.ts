@@ -7,25 +7,6 @@ import { modelJson, transcribe, stock } from "./providers";
 import { submitWan, pollWan } from "./wan";
 import { commit, document } from "./document";
 import { alignScript } from "./alignment";
-export async function requestAgent(data: unknown) {
-    const url = process.env.NODE_AGENT_URL || "http://127.0.0.1:5212";
-    let response: Response;
-    try {
-        response = await fetch(url + "/agent/plan", {
-            method: "POST",
-            headers: {
-                Authorization: `Bearer ${process.env.WORKER_TOKEN}`,
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(data),
-            signal: AbortSignal.timeout(65000),
-        });
-    } catch (error: any) {
-        throw new Error("Worker connection failed: " + (error.cause?.code || error.name));
-    }
-    if (!response.ok) throw new Error(`Editing worker HTTP ${response.status}`);
-    return response.json() as Promise<any>;
-}
 export function mediaFile(relative: string, kind = "public") {
     if (!relative || relative.includes("..") || path.isAbsolute(relative))
         throw new Error("Invalid media path");

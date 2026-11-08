@@ -2,7 +2,6 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { spawn, execFileSync } = require("node:child_process");
 const root = path.resolve(__dirname, "..");
-const renderer = path.resolve(root, "../remotion-api");
 const runtime = path.resolve(root, "../runtime");
 fs.mkdirSync(runtime, { recursive: true });
 const configFile = path.join(runtime, "node-local-config.json");
@@ -72,87 +71,48 @@ async function main() {
             process.env.NODE_APP_ORIGIN ||
             config.origin ||
             "http://127.0.0.1:8100",
-        NODE_AGENT_URL: "http://127.0.0.1:5212",
-        HOST: "127.0.0.1",
     };
-    for (const line of fs
-        .readFileSync(path.join(root, ".env"), "utf8")
-        .split(/[\r\n]+/)) {
+    const envFile = path.join(root, ".env");
+    const localEnv = fs.existsSync(envFile) ? fs.readFileSync(envFile, "utf8") : "";
+    for (const line of localEnv.split(/[\r\n]+/)) {
         const m = line.match(/^([A-Z0-9_]+)=(.*)$/);
         if (m && !env[m[1]]) env[m[1]] = m[2].replace(/^['"]|['"]$/g, "");
     }
     if (config.databasePath && !process.env.NODE_DATABASE_PATH)
         env.NODE_DATABASE_PATH = config.databasePath;
-    if (!env.APP_KEY || !env.WORKER_TOKEN)
-        throw new Error(
-            "Set APP_KEY and WORKER_TOKEN in the private .env before starting.",
-        );
-    for (const port of [
-        Number(new URL(env.NODE_APP_ORIGIN).port) || 8100,
-        5212,
-    ])
-        await new Promise((resolve, reject) => {
-            const socket = require("node:net").createServer();
-            socket.once("error", () =>
-                reject(new Error(`Port ${port} is already in use.`)),
-            );
-            socket.listen(port, "127.0.0.1", () => socket.close(resolve));
-        });
-    env.APP_MEDIA_ORIGIN = env.NODE_APP_ORIGIN;
-    const defs = [
-        {
-            name: "Control",
-            cwd: root,
-            args: ["--import", "tsx", path.join(root, "server/start.ts")],
-            env,
-        },
-        {
-            name: "Agent",
-            cwd: renderer,
-            args: [
-                "--import",
-                "tsx",
-                path.join(renderer, "apps/agent-worker/server.ts"),
-            ],
-            env: { ...env, AGENT_PORT: "5212" },
-        },
-    ];
-    const services = [];
-    for (const d of defs) {
-        const logfile = path.join(runtime, `node-${d.name.toLowerCase()}.log`);
-        const fd = fs.openSync(logfile, "a");
-        const p = spawn(config.nodeExe, d.args, {
-            cwd: d.cwd,
-            env: d.env,
-            detached: true,
-            windowsHide: true,
-            stdio: ["ignore", fd, fd],
-        });
-        fs.closeSync(fd);
-        await new Promise((resolve, reject) => {
-            p.once("spawn", resolve);
-            p.once("error", reject);
-        });
-        p.unref();
-        services.push({ name: d.name, pid: p.pid });
-        fs.writeFileSync(statefile, JSON.stringify(services));
+    const port = Number(new URL(env.NODE_APP_ORIGIN).port) || 8100;
+    await new Promise((resolve, reject) => {
+        const socket = require("node:net").createServer();
+        socket.once("error", () => reject(new Error("Port " + port + " is already in use.")));
+        socket.listen(port, "127.0.0.1", () => socket.close(resolve));
+    });
+    const logfile = path.join(runtime, "node-control.log");
+    const fd = fs.openSync(logfile, "a");
+    const child = spawn(config.nodeExe, ["--import", "tsx", path.join(root, "server/start.ts")], {
+        cwd: root,
+        env,
+        detached: true,
+        windowsHide: true,
+        stdio: ["ignore", fd, fd],
+    });
+    fs.closeSync(fd);
+    await new Promise((resolve, reject) => {
+        child.once("spawn", resolve);
+        child.once("error", reject);
+    });
+    child.unref();
+    fs.writeFileSync(statefile, JSON.stringify([{ name: "Control", pid: child.pid }]));
+    for (let i = 0; i < 60; i++) {
+        try {
+            const response = await fetch(env.NODE_APP_ORIGIN + "/health", { signal: AbortSignal.timeout(1000) });
+            if (response.ok) {
+                console.log("VidsAI: " + env.NODE_APP_ORIGIN);
+                return;
+            }
+        } catch {}
+        await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    for (const url of [
-        env.NODE_APP_ORIGIN + "/health",
-        "http://127.0.0.1:5212/health",
-    ]) {
-        let ok = false;
-        for (let i = 0; i < 60; i++) {
-            try {
-                ok = (await fetch(url, { signal: AbortSignal.timeout(1000) }))
-                    .ok;
-                if (ok) break;
-            } catch {}
-            await new Promise((r) => setTimeout(r, 500));
-        }
-        if (!ok) throw new Error("Startup failed. See node service logs.");
-    }
-    console.log("Node-only VidsAI: " + env.NODE_APP_ORIGIN);
+    throw new Error("Startup failed. See " + logfile);
 }
 main().catch((e) => {
     console.error(e.message);

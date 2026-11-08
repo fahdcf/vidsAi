@@ -5,7 +5,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { browserPlanningLimitsSchema } from "../../remotion-api/packages/contracts/index";
+import { browserPlanningLimitsSchema } from "../shared/contracts/index";
 import { root, origin, mediaRoot, runtime } from "./env";
 import { db, insert, update, project, scenes, json, now } from "./database";
 import {
@@ -13,11 +13,11 @@ import {
     user,
     own,
     fail,
-    validSignature,
     rotateSession,
 } from "./security";
 import { document, commit, normalizeExisting } from "./document";
-import { enqueue, requestAgent, mediaFile } from "./jobs";
+import { enqueue, mediaFile } from "./jobs";
+import { planAgentRun } from "./agent/runs";
 import { music, stock } from "./providers";
 import { requestReset, resetPassword } from "./recovery";
 import { wanModels, wanPayload } from "./wan";
@@ -705,7 +705,7 @@ app.post(
     },
 );
 app.get("/projects/:id/assets/:asset", (req, res) => {
-    if (!validSignature(req)) own(req, req.params.id);
+    own(req, req.params.id);
     const asset = db
         .prepare("SELECT * FROM project_assets WHERE id=? AND project_id=?")
         .get(req.params.asset, req.params.id) as any;
@@ -721,10 +721,7 @@ app.get("/projects/:id/assets/:asset", (req, res) => {
         .sendFile(file);
 });
 app.get("/projects/:id/voiceover", (req, res) => {
-    const p = validSignature(req)
-        ? project(req.params.id)
-        : own(req, req.params.id);
-    if (!p) fail(404, "Project not found");
+    const p = own(req, req.params.id);
     res.set("Cache-Control", "private, max-age=3600").sendFile(
         mediaFile(p.voiceover_file),
     );
@@ -881,17 +878,26 @@ app.post("/projects/:id/agent-runs", async (req, res) => {
             .get(input.runId) as any;
     }
     try {
-        const result = await requestAgent({
-                runId: run.id,
-                message: run.message,
-                document: json(run.snapshot, {}),
-                browserRenderProfile: input.browserRenderProfile,
+        const result = await planAgentRun({
+            projectId: p.id,
+            runId: run.id,
+            message: run.message,
+            document: json(run.snapshot, {}),
+            browserRenderProfile: input.browserRenderProfile,
         });
         const current = db
-            .prepare("SELECT status FROM agent_runs WHERE id=?")
-            .pluck()
-            .get(run.id);
-        if (current === "cancelled") fail(409, "Run cancelled");
+            .prepare("SELECT status, plan FROM agent_runs WHERE id=? AND project_id=?")
+            .get(run.id, p.id) as { status: string; plan: string | null } | undefined;
+        if (!current) fail(404, "Run not found");
+        if (current.status === "cancelled") fail(409, "Run cancelled");
+        if (current.plan) {
+            return res.json({
+                runId: run.id,
+                status: current.status,
+                startingRevision: run.starting_revision,
+                plan: json(current.plan, {}),
+            });
+        }
         const status = result.operations.length ? "planned" : "completed";
         update("agent_runs", run.id, {
             status,
@@ -902,8 +908,8 @@ app.post("/projects/:id/agent-runs", async (req, res) => {
         res.json({ runId: run.id, status, startingRevision: run.starting_revision, plan: result });
     } catch (e) {
         db.prepare(
-            "UPDATE agent_runs SET status='failed',error=?,updated_at=? WHERE id=? AND status!='cancelled'",
-        ).run("Planning failed. Retry this request.", now(), run.id);
+            "UPDATE agent_runs SET status='failed',error=?,updated_at=? WHERE id=? AND project_id=? AND status!='cancelled'",
+        ).run("Planning failed. Retry this request.", now(), run.id, p.id);
         throw e;
     }
 });
@@ -969,12 +975,6 @@ app.get("/projects/:id/exports/:export/download", (req, res) => {
     if (!fs.existsSync(file)) fail(404, "This historical export file is unavailable. Export the project again in the editor.");
     res.type("video/mp4").attachment(`vidsai-${p.id}.mp4`).sendFile(file);
 });
-app.use(
-    "/migration-fixtures",
-    express.static(
-        path.resolve(root, "../remotion-api/public/migration-fixtures"),
-    ),
-);
 app.use(express.static(path.join(root, "dist")));
 app.get(/.*/, (_req, res) => res.sendFile(path.join(root, "dist/index.html")));
 app.use(

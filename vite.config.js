@@ -8,20 +8,19 @@ export default defineConfig({
         alias: {
             "@vidsai/contracts": path.resolve(
                 import.meta.dirname,
-                "../remotion-api/packages/contracts/dist/index.js",
+                "./shared/contracts/index.ts",
             ),
             "@vidsai/editing-core": path.resolve(
                 import.meta.dirname,
-                "../remotion-api/packages/editing-core/dist/index.js",
+                "./shared/editing-core/index.ts",
             ),
             "@vidsai/compositions": path.resolve(
                 import.meta.dirname,
-                "../remotion-api/packages/compositions/dist/index.js",
+                "./shared/compositions/index.ts",
             ),
         },
     },
     server: {
-        fs: { allow: [".."] },
         proxy: Object.fromEntries(
             [
                 "/api",

@@ -14,5 +14,3 @@ export const mediaRoot =
     process.env.NODE_MEDIA_ROOT || path.join(runtime, "node-media");
 fs.mkdirSync(mediaRoot, { recursive: true });
 export const origin = process.env.NODE_APP_ORIGIN || "http://127.0.0.1:8100";
-export const secret = process.env.APP_KEY;
-if (!secret) throw new Error("APP_KEY is required");

@@ -1,19 +1,9 @@
-import { createRequire } from "node:module";
-import type { Document } from "../../remotion-api/packages/contracts/index";
-const require = createRequire(import.meta.url);
-const {
-    normalizeDocument,
-    commandSchema,
-} = require("../../remotion-api/packages/contracts/dist/index.js");
-const {
-    applyOperations,
-} = require("../../remotion-api/packages/editing-core/dist/index.js");
-const {
-    legacyPayloadToEditState,
-} = require("../../remotion-api/remotion/utils/legacyAdapter.ts");
+import { commandSchema, normalizeDocument, type Document } from "../shared/contracts/index";
+import { applyOperations } from "../shared/editing-core/index";
+import { legacyPayloadToEditState } from "./legacy-document";
 import { json, db, scenes, project, insert, update, now } from "./database";
 import { origin } from "./env";
-import { fail, hash, signed } from "./security";
+import { fail, hash } from "./security";
 export function normalizeExisting(value: unknown): Document {
     return normalizeDocument(json(value, {}));
 }
@@ -104,42 +94,6 @@ export function document(p: any, fps?: number): Document {
                 item[key] = origin + url.pathname;
         }
     return normalizeDocument(d);
-}
-export function renderSnapshot(d: Document, p: any) {
-    const result = structuredClone(d);
-    for (const track of [
-        result.tracks.video,
-        result.tracks.audio,
-        result.tracks.overlays,
-    ])
-        for (const item of track as any[]) {
-            const field =
-                "clip_url" in item ? "clip_url" : "url" in item ? "url" : "src";
-            if (!item[field]) continue;
-            const pathname = new URL(item[field], origin).pathname;
-            const asset = pathname.match(
-                /^\/projects\/(\d+)\/assets\/([a-f0-9-]{36})$/,
-            );
-            if (asset) {
-                if (
-                    Number(asset[1]) !== p.id ||
-                    !db
-                        .prepare(
-                            "SELECT id FROM project_assets WHERE id=? AND project_id=?",
-                        )
-                        .get(asset[2], p.id)
-                )
-                    fail(422, "Asset belongs to another project");
-                item[field] = signed(pathname);
-            }
-            const voice = pathname.match(/^\/projects\/(\d+)\/voiceover$/);
-            if (voice) {
-                if (Number(voice[1]) !== p.id)
-                    fail(422, "Voiceover belongs to another project");
-                item[field] = signed(pathname);
-            }
-        }
-    return result;
 }
 export function commit(p: any, input: any) {
     return db.transaction(() => {

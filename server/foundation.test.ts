@@ -5,7 +5,7 @@ import path from "node:path";
 import Database from "better-sqlite3";
 import { db } from "./database";
 import { runtime } from "./env";
-import { signed, hash } from "./security";
+import { hash } from "./security";
 test("database import preserves existing users, projects and scene relationships", () => {
     const users = db.prepare("SELECT count(*) AS n FROM users").get() as any;
     const projects = db
@@ -64,10 +64,7 @@ test("database import preserves existing users, projects and scene relationships
             .get(),
     );
 });
-test("render access signatures contain no application or provider key", () => {
-    const url = signed("/projects/1/voiceover");
-    assert.ok(url.includes("signature="));
-    assert.ok(url.includes("expires="));
-    assert.ok(!url.includes(process.env.APP_KEY!));
+test("session tokens are stored as deterministic hashes", () => {
+    assert.equal(hash("one"), hash("one"));
     assert.notEqual(hash("one"), hash("two"));
 });

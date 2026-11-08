@@ -5,7 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { app } from "./app";
 import { db, project, scenes } from "./database";
-import { document, renderSnapshot } from "./document";
+import { document } from "./document";
 test("Node account, CSRF, ownership, private media and editing contracts", async () => {
     const server = app.listen(0, "127.0.0.1");
     await new Promise<void>((r) => server.once("listening", r));
@@ -236,23 +236,10 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             ).status,
             200,
         );
-        const snapshot = renderSnapshot(document(project(id)), project(id));
-        assert.ok(snapshot.tracks.audio[0].url.includes("signature="));
-        const url = new URL(snapshot.tracks.audio[0].url);
-        assert.equal(
-            (await fetch(base + url.pathname + url.search)).status,
-            200,
-        );
-        assert.equal(
-            (
-                await fetch(
-                    base +
-                        url.pathname +
-                        url.search.replace("signature=", "signature=bad"),
-                )
-            ).status,
-            401,
-        );
+        const voiceoverPath = '/projects/' + id + '/voiceover';
+        assert.equal((await owner.call(voiceoverPath)).status, 200);
+        assert.equal((await other.call(voiceoverPath)).status, 404);
+        assert.equal((await fetch(base + voiceoverPath)).status, 401);
         const invalidMedia = new FormData();
         invalidMedia.append(
             "file",
@@ -370,22 +357,29 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             422,
         );
         const originalFetch = globalThis.fetch;
+        const providerEnv = {
+            NVIDIA_PROVIDER_ENABLED: "false",
+            OPENROUTER_API_KEY: "test-key",
+            OPENROUTER_BASE_URL: "https://planner.example.invalid/v1",
+            OPENROUTER_MODELS: "test-model",
+        };
+        const savedProviderEnv = Object.entries(providerEnv).map(([key]) => [key, process.env[key]] as const);
+        let planningCalls = 0;
+        Object.assign(process.env, providerEnv);
         try {
-            globalThis.fetch = async (url, options) =>
-                String(url).includes(":5212/agent/plan")
-                    ? new Response(
-                          JSON.stringify({
-                              operations: [
-                                  {
-                                      tool: "set_format",
-                                      params: { width: 640, height: 360 },
-                                  },
-                              ],
-                              reply: "Prepared",
-                              source: "test-model",
-                          }),
-                      )
-                    : originalFetch(url, options);
+            globalThis.fetch = async (url, options) => {
+                if (String(url) !== "https://planner.example.invalid/v1/chat/completions") {
+                    return originalFetch(url, options);
+                }
+                planningCalls++;
+                await new Promise((resolve) => setTimeout(resolve, 100));
+                return Response.json({
+                    choices: [{ message: { content: JSON.stringify({
+                        operations: [{ tool: "set_format", params: { width: 640, height: 360 } }],
+                        reply: "Prepared",
+                    }) } }],
+                });
+            };
             const cancelled = crypto.randomUUID();
             assert.equal(
                 (
@@ -421,15 +415,14 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
                 409,
             );
             const run = crypto.randomUUID();
-            assert.equal(
-                (
-                    await owner.call(`/projects/${id}/agent-runs`, {
-                        runId: run,
-                        message: "Resize",
-                    })
-                ).status,
-                200,
+            const proposals = await Promise.all(
+                [1, 2].map(() => owner.call('/projects/' + id + '/agent-runs', {
+                    runId: run,
+                    message: "Resize",
+                })),
             );
+            assert.deepEqual(proposals.map((response) => response.status), [200, 200]);
+            assert.equal(planningCalls, 2, "The cancelled run and repeated run each plan once");
             const executed = await owner.call(
                 `/projects/${id}/agent-runs/${run}/execute`,
                 {},
@@ -456,6 +449,10 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
             );
         } finally {
             globalThis.fetch = originalFetch;
+            for (const [key, value] of savedProviderEnv) {
+                if (value === undefined) delete process.env[key];
+                else process.env[key] = value;
+            }
         }
         const beforeDuration = document(project(id));
         db.prepare("UPDATE projects SET voiceover_transcript=? WHERE id=?").run(

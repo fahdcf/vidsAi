@@ -6,7 +6,6 @@
     "build": "vite build --configLoader native",
     "dev": "tsx watch server/start.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
-    "prebuild": "node scripts/build-shared.cjs",
     "start": "tsx server/start.ts",
     "dev:ui": "vite",
     "test": "node scripts/test-server.cjs",

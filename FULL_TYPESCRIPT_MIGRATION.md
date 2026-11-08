@@ -1,8 +1,10 @@
 # Full TypeScript replacement: complete local cutover
 
+Historical record of the November 2 cutover. See [README.md](README.md) for the current single-repository setup.
+
 The `migration/full-typescript` branches replace the PHP control server and all Blade/Inertia pages with React 19, Vite, TypeScript/Express, SQLite and durable Node jobs. The typed editing core, agent worker and Remotion renderer remain shared. PHP, Laravel, Blade, Composer, framework routes and obsolete build/test tooling have been removed from this branch. This is the full replacement; `migration/react-typescript` remains the earlier hybrid checkpoint.
 
-## Active local folders
+## Local folders at cutover
 
 - `D:/VidsAI-migration/full-typescript/vidsAi`
 - `D:/VidsAI-migration/full-typescript/remotion-api`
