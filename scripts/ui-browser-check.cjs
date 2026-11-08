@@ -151,6 +151,13 @@ async function main() {
             );
             report.checks.push("Registration and sign out");
             await page.goto(origin + "/create");
+            const videoTypes = page.getByRole("list", { name: "Video types" });
+            await videoTypes.waitFor();
+            assert.equal(await videoTypes.getByRole("listitem").count(), 4);
+            assert.equal(await videoTypes.getByText("Coming soon", { exact: true }).count(), 3);
+            await capture("create-options-desktop");
+            await videoTypes.getByRole("link", { name: "Video from scratch", exact: true }).click();
+            await page.waitForURL("**/create/from-scratch");
             await page
                 .getByLabel("Project name", { exact: true })
                 .fill("Everyday adventures");
@@ -483,7 +490,8 @@ async function main() {
             await page.setViewportSize(viewport);
             for (const [route, name] of [
                 ["/dashboard", "dashboard"],
-                ["/create", "create"],
+                ["/create", "create-options"],
+                ["/create/from-scratch", "create"],
                 [`/review/${report.projectId}`, "review"],
                 [`/subtitle-styles/${report.projectId}`, "styles"],
                 [`/projects/${report.projectId}/editor`, "editor"],

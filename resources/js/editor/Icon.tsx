@@ -3,6 +3,8 @@ const paths: Record<string, string> = {
     grid: "M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z",
     film: "M4 3h16v18H4z M4 8h16 M4 16h16 M8 3v18 M16 3v18",
     plus: "M12 5v14 M5 12h14",
+    stickman: "M12 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z M12 10v6m-5-3 5-3 5 3m-9 8 4-5 4 5",
+    mobile: "M8 3h8a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z M11 17h2",
     sparkles: "m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z",
     arrowLeft: "m14 6-6 6 6 6 M8 12h13",
     arrowRight: "m10 6 6 6-6 6 M3 12h13",

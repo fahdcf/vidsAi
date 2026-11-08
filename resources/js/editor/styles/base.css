@@ -394,7 +394,8 @@ svg {
     background: #181c18;
     color: var(--text);
 }
-.sidebar nav a[aria-current="page"] {
+.sidebar nav a[aria-current="page"],
+.sidebar nav a[aria-current="location"] {
     color: var(--accent);
     background: var(--accent-soft);
 }

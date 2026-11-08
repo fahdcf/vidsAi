@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import Dashboard from "./pages/Dashboard";
 import Create from "./pages/Create";
+import CreateOptions from "./pages/CreateOptions";
 import Editor from "./pages/Editor";
 import {
     Processing,
@@ -17,6 +18,7 @@ import "./editor.css";
 const pages: any = {
     Dashboard,
     Create,
+    CreateOptions,
     Editor,
     Processing,
     Review,

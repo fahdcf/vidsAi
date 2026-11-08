@@ -292,7 +292,8 @@ app.get("/api/page", (req, res) => {
                     .all(id),
             },
         });
-    if (pathname === "/create") return res.json({ page: "Create", props: {} });
+    if (pathname === "/create") return res.json({ page: "CreateOptions", props: {} });
+    if (pathname === "/create/from-scratch") return res.json({ page: "Create", props: {} });
     if (pathname === "/profile")
         return res.json({ page: "Profile", props: { user: currentUser(id) } });
     const match =

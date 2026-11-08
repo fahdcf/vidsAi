@@ -58,6 +58,11 @@ export default function Create() {
         <Shell
             title="Create a video"
             description="Start with your story. We’ll help you find the right shots."
+            actions={
+                <a className="button ghost" href="/create">
+                    <Icon name="arrowLeft" /> Project types
+                </a>
+            }
         >
             <div className="create-layout">
                 <form className="panel create-form" onSubmit={submit}>

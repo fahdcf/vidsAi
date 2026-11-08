@@ -14,6 +14,7 @@ export default function Shell({
     editor?: boolean;
 }) {
     const path = window.location.pathname;
+    const createPage = path === "/create" || path.startsWith("/create/");
     const projectId =
         path.match(
             /\/(?:review|subtitle-styles|processing|final)\/(\d+)/,
@@ -99,7 +100,11 @@ export default function Shell({
                                 key={l.href}
                                 href={l.href}
                                 aria-current={
-                                    path === l.href ? "page" : undefined
+                                    path === l.href
+                                        ? "page"
+                                        : l.href === "/create" && createPage
+                                          ? "location"
+                                          : undefined
                                 }
                             >
                                 <Icon name={l.icon} />
@@ -179,7 +184,7 @@ export default function Shell({
                                 ? "YOUR VIDEO WORKSPACE"
                                 : path === "/dashboard"
                                   ? "YOUR CREATIVE WORKSPACE"
-                                  : path === "/create"
+                                  : createPage
                                     ? "FROM IDEA TO VIDEO"
                                     : "VIDSAI STUDIO"}
                         </div>
