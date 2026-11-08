@@ -1,6 +1,6 @@
 import { documentSchema, type Document } from "@vidsai/contracts";
 import { renderBrowserMp4 } from "./render";
-import { inspectBrowserMedia, type BrowserMediaKind } from "./inspect-media";
+import { resolveBrowserAssets } from "./resolve-assets";
 
 const fixtureInput = document.querySelector<HTMLInputElement>("#fixture")!;
 const exportButton = document.querySelector<HTMLButtonElement>("#export")!;
@@ -19,7 +19,7 @@ exportButton.addEventListener("click", async () => {
     if (active) return;
     const controller = new AbortController();
     active = controller;
-    const urls = new Map<File, string>();
+    let assets: Awaited<ReturnType<typeof resolveBrowserAssets>> | undefined;
     if (download.hasAttribute("href")) URL.revokeObjectURL(download.href);
     download.removeAttribute("href");
     download.hidden = true;
@@ -43,28 +43,15 @@ exportButton.addEventListener("click", async () => {
             throw new Error("Select the three-second VidsAI reference fixture.");
         }
         const base = manifest.webkitRelativePath.slice(0, -"project.json".length);
-        const inspected = new Map<File, BrowserMediaKind>();
-        const resolve = async (src: string, kind: BrowserMediaKind) => {
-            const file = files.find(({ webkitRelativePath }) => webkitRelativePath === base + src);
-            if (!file) throw new Error(`Missing fixture asset: ${src}`);
-            if (inspected.get(file) !== kind) {
-                await inspectBrowserMedia(file, kind, controller.signal);
-                inspected.set(file, kind);
-            }
-            let url = urls.get(file);
-            if (!url) {
-                url = URL.createObjectURL(file);
-                urls.set(file, url);
-            }
-            return url;
-        };
-        for (const clip of doc.tracks.video) {
-            clip.clip_url = await resolve(clip.clip_url, clip.media_type === "video" ? "video" : "image");
-        }
-        for (const track of doc.tracks.audio) track.url = await resolve(track.url, "audio");
-        for (const overlay of doc.tracks.overlays) overlay.src = await resolve(overlay.src, "image");
+        assets = await resolveBrowserAssets(doc, {
+            readLocal: async ({ source }) => {
+                const file = files.find(({ webkitRelativePath }) => webkitRelativePath === base + source);
+                if (!file) throw new Error(`Missing fixture asset: ${source}`);
+                return file;
+            },
+        }, controller.signal);
 
-        const mp4 = await renderBrowserMp4(doc, controller.signal, (progress) => {
+        const mp4 = await renderBrowserMp4(assets.document, controller.signal, (progress) => {
             status.textContent = `Rendering locally… ${Math.round(progress * 100)}%`;
         });
         controller.signal.throwIfAborted();
@@ -76,7 +63,7 @@ exportButton.addEventListener("click", async () => {
             ? "Export cancelled."
             : `Export failed: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
-        urls.forEach((url) => URL.revokeObjectURL(url));
+        await assets?.release().catch((error: unknown) => console.warn("Could not release export media", error));
         cancelButton.disabled = true;
         exportButton.disabled = fixtureInput.disabled = false;
         active = undefined;
