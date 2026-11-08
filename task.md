@@ -152,4 +152,6 @@ P1–P2 and all migration tasks through E5 are complete. The follow-up scope beg
 
 - 2026-11-08 — Fixed an export failure for a 50 FPS stock clip. The browser accepts constant-frame-rate sources up to 60 FPS and prepares a temporary 30 FPS copy before rendering. Chrome and Edge exported the original project as a 186-frame H.264/AAC MP4 at 30 FPS with zero server render requests. Evidence is in `../runtime/browser-stock-fps-ppuu0I/verification.json`.
 
+- 2026-11-08 — Upgraded the browser to Remotion 4.0.541 with the Windows decoder stall fix. Export now reads the original high-frame-rate media directly and encodes at the project frame rate. Repeated tests started exports while the preview was playing. The stress fixture used two 1080p/60 FPS sources with a transition in a 60-second timeline. Evidence is in `../runtime/browser-decoder-stall-verification/verification.json`.
+
 At each checkpoint, append one concise entry with the date, completed task IDs, verification result/artifact path, and the next task or exact blocker. This keeps future work resumable without rerunning already valid verification.

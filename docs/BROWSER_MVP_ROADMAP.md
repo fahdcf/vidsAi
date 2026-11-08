@@ -31,7 +31,7 @@ Existing stabilization work and portable fixtures remain useful. Previous end-to
 
 ## Rendering approach
 
-Prototype `@remotion/web-renderer` with `@remotion/media`, pinned to the existing compatible Remotion release, currently 4.0.539. Validate APIs against that exact version rather than assume every option in the latest documentation exists. Reuse `VideoMerger` through browser-safe adapters and retain the existing integer-frame timing semantics.
+Prototype `@remotion/web-renderer` with `@remotion/media`, pinned to the existing compatible Remotion release, currently 4.0.541. Validate APIs against that exact version rather than assume every option in the latest documentation exists. Reuse `VideoMerger` through browser-safe adapters and retain the existing integer-frame timing semantics.
 
 Remotion's documented browser renderer uses WebCodecs and Mediabunny. This provides an incremental path, subject to the compatibility prototype. [Remotion browser rendering](https://www.remotion.dev/docs/client-side-rendering/)
 
@@ -57,7 +57,7 @@ These are proposed engineering limits, not measured guarantees. Final launch lim
 | Audio | At most two simultaneous sources, normally narration and music; clip sound counts toward this limit |
 | Overlays | Up to 10 image overlays in the project, at most two visible together |
 | Captions | One caption lane, up to 200 segments / 1,000 timed words; at most two displayed lines with validated text/layout bounds |
-| Video inputs | SDR H.264 MP4, at most 1920x1080 or its portrait equivalent, constant frame rate up to 60 FPS, maximum 120 seconds per source. The browser prepares a temporary 30 FPS copy for sources above 30 FPS. |
+| Video inputs | SDR H.264 MP4, at most 1920x1080 or its portrait equivalent, constant frame rate up to 60 FPS, maximum 120 seconds per source |
 | Other inputs | JPEG/PNG up to 4 megapixels; MP3/WAV/AAC only after actual decode checks; no animated image import initially |
 | Import size | 100 MiB per file, 300 MiB total distinct project media, enforced before full reads |
 | Image/audio details | Maximum image dimension 4,096 pixels; mono/stereo audio up to 48 kHz and 120 seconds per source |
@@ -153,7 +153,7 @@ Keep the browser product maintained while native work proceeds. Add iPhone parit
 
 ## First implementation batch
 
-The development prototype uses Remotion 4.0.539 and the shared composition with browser-specific media components. Run `node scripts/build-shared.cjs` and `npm run dev:ui` from the VidsAI clone with Node 24. Open `/browser-export-prototype.html` at the local Vite address and select the `fixtures/iphone-export-reference` folder. Export, cancel, and download are available on that development page. The final app and prototype write file-backed MP4s to browser storage.
+The development prototype uses the app’s pinned Remotion version and the shared composition with browser-specific media components. Run `node scripts/build-shared.cjs` and `npm run dev:ui` from the VidsAI clone with Node 24. Open `/browser-export-prototype.html` at the local Vite address and select the `fixtures/iphone-export-reference` folder. Export, cancel, and download are available on that development page. The final app and prototype write file-backed MP4s to browser storage.
 
 On the Windows development PC, Chrome and Edge each cancelled an active render and exported twice in the same tab. FFprobe verified H.264/AAC, 360×640, 30 FPS, and 90 video frames. Downloads took about 1.5–1.7 seconds and the sampled JavaScript heap peaked at 18.8 MiB. That measurement excludes native codec and GPU memory. Both browsers exported with external requests blocked and without a render-worker request. Remotion attempted usage telemetry, which the verification blocked. Review license eligibility and production usage costs before rollout. [Remotion licensing](https://www.remotion.dev/docs/licensing)
 

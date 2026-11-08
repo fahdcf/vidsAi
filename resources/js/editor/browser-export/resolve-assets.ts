@@ -51,9 +51,7 @@ export async function resolveBrowserAssets(
     const downloaded = new Map<string, File>();
     const objectUrls = new Map<Blob, string>();
     const inspected = new Map<Blob, Set<BrowserMediaKind>>();
-    const preparedVideos = new Map<Blob, string>();
     let totalBytes = 0;
-    let preparedBytes = 0;
     let root: FileSystemDirectoryHandle | undefined;
     let directory: FileSystemDirectoryHandle | undefined;
     const directoryName = exportDirectoryName("media", id);
@@ -62,8 +60,6 @@ export async function resolveBrowserAssets(
     const release = async () => {
         for (const url of objectUrls.values()) URL.revokeObjectURL(url);
         objectUrls.clear();
-        for (const url of preparedVideos.values()) URL.revokeObjectURL(url);
-        preparedVideos.clear();
         local.clear();
         downloaded.clear();
         inspected.clear();
@@ -78,11 +74,6 @@ export async function resolveBrowserAssets(
         if (size + totalBytes > maxProjectSourceBytes) {
             throw new Error("Project source files must total 300 MiB or less.");
         }
-    }
-
-    async function sourceDirectory() {
-        root ??= await navigator.storage.getDirectory();
-        return directory ??= await root.getDirectoryHandle(directoryName, { create: true });
     }
 
     async function download(asset: AssetRequest, url: URL): Promise<File> {
@@ -119,7 +110,9 @@ export async function resolveBrowserAssets(
         }
         try {
             checkBytes(Number(response.headers.get("Content-Length") || 0));
-            const entry = await (await sourceDirectory()).getFileHandle(String(downloaded.size), { create: true });
+            root ??= await navigator.storage.getDirectory();
+            directory ??= await root.getDirectoryHandle(directoryName, { create: true });
+            const entry = await directory.getFileHandle(String(downloaded.size), { create: true });
             const writer = await entry.createWritable();
             let bytes = 0;
             await body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
@@ -145,28 +138,13 @@ export async function resolveBrowserAssets(
             if (!local.has(source)) local.set(source, await options.readLocal?.(request, signal) ?? null);
             const file = local.get(source) ?? await download(request, remoteUrl(document.project_id, source));
             let url = objectUrls.get(file);
-            const prepared = preparedVideos.get(file);
-            if (kind === "video" && prepared) return prepared;
-            if (!url && !prepared) {
+            if (!url) {
                 checkBytes(file.size);
                 totalBytes += file.size;
             }
             const kinds = inspected.get(file) ?? new Set<BrowserMediaKind>();
             if (!kinds.has(kind)) {
-                const metadata = await inspectBrowserMedia(file, kind, signal);
-                if ("video" in metadata && metadata.video &&
-                    metadata.video.fps > browserRenderProfile.maxFps + 0.05) {
-                    const { prepareHighFrameRateVideo } = await import("./prepare-video");
-                    const entry = await (await sourceDirectory()).getFileHandle(
-                        `prepared-video-${preparedVideos.size}.mp4`, { create: true },
-                    );
-                    const maxBytes = Math.min(maxSourceBytes, maxProjectSourceBytes - preparedBytes);
-                    const converted = await prepareHighFrameRateVideo(file, entry, maxBytes, signal);
-                    const preparedUrl = URL.createObjectURL(converted);
-                    preparedBytes += converted.size;
-                    preparedVideos.set(file, preparedUrl);
-                    return preparedUrl;
-                }
+                await inspectBrowserMedia(file, kind, signal);
                 kinds.add(kind);
                 inspected.set(file, kinds);
             }

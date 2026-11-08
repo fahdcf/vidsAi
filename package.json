@@ -32,18 +32,18 @@
     "vite": "^6.2.4"
   },
   "dependencies": {
-    "@remotion/media": "4.0.539",
-    "@remotion/player": "4.0.539",
-    "@remotion/web-renderer": "4.0.539",
+    "@remotion/media": "4.0.541",
+    "@remotion/player": "4.0.541",
+    "@remotion/web-renderer": "4.0.541",
     "bcryptjs": "^3.0.2",
     "better-sqlite3": "^12.8.0",
     "express": "^5.1.0",
-    "mediabunny": "1.62.0",
+    "mediabunny": "1.64.0",
     "multer": "^2.5.0",
     "nodemailer": "^10.3.1",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "remotion": "4.0.539",
+    "remotion": "4.0.541",
     "tsx": "^4.19.3",
     "zod": "4.6.7"
   },
