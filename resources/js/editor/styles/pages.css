@@ -140,66 +140,89 @@
     justify-content: center;
     margin-top: 25px;
 }
+main:has(> .create-options) > .page-heading {
+    justify-content: center;
+    text-align: center;
+    margin-bottom: clamp(26px, 4vw, 54px);
+}
+main:has(> .create-options) > .page-heading h1 {
+    font-size: clamp(28px, 3vw, 42px);
+}
 .create-options {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-    max-width: 820px;
-    margin: 0;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 32px 18px;
+    max-width: 1200px;
+    margin: 0 auto;
     padding: 0;
     list-style: none;
 }
 .create-option {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 9px;
-    height: 100%;
-    padding: 20px;
+    display: block;
+    min-width: 0;
+    color: var(--text);
 }
-.create-option-icon {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 9px;
+.create-option-preview {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
     background: var(--raised);
-    color: var(--muted);
-    margin-bottom: 4px;
+}
+.create-option-preview img {
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 16 / 9;
+    object-fit: cover;
+}
+.create-option h2 {
+    margin-top: 12px;
+    font-size: 16px;
 }
 .create-option p {
+    margin-top: 4px;
+    font-size: 12px;
     color: var(--muted);
 }
 .create-option-available {
+    border-radius: 10px;
+}
+.create-option-available:hover .create-option-preview,
+.create-option-available:focus-visible .create-option-preview {
     border-color: var(--accent);
-}
-.create-option-available .create-option-icon {
-    background: var(--accent-soft);
-    color: var(--accent);
-}
-.create-option-available:hover {
-    background: var(--accent-soft);
-    color: var(--text);
-}
-.create-option-start,
-.create-option-status {
-    margin-top: auto;
-    padding-top: 8px;
-    font-size: 12px;
-    font-weight: 600;
 }
 .create-option-start {
     display: inline-flex;
     align-items: center;
     gap: 7px;
+    margin-top: 10px;
+    font-size: 12px;
+    font-weight: 600;
     color: var(--accent);
 }
 .create-option-status {
-    color: var(--muted);
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    padding: 4px 9px;
+    border-radius: 20px;
+    color: #fff;
+    background: #111214e6;
+    font-size: 10px;
+    font-weight: 600;
 }
-@media (max-width: 600px) {
+@media (max-width: 1120px) {
     .create-options {
+        max-width: 760px;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 540px) {
+    .create-options {
+        max-width: 400px;
         grid-template-columns: minmax(0, 1fr);
+        row-gap: 24px;
     }
 }
 .create-layout {

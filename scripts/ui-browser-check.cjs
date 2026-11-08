@@ -153,6 +153,9 @@ async function main() {
             await page.goto(origin + "/create");
             const videoTypes = page.getByRole("list", { name: "Video types" });
             await videoTypes.waitFor();
+            const previews = videoTypes.locator("img");
+            assert.equal(await previews.count(), 4);
+            await previews.evaluateAll((images) => Promise.all(images.map((image) => image.decode())));
             assert.equal(await videoTypes.getByRole("listitem").count(), 4);
             assert.equal(await videoTypes.getByText("Coming soon", { exact: true }).count(), 3);
             await capture("create-options-desktop");
