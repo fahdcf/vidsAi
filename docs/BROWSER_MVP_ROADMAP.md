@@ -57,7 +57,7 @@ These are proposed engineering limits, not measured guarantees. Final launch lim
 | Audio | At most two simultaneous sources, normally narration and music; clip sound counts toward this limit |
 | Overlays | Up to 10 image overlays in the project, at most two visible together |
 | Captions | One caption lane, up to 200 segments / 1,000 timed words; at most two displayed lines with validated text/layout bounds |
-| Video inputs | Initially SDR H.264 MP4, at most 1920x1080 or its portrait equivalent, 30 FPS; maximum 120 seconds per source |
+| Video inputs | SDR H.264 MP4, at most 1920x1080 or its portrait equivalent, constant frame rate up to 60 FPS, maximum 120 seconds per source. The browser prepares a temporary 30 FPS copy for sources above 30 FPS. |
 | Other inputs | JPEG/PNG up to 4 megapixels; MP3/WAV/AAC only after actual decode checks; no animated image import initially |
 | Import size | 100 MiB per file, 300 MiB total distinct project media, enforced before full reads |
 | Image/audio details | Maximum image dimension 4,096 pixels; mono/stereo audio up to 48 kHz and 120 seconds per source |

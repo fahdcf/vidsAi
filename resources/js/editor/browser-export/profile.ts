@@ -17,6 +17,7 @@ export const browserRenderProfile = {
     maxSourceBytes: 100 * 1024 * 1024,
     maxProjectSourceBytes: 300 * 1024 * 1024,
     maxSourceSeconds: 120,
+    maxSourceVideoFps: 60,
     maxSourceVideoLongEdge: 1920,
     maxSourceVideoShortEdge: 1080,
     maxImagePixels: 4_000_000,

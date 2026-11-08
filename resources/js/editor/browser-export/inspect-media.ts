@@ -83,24 +83,26 @@ async function videoInfo(track: InputVideoTrack, signal: AbortSignal) {
     }
 
     const timestamps: number[] = [];
-    const maxSamples = profile.maxSourceSeconds * profile.maxFps + 1;
+    const maxFps = profile.maxSourceVideoFps;
+    const maxSamples = profile.maxSourceSeconds * maxFps + 1;
+    const frameRateError = `Use constant-frame-rate source video at ${maxFps} FPS or less.`;
     for await (const packet of new EncodedPacketSink(track).packets(undefined, undefined, { metadataOnly: true })) {
         signal.throwIfAborted();
         if (!Number.isFinite(packet.timestamp) || !(packet.duration > 0) || !Number.isFinite(packet.duration)) {
             throw new Error("The video timestamps are invalid.");
         }
         timestamps.push(packet.timestamp);
-        if (timestamps.length > maxSamples) throw new Error("Use video up to 120 seconds at 30 FPS or less.");
+        if (timestamps.length > maxSamples) throw new Error(frameRateError);
     }
     timestamps.sort((a, b) => a - b);
     if (!timestamps.length || timestamps[0] < -0.001) throw new Error("The video timestamps are invalid.");
     const framePeriod = timestamps.length > 1
         ? (timestamps.at(-1)! - timestamps[0]) / (timestamps.length - 1)
-        : 1 / profile.maxFps;
-    if (framePeriod < 1 / profile.maxFps - 0.00005 || timestamps.some((timestamp, i) =>
+        : 1 / maxFps;
+    if (framePeriod < 1 / maxFps - 0.00005 || timestamps.some((timestamp, i) =>
         i > 0 && Math.abs(timestamp - timestamps[i - 1] - framePeriod) > 0.001
     )) {
-        throw new Error("Use constant-frame-rate video at 30 FPS or less.");
+        throw new Error(frameRateError);
     }
     return { codec, width, height, displayWidth, displayHeight, rotation, fps: 1 / framePeriod };
 }
