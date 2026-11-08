@@ -8,6 +8,7 @@ import type { ComponentProps, ContextType } from "react";
 import { prepareBrowserAudio } from "./audio";
 import { BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
 import { checkBrowserOutput, invalidateBrowserOutputProbe, mp4Encoding } from "./capabilities";
+import { openBrowserOutput } from "./output";
 
 type VideoProps = ComponentProps<ContextType<typeof CompositionMedia>["Video"]>;
 
@@ -53,34 +54,39 @@ export async function renderBrowserMp4(
         ...mp4Encoding,
         audioCodec: muted ? null : "aac",
         muted,
-        // Only the three-second fixture uses this buffered prototype output.
-        outputTarget: "arraybuffer",
     } as const;
-    await checkBrowserOutput({ ...options, width, height, fps }, signal);
+    await checkBrowserOutput({ ...options, width, height, fps, outputTarget: "web-fs" }, signal);
     if (!muted) await prepareBrowserAudio(editState, signal);
     signal.throwIfAborted();
-    const result = await renderMediaOnWeb({
-        ...options,
-        composition: {
-            id: "VidsAIBrowserExport",
-            component: BrowserComposition,
-            width,
-            height,
-            fps,
-            durationInFrames: total_frames,
-            defaultProps: { editState },
-        },
-        inputProps: { editState },
-        signal,
-        onProgress: ({ progress }) => onProgress(progress),
-        pageResponsiveness: "high",
-        mediaCacheSizeInBytes: 64 * 1024 * 1024,
-        licenseKey: "free-license",
-        isProduction: import.meta.env.PROD,
-    }).catch((error: unknown) => {
+    const output = await openBrowserOutput(total_frames / fps, muted, signal);
+    try {
+        await renderMediaOnWeb({
+            ...options,
+            outputWritable: output.writable,
+            composition: {
+                id: "VidsAIBrowserExport",
+                component: BrowserComposition,
+                width,
+                height,
+                fps,
+                durationInFrames: total_frames,
+                defaultProps: { editState },
+            },
+            inputProps: { editState },
+            signal,
+            onProgress: ({ progress }) => onProgress(progress),
+            pageResponsiveness: "high",
+            mediaCacheSizeInBytes: 64 * 1024 * 1024,
+            licenseKey: "free-license",
+            isProduction: import.meta.env.PROD,
+        });
+        const artifact = await output.getArtifact();
+        signal.throwIfAborted();
+        return artifact;
+    } catch (error) {
         if (!signal.aborted) invalidateBrowserOutputProbe();
-        throw error;
-    });
-    signal.throwIfAborted();
-    return result.getBlob();
+        await output.release().catch(() => {});
+        signal.throwIfAborted();
+        throw output.getFailure() ?? error;
+    }
 }

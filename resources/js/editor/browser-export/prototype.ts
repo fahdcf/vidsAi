@@ -1,6 +1,7 @@
 import { documentSchema, type Document } from "@vidsai/contracts";
 import { renderBrowserMp4 } from "./render";
 import { resolveBrowserAssets } from "./resolve-assets";
+import type { BrowserExportArtifact } from "./output";
 
 const fixtureInput = document.querySelector<HTMLInputElement>("#fixture")!;
 const exportButton = document.querySelector<HTMLButtonElement>("#export")!;
@@ -8,6 +9,7 @@ const cancelButton = document.querySelector<HTMLButtonElement>("#cancel")!;
 const status = document.querySelector("#status")!;
 const download = document.querySelector<HTMLAnchorElement>("#download")!;
 let active: AbortController | undefined;
+let lastExport: BrowserExportArtifact | undefined;
 
 fixtureInput.addEventListener("change", () => {
     exportButton.disabled = !fixtureInput.files?.length;
@@ -20,6 +22,7 @@ exportButton.addEventListener("click", async () => {
     const controller = new AbortController();
     active = controller;
     let assets: Awaited<ReturnType<typeof resolveBrowserAssets>> | undefined;
+    let artifact: BrowserExportArtifact | undefined;
     if (download.hasAttribute("href")) URL.revokeObjectURL(download.href);
     download.removeAttribute("href");
     download.hidden = true;
@@ -28,6 +31,8 @@ exportButton.addEventListener("click", async () => {
     status.textContent = "Checking local export support…";
 
     try {
+        await lastExport?.release();
+        lastExport = undefined;
         const files = Array.from(fixtureInput.files ?? []);
         if (files.reduce((bytes, file) => bytes + file.size, 0) > 10 * 1024 * 1024) {
             throw new Error("The prototype only accepts the small reference fixture.");
@@ -51,11 +56,12 @@ exportButton.addEventListener("click", async () => {
             },
         }, controller.signal);
 
-        const mp4 = await renderBrowserMp4(assets.document, controller.signal, (progress) => {
+        artifact = await renderBrowserMp4(assets.document, controller.signal, (progress) => {
             status.textContent = `Rendering locally… ${Math.round(progress * 100)}%`;
         });
         controller.signal.throwIfAborted();
-        download.href = URL.createObjectURL(mp4);
+        download.href = URL.createObjectURL(artifact.file);
+        lastExport = artifact;
         download.hidden = false;
         status.textContent = "Local MP4 ready.";
     } catch (error) {
@@ -63,6 +69,7 @@ exportButton.addEventListener("click", async () => {
             ? "Export cancelled."
             : `Export failed: ${error instanceof Error ? error.message : String(error)}`;
     } finally {
+        if (artifact && lastExport !== artifact) await artifact.release().catch(() => {});
         await assets?.release().catch((error: unknown) => console.warn("Could not release export media", error));
         cancelButton.disabled = true;
         exportButton.disabled = fixtureInput.disabled = false;
