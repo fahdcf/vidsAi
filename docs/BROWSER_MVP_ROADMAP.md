@@ -1,6 +1,6 @@
 # Browser MVP with local rendering
 
-Updated 2026-11-07. This is the active development roadmap. The first browser export prototype is available for local development. Native iPhone development is deferred until the browser MVP passes the release gate below.
+Updated 2026-11-08. The browser rendering migration passed local acceptance on the development PC. The existing editor creates new MP4s in Chrome and Edge, and production startup uses the control server and standalone editing agent. Public beta evidence and broader device coverage remain follow-up work before expanding support.
 
 Execute the migration using [task.md](../task.md). Its ordered tasks and grouped verification checkpoints govern implementation. Final acceptance requires the existing website and working editing features to export fully in the browser with server rendering unavailable.
 
@@ -25,7 +25,7 @@ Continue development on Windows. No Mac is required for this browser milestone.
 
 Keep these repositories. A repository named remotion-api can supply browser-safe packages without running its render service in production. Do not bundle Node-only imports, SQLite, FFmpeg, server environment variables, or provider credentials into browser packages. Pin compatible shared package revisions and aligned Remotion versions.
 
-The current browser preview already uses Remotion. Export still runs through `server/jobs.ts` and the worker's `/render` endpoint. `remotion/AnimatedMediaClip.tsx` uses `OffthreadVideo`, and `remotion/VideoMerger.tsx` imports `Audio` from `remotion`. These are explicit migration points. Existing caption components include timed styling and RTL layout that need export comparison.
+Before migration, the browser preview used Remotion and exports ran through `server/jobs.ts` and the worker's `/render` endpoint. The shared composition now uses browser media adapters for export. Its original renderer remains available for development comparisons, including caption timing and RTL layout.
 
 Existing stabilization work and portable fixtures remain useful. Previous end-to-end evidence covered simulated AI providers and a real server-rendered MP4. It does not prove browser rendering or live provider reliability. Preserve all uncommitted editor work and record a baseline before renderer changes.
 
@@ -153,8 +153,10 @@ Keep the browser product maintained while native work proceeds. Add iPhone parit
 
 ## First implementation batch
 
-The development prototype uses Remotion 4.0.539 and the shared composition with browser-specific media components. Run `node scripts/build-shared.cjs` and `npm run dev:ui` from the VidsAI clone with Node 24. Open `/browser-export-prototype.html` at the local Vite address and select the `fixtures/iphone-export-reference` folder. Export, cancel, and download are available on that page. Its fixed three-second workload uses a buffered MP4. Longer exports still need a file-backed output path with tested cleanup.
+The development prototype uses Remotion 4.0.539 and the shared composition with browser-specific media components. Run `node scripts/build-shared.cjs` and `npm run dev:ui` from the VidsAI clone with Node 24. Open `/browser-export-prototype.html` at the local Vite address and select the `fixtures/iphone-export-reference` folder. Export, cancel, and download are available on that development page. The final app and prototype write file-backed MP4s to browser storage.
 
 On the Windows development PC, Chrome and Edge each cancelled an active render and exported twice in the same tab. FFprobe verified H.264/AAC, 360×640, 30 FPS, and 90 video frames. Downloads took about 1.5–1.7 seconds and the sampled JavaScript heap peaked at 18.8 MiB. That measurement excludes native codec and GPU memory. Both browsers exported with external requests blocked and without a render-worker request. Remotion attempted usage telemetry, which the verification blocked. Review license eligibility and production usage costs before rollout. [Remotion licensing](https://www.remotion.dev/docs/licensing)
 
-Frame comparisons showed the same source trim, fade, overlay, and English and Arabic captions at sampled frames. Both tones were present and the narration entered at the expected cut, but the browser's steady-state tones measured about 3 dB louder than the worker reference. Confirm audio mix semantics and mixed-direction captions before calling renderer parity complete. Measure total memory on representative hardware as part of the workload profile work.
+Frame comparisons showed the same source trim, fade, overlay, and English and Arabic captions at sampled frames. The initial 3 dB mono mix difference was corrected. The final comparison matched mixed-direction wrapping when both references used the same Chrome version.
+
+The final acceptance batch verified existing and new projects through the production website in Chrome and Edge with the server renderer stopped. The approved live provider journey produced a 720×1280 H.264/AAC MP4. Each browser completed 20 maximum-profile 60-second exports on the Windows 11 development PC. See [task.md](../task.md) for the exact workload, measurements, and evidence paths.

@@ -194,6 +194,19 @@ async function generate(job: any) {
 let active = false;
 async function wan(job: any) {
     const payload = json<any>(job.payload, {});
+    if (db.prepare("SELECT 1 FROM edit_commands WHERE id=? AND project_id=?").get(job.id, job.project_id)) return true;
+    const target = () => {
+        const scene = db.prepare("SELECT * FROM scenes WHERE id=? AND project_id=? AND job_id=?")
+            .get(payload.sceneId, job.project_id, job.id) as any;
+        if (!scene) return;
+        const p = project(job.project_id);
+        const revision = document(p).revision;
+        if (payload.startingRevision !== revision) {
+            throw Object.assign(new Error("The project changed after video generation started. The generated clip was not applied."), { deadline: true });
+        }
+        return { p, scene, revision };
+    };
+    if (!target()) return true;
     if (!payload.taskId) {
         payload.taskId = await submitWan(payload.input);
         update("node_jobs", job.id, { payload: JSON.stringify(payload) });
@@ -201,34 +214,33 @@ async function wan(job: any) {
     const status = await pollWan(payload.taskId);
     if (status?.task_status !== "SUCCEEDED") return false;
     if (!status.video_url) throw new Error("WAN output video is missing");
-    const scene = db
-        .prepare("SELECT * FROM scenes WHERE id=? AND project_id=?")
-        .get(payload.sceneId, job.project_id) as any;
-    if (!scene) return true;
-    const p = project(job.project_id);
-    const d = document(p);
-    commit(p, {
-        commandId: job.id,
-        expectedRevision: d.revision,
-        operations: [
-            {
-                tool: "replace_asset",
-                params: {
-                    id: "scene_" + scene.id,
-                    url: status.video_url,
-                    media_type: "video",
+    db.transaction(() => {
+        const current = target();
+        if (!current) return;
+        const {p, scene, revision} = current;
+        commit(p, {
+            commandId: job.id,
+            expectedRevision: revision,
+            operations: [
+                {
+                    tool: "replace_asset",
+                    params: {
+                        id: "scene_" + scene.id,
+                        url: status.video_url,
+                        media_type: "video",
+                    },
                 },
-            },
-        ],
-    });
-    update("scenes", scene.id, {
-        video_url: status.video_url,
-        type: "video",
-        status: "completed",
-        start_time: 0,
-        end_time: Math.min(Number(scene.gemini_duration) || 3, 5),
-        duration_seconds: 5,
-    });
+            ],
+        });
+        update("scenes", scene.id, {
+            video_url: status.video_url,
+            type: "video",
+            status: "completed",
+            start_time: 0,
+            end_time: Math.min(Number(scene.gemini_duration) || 3, 5),
+            duration_seconds: 5,
+        });
+    })();
     return true;
 }
 export async function tick() {
@@ -312,7 +324,7 @@ export async function tick() {
             });
             if (exhausted) {
                 if (job.task === "wan")
-                    update("scenes", payload.sceneId, { status: "failed" });
+                    db.prepare("UPDATE scenes SET status='failed' WHERE id=? AND job_id=?").run(payload.sceneId, job.id);
                 else if (job.task === "generate")
                     update("projects", job.project_id, {
                         status: "failed",

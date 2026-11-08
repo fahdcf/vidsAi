@@ -107,7 +107,7 @@ app.post("/scenes/:scene/ai-video", (req, res) => {
     const id = db.transaction(() => {
         if (scene.status === "regenerating" && scene.job_id) return scene.job_id;
         reserveProviderRequest(user(req), "video", crypto.randomUUID());
-        const id = enqueue(p.id, "wan", { sceneId: scene.id, input });
+        const id = enqueue(p.id, "wan", { sceneId: scene.id, startingRevision: document(p).revision, input });
         update("scenes", scene.id, { status: "regenerating", job_id: id });
         return id;
     })();
@@ -806,30 +806,33 @@ app.post("/scenes/:scene/regenerate-proxy", async (req, res) => {
         String(req.body.keywords?.[0] || scene.keywords || scene.script_text),
         previous ? [Number(previous)] : [],
     );
-    update("scenes", scene.id, {
-        video_url: clip.url,
-        thumbnail_path: clip.image || null,
-        type: "video",
-        approved: 0,
-        trimmed_duration: Math.min(clip.duration, scene.gemini_duration || 3),
-        duration_seconds: clip.duration,
-        start_time: 0,
-        end_time: Math.min(clip.duration, scene.gemini_duration || 3),
-    });
-    const result = commit(p, {
-        commandId: crypto.randomUUID(),
-        expectedRevision: document(p).revision,
-        operations: [
-            {
-                tool: "replace_asset",
-                params: {
-                    id: "scene_" + scene.id,
-                    url: clip.url,
-                    media_type: "video",
+    const result = db.transaction(() => {
+        const result = commit(p, {
+            commandId: crypto.randomUUID(),
+            expectedRevision: document(p).revision,
+            operations: [
+                {
+                    tool: "replace_asset",
+                    params: {
+                        id: "scene_" + scene.id,
+                        url: clip.url,
+                        media_type: "video",
+                    },
                 },
-            },
-        ],
-    });
+            ],
+        });
+        update("scenes", scene.id, {
+            video_url: clip.url,
+            thumbnail_path: clip.image || null,
+            type: "video",
+            approved: 0,
+            trimmed_duration: Math.min(clip.duration, scene.gemini_duration || 3),
+            duration_seconds: clip.duration,
+            start_time: 0,
+            end_time: Math.min(clip.duration, scene.gemini_duration || 3),
+        });
+        return result;
+    })();
     res.json(result);
 });
 app.post("/projects/:id/agent-runs", async (req, res) => {
