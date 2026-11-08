@@ -33,13 +33,15 @@ export async function renderBrowserMp4(
     onProgress: (progress: number) => void,
     lifecycle?: {
         id: string;
+        canvas?: { width: number; height: number; scale: number };
         onRendering: () => Promise<void>;
         onFinalizing: () => Promise<void>;
     },
 ) {
     signal.throwIfAborted();
     const editState = documentSchema.parse(structuredClone(snapshot)) as Document;
-    const issues = validateBrowserRenderProfile(editState);
+    const canvas = lifecycle?.canvas ?? { width: editState.width, height: editState.height, scale: 1 };
+    const issues = validateBrowserRenderProfile(editState, canvas);
     if (issues.length) throw new BrowserRenderProfileError(issues);
     const sources = [
         ...editState.tracks.video.map((clip) => clip.clip_url),
@@ -60,7 +62,7 @@ export async function renderBrowserMp4(
         audioCodec: muted ? null : "aac",
         muted,
     } as const;
-    await checkBrowserOutput({ ...options, width, height, fps, outputTarget: "web-fs" }, signal);
+    await checkBrowserOutput({ ...options, width: canvas.width, height: canvas.height, fps, outputTarget: "web-fs" }, signal);
     if (!muted) await prepareBrowserAudio(editState, signal);
     signal.throwIfAborted();
     const output = await openBrowserOutput(
@@ -71,6 +73,7 @@ export async function renderBrowserMp4(
         signal.throwIfAborted();
         await renderMediaOnWeb({
             ...options,
+            scale: canvas.scale,
             outputWritable: output.writable,
             composition: {
                 id: "VidsAIBrowserExport",

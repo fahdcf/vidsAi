@@ -498,55 +498,11 @@ test("Node account, CSRF, ownership, private media and editing contracts", async
         assert.equal(newerEdit.status, 200);
         const beforeRetry = scenes(id);
         const retried = await owner.call(`/projects/${id}/retry`, {});
-        assert.equal(retried.status, 202);
-        const retry = await retried.json() as { export_id: string; redirect: string };
-        assert.equal(retry.redirect, `/projects/${id}/editor`);
-        assert.notEqual(retry.export_id, requestId);
-        const retriedExport = db.prepare(
-            "SELECT revision,snapshot FROM video_exports WHERE id=?",
-        ).get(retry.export_id) as typeof failedExport;
-        assert.equal(retriedExport.revision, failedExport.revision);
+        assert.equal(retried.status, 200);
+        assert.deepEqual(await retried.json(), { success: true, redirect: `/projects/${id}/editor` });
         assert.equal(document(project(id)).width, 960);
-        assert.equal(JSON.parse(retriedExport.snapshot).width, JSON.parse(failedExport.snapshot).width);
-        assert.deepEqual(
-            JSON.parse(retriedExport.snapshot).tracks.video,
-            JSON.parse(failedExport.snapshot).tracks.video,
-        );
-        assert.equal(db.prepare(
-            "SELECT task FROM node_jobs WHERE project_id=? ORDER BY rowid DESC LIMIT 1",
-        ).pluck().get(id), "render");
+        assert.equal(db.prepare("SELECT COUNT(*) FROM video_exports WHERE project_id=?").pluck().get(id), 1);
         assert.deepEqual(scenes(id), beforeRetry);
-        db.prepare("UPDATE node_jobs SET available=? WHERE project_id=?").run(Number.MAX_SAFE_INTEGER, id);
-        db.prepare("UPDATE node_jobs SET available=0 WHERE project_id=? AND json_extract(payload, '$.exportId')=?")
-            .run(id, retry.export_id);
-        const realFetch = globalThis.fetch;
-        const workerCalls: string[] = [];
-        const exportPath = `/projects/${id}/exports/${retry.export_id}`;
-        try {
-            globalThis.fetch = async (url, init) => {
-                const pathname = new URL(String(url)).pathname;
-                if (pathname === "/render") {
-                    workerCalls.push(pathname);
-                    const cancelled = await owner.call(exportPath, undefined, "DELETE");
-                    assert.equal(cancelled.status, 200);
-                    return Response.json({ status: "rendering", jobId: crypto.randomUUID() });
-                }
-                if (pathname.startsWith("/render-requests/")) {
-                    workerCalls.push(pathname);
-                    assert.equal(init?.method, "DELETE");
-                    return Response.json({ status: "cancelled" });
-                }
-                assert.ok(!pathname.startsWith("/status/"), "cancelled export should not be polled");
-                return realFetch(url, init);
-            };
-            await tick();
-            await tick();
-        } finally {
-            globalThis.fetch = realFetch;
-        }
-        assert.deepEqual(workerCalls, ["/render", `/render-requests/${retry.export_id}`]);
-        assert.equal((await (await owner.call(exportPath)).json() as any).status, "cancelled");
-        assert.equal(project(id).status, "subtitle_selection");
         assert.equal(
             (
                 await owner.call(

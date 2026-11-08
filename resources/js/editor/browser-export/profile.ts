@@ -60,9 +60,30 @@ function peakActive(spans: Span[]) {
     return peak;
 }
 
-export function validateBrowserRenderProfile(snapshot: Document): BrowserRenderIssue[] {
+export function browserExportCanvas({ width, height }: Pick<Document, "width" | "height">) {
     const p = browserRenderProfile;
-    const { fps, total_frames: frames, width, height, tracks } = snapshot;
+    const maxWidth = width > height ? p.longEdge : p.shortEdge;
+    const maxHeight = height > width ? p.longEdge : p.shortEdge;
+    const maxScale = Math.min(1, maxWidth / width, maxHeight / height);
+    if (maxScale === 1) return { width, height, scale: 1 };
+    const longEdge = Math.max(width, height);
+    for (let edge = Math.floor(longEdge * maxScale); edge >= 2; edge--) {
+        // The encoder rounds each scaled dimension up. Keep both dimensions even.
+        const scale = (edge - 1e-8) / longEdge;
+        const w = Math.ceil(width * scale);
+        const h = Math.ceil(height * scale);
+        if (w > 0 && h > 0 && w % 2 === 0 && h % 2 === 0) return { width: w, height: h, scale };
+    }
+    return { width, height, scale: 1 };
+}
+
+export function validateBrowserRenderProfile(
+    snapshot: Document,
+    canvas: Pick<Document, "width" | "height"> = snapshot,
+): BrowserRenderIssue[] {
+    const p = browserRenderProfile;
+    const { fps, total_frames: frames, tracks } = snapshot;
+    const { width, height } = canvas;
     const issues: BrowserRenderIssue[] = [];
     function limit(
         exceeds: boolean,

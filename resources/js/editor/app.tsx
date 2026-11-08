@@ -62,7 +62,7 @@ async function boot() {
     const Component = pages[data.page];
     if (!Component) throw new Error("Unknown page");
     createRoot(document.getElementById("app")!).render(
-        <Component {...data.props} />,
+        <Component key={pathname} {...data.props} accountId={String(session.user.id)} />,
     );
 }
 void boot().catch((e) => {

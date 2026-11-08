@@ -28,11 +28,14 @@ import StyleGallery from "../StyleGallery";
 import { api } from "../api";
 
 import MusicLibrary from "../MusicLibrary";
+import { useBrowserExport } from "../browser-export/useBrowserExport";
+import { browserExportCanvas, browserRenderProfile, validateBrowserRenderProfile } from "../browser-export/profile";
 
 type Project = { id: number; name: string; status: string };
 
 export default function Editor({
     project,
+    accountId,
 
     document: initial,
 
@@ -45,6 +48,7 @@ export default function Editor({
     agentHistory = [],
 }: {
     project: Project;
+    accountId: string;
 
     document: Document;
 
@@ -62,7 +66,12 @@ export default function Editor({
 
     const [error, setError] = useState("");
 
-    const [save, setSave] = useState("Saved");
+    const [save, updateSave] = useState("Saved");
+    const saveRef = useRef("Saved");
+    function setSave(value: string) {
+        saveRef.current = value;
+        updateSave(value);
+    }
 
     const [selected, setSelected] = useState(doc.tracks.video[0]?.id || "");
 
@@ -120,11 +129,23 @@ export default function Editor({
 
     const [redo, setRedo] = useState<Document[]>([]);
 
-    const [exportId, setExportId] = useState<string | null>(
-        latestExport?.id || null,
-    );
-
-    const [job, setJob] = useState<any>(latestExport || null);
+    const localExport = useBrowserExport(accountId, String(project.id));
+    const savedLocalJob = localExport.job;
+    const localStatus = localExport.status?.state ?? savedLocalJob?.state;
+    const legacyRetry = !savedLocalJob && latestExport?.status === "failed" && latestExport.snapshot;
+    const canRetry = !localExport.active && (legacyRetry || ["failed", "cancelled", "interrupted"].includes(localStatus ?? ""));
+    const job = localStatus || localExport.active ? {
+        status: localExport.active
+            ? localExport.status?.state ?? "preparing"
+            : localStatus === "succeeded" ? "done" : localStatus,
+        revision: localExport.status?.revision ?? savedLocalJob?.snapshot.revision,
+        progress: localExport.status?.progress ?? 0,
+        output_url: localExport.outputUrl,
+        error: localExport.active ? localExport.status?.error : savedLocalJob?.error,
+    } : latestExport?.status === "done" || legacyRetry ? latestExport : null;
+    const outputCanvas = browserExportCanvas(doc);
+    const downloadRevision = localExport.outputUrl ? savedLocalJob?.output?.revision : latestExport?.revision;
+    const downloadUrl = job?.output_url || (latestExport?.status === "done" ? latestExport.output_url : "");
 
     const [message, setMessage] = useState("");
 
@@ -160,7 +181,7 @@ export default function Editor({
 
     const [plan, setPlan] = useState<any>(
         pendingRun?.plan
-            ? { runId: pendingRun.id, plan: JSON.parse(pendingRun.plan) }
+            ? { runId: pendingRun.id, plan: JSON.parse(pendingRun.plan), startingRevision: pendingRun.starting_revision }
             : null,
     );
 
@@ -224,6 +245,13 @@ export default function Editor({
         if (form?.isConnected) form.requestSubmit();
 
         return queue.current;
+    }
+
+    function checkEdit(current: Document, operations: Operation[]) {
+        const next = applyOperations(current, operations);
+        const existing = new Set(validateBrowserRenderProfile(current, browserExportCanvas(current)).map((issue) => issue.code));
+        const added = validateBrowserRenderProfile(next, browserExportCanvas(next)).filter((issue) => !existing.has(issue.code));
+        if (added.length) throw new Error(added.map((issue) => issue.message).join(" "));
     }
 
     function scheduleAutosave(event: React.FormEvent<HTMLElement>) {
@@ -290,7 +318,7 @@ export default function Editor({
             const current = docRef.current;
 
             try {
-                applyOperations(current, operations);
+                checkEdit(current, operations);
 
                 const r = await api(`${base}/commands`, {
                     commandId: crypto.randomUUID(),
@@ -375,38 +403,8 @@ export default function Editor({
     }
 
     useEffect(() => {
-        if (!exportId) return;
-
-        let disposed = false;
-
-        const tick = async () => {
-            try {
-                const r = await api(
-                    `${base}/exports/${exportId}`,
-
-                    undefined,
-
-                    "GET",
-                );
-
-                if (!disposed) {
-                    setJob(r);
-                }
-            } catch (e) {
-                if (!disposed) setError((e as Error).message);
-            }
-        };
-
-        void tick();
-
-        const timer = setInterval(() => void tick(), 3000);
-
-        return () => {
-            disposed = true;
-
-            clearInterval(timer);
-        };
-    }, [exportId]);
+        if (localExport.active) player.current?.pause();
+    }, [localExport.active]);
 
     useEffect(() => {
         const p = player.current;
@@ -456,10 +454,14 @@ export default function Editor({
         setChat([...chat, { role: "You", text }]);
 
         try {
+            await flushAutosave();
+            if (saveRef.current !== "Saved") throw new Error("Save the project before asking the assistant.");
             const r = await api(`${base}/agent-runs`, {
                 runId: crypto.randomUUID(),
 
                 message: text,
+                expectedRevision: docRef.current.revision,
+                browserRenderProfile,
             });
 
             setPlan(r);
@@ -484,6 +486,12 @@ export default function Editor({
         setError("");
 
         try {
+            await flushAutosave();
+            if (saveRef.current !== "Saved") throw new Error("Save the project before applying changes.");
+            if (plan.startingRevision !== docRef.current.revision) {
+                throw new Error("The project changed. Discard this proposal and ask for an updated one.");
+            }
+            checkEdit(docRef.current, plan.plan.operations);
             const r = await api(`${base}/agent-runs/${plan.runId}/execute`, {});
 
             setUndo([...undo, doc]);
@@ -556,6 +564,8 @@ export default function Editor({
                 runId: pendingRun.id,
 
                 message: pendingRun.message,
+                expectedRevision: pendingRun.starting_revision,
+                browserRenderProfile,
             });
 
             setPlan(r);
@@ -646,12 +656,11 @@ export default function Editor({
                         <div>
                             <h2>Export: {job.status}</h2>
 
-                            {job.status === "done" &&
-                                job.revision !== doc.revision && (
+                            {downloadUrl && downloadRevision !== doc.revision && (
                                     <p className="muted">Older version</p>
                                 )}
 
-                            {["queued", "rendering"].includes(job.status) && (
+                            {localExport.active && (
                                 <progress
                                     aria-label="Export progress"
                                     max={1}
@@ -662,32 +671,21 @@ export default function Editor({
                             {job.error && <p className="error">{job.error}</p>}
                         </div>
 
-                        {job.output_url && (
-                            <a className="button" href={job.output_url} aria-label="Download MP4" title="Download MP4">
+                        {downloadUrl && (
+                            <a className="button" href={downloadUrl} download={localExport.outputUrl ? "video.mp4" : undefined} aria-label="Download MP4" title={localExport.outputUrl ? "Download MP4 from this device" : "Download saved MP4"}>
                                 <Icon name="download" size={15}/>
                             </a>
                         )}
 
-                        {["queued", "rendering"].includes(job.status) && (
-                            <button
-                                onClick={async () => {
-                                    try {
-                                        await api(
-                                            `${base}/exports/${exportId}`,
-
-                                            undefined,
-
-                                            "DELETE",
-                                        );
-
-                                        setJob({ ...job, status: "cancelled" });
-                                    } catch (e) {
-                                        setError((e as Error).message);
-                                    }
-                                }}
-                            >
-                                Cancel export
-                            </button>
+                        {localExport.active && (
+                            <button onClick={localExport.cancel}>Cancel export</button>
+                        )}
+                        {canRetry && (
+                            <button onClick={() => {
+                                player.current?.pause();
+                                void localExport.start(async () =>
+                                    normalizeDocument(JSON.parse(latestExport.snapshot)), !legacyRetry);
+                            }}>Retry export</button>
                         )}
                     </section>
                 )}
@@ -695,35 +693,28 @@ export default function Editor({
                 <button
                     className="primary"
                     aria-label="Export video"
-                    disabled={
-                        busy ||
-                        save === "Unsaved changes" ||
-                        ["queued", "rendering"].includes(job?.status)
-                    }
+                    title={"Export " + outputCanvas.width + "×" + outputCanvas.height + " MP4 on this device"}
+                    disabled={busy || applying || localExport.active}
                     onClick={async () => {
                         setError("");
-
-                        try {
-                            const r = await api(`${base}/export`, {
-                                requestId: crypto.randomUUID(),
-                            });
-
-                            setJob({ status: "queued", progress: 0 });
-
-                            setExportId(r.export_id);
-                        } catch (e) {
-                            setError((e as Error).message);
-                        }
+                        player.current?.pause();
+                        await localExport.start(async () => {
+                            await flushAutosave();
+                            if (saveRef.current !== "Saved" || pending.current.form) {
+                                throw new Error("Save the project before exporting.");
+                            }
+                            return docRef.current;
+                        }, false);
                     }}
                 >
                     <Icon name="download" size={15} />
-
-                    {["queued", "rendering"].includes(job?.status)
-                        ? "Rendering…"
-                        : "Export"}
+                    {localExport.active ? "Rendering…" : "Export"}
                 </button>
             </div>
 
+            {localExport.error && localExport.error !== job?.error && (
+                <div role="alert" className="error">{localExport.error}</div>
+            )}
             {error && (
                 <div role="alert" className="error">
                     {error}
@@ -796,6 +787,8 @@ export default function Editor({
                                 compositionHeight={doc.height}
                                 fps={doc.fps}
                                 controls={false}
+                                clickToPlay={localExport.active ? false : undefined}
+                                spaceKeyToPlayOrPause={localExport.active ? false : undefined}
                                 style={{
                                     width: Math.max(
                                         1,
@@ -827,6 +820,7 @@ export default function Editor({
                         <div className="playhead">
                             <button
                                 className="preview-play"
+                                disabled={localExport.active}
                                 aria-label={
                                     playing ? "Pause preview" : "Play preview"
                                 }
@@ -844,6 +838,7 @@ export default function Editor({
 
                             <input
                                 aria-label="Playhead"
+                                disabled={localExport.active}
                                 type="range"
                                 min={0}
                                 max={doc.total_frames - 1}

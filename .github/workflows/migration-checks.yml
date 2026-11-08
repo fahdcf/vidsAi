@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v7
         with:
           repository: fahdcf/remotion-api
-          ref: 3cd77fc851951715d27a6921f967e268686b2a81
+          ref: 599cfbe7277c889bc43d3e20de53488d49e58a93
           ssh-key: ${{ secrets.REMOTION_CI_SSH_KEY }}
           persist-credentials: false
           path: remotion-api

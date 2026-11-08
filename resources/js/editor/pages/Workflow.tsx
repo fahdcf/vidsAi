@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import Shell from "../Shell";
 import { api } from "../api";
 import Icon from "../Icon";
+import { useBrowserExport } from "../browser-export/useBrowserExport";
 
 export function Processing({ project }: any) {
     const [state, setState] = useState<any>(project);
@@ -126,7 +127,9 @@ export function Processing({ project }: any) {
 }
 export { default as Review } from "./Review";
 export { default as Subtitles } from "./StyleStudio";
-export function Final({ project, latestExport }: any) {
+export function Final({ project, latestExport, accountId }: any) {
+    const local = useBrowserExport(accountId, String(project.id));
+    const url = local.outputUrl || (latestExport?.status === "done" ? latestExport.output_url : "");
     return (
         <Shell
             title="Your video is ready"
@@ -134,14 +137,14 @@ export function Final({ project, latestExport }: any) {
         >
             <div className="final-layout">
                 <section className="panel final-preview">
-                    {latestExport?.status === "done" ? (
+                    {url ? (
                         <video
                             controls
                             playsInline
-                            src={latestExport.output_url}
+                            src={url}
                         />
                     ) : (
-                        <p>No completed export is available yet.</p>
+                        <p>{local.error || "No completed export is available yet."}</p>
                     )}
                 </section>
                 <aside className="panel final-summary">
@@ -154,10 +157,11 @@ export function Final({ project, latestExport }: any) {
                         Download your video and share your story. Your project
                         stays here whenever inspiration strikes again.
                     </p>
-                    {latestExport?.status === "done" && (
+                    {url && (
                         <a
                             className="button primary"
-                            href={latestExport.output_url}
+                            href={url}
+                            download={local.outputUrl ? "video.mp4" : undefined}
                         >
                             <Icon name="download" />
                             Download MP4

@@ -3,8 +3,9 @@ import {
     readBrowserExport, saveBrowserExport,
     type BrowserExportJob, type BrowserExportScope, type BrowserExportState,
 } from "./job-store";
-import { resolveBrowserAssets, type AssetResolverOptions } from "./resolve-assets";
-import { renderBrowserMp4 } from "./render";
+import type { AssetResolverOptions, resolveBrowserAssets } from "./resolve-assets";
+import type { renderBrowserMp4 } from "./render";
+import { browserExportCanvas } from "./profile";
 import { exportDirectoryName, removeExportDirectory } from "./storage";
 
 const lockName = "vidsai-browser-export";
@@ -147,14 +148,17 @@ export async function runBrowserExport(
 
         try {
             emit();
-            prepared = await resolveBrowserAssets(savedSnapshot, options, signal, job.id);
-            artifact = await renderBrowserMp4(prepared.document, signal, (next) => {
+            const [assets, renderer] = await Promise.all([import("./resolve-assets"), import("./render")]);
+            const canvas = browserExportCanvas(savedSnapshot);
+            prepared = await assets.resolveBrowserAssets(savedSnapshot, options, signal, job.id, canvas);
+            artifact = await renderer.renderBrowserMp4(prepared.document, signal, (next) => {
                 if (next <= progress) return;
                 progress = Math.min(1, next);
                 resetWatchdog();
                 emit();
             }, {
                 id: job.id,
+                canvas,
                 onRendering: async () => {
                     await setState("rendering");
                     resetWatchdog();

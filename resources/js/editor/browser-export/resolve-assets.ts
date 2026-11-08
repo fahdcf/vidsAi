@@ -40,10 +40,11 @@ export async function resolveBrowserAssets(
     options: AssetResolverOptions,
     signal: AbortSignal,
     id: string = crypto.randomUUID(),
+    canvas: Pick<Document, "width" | "height"> = snapshot,
 ) {
     signal.throwIfAborted();
     const document = documentSchema.parse(structuredClone(snapshot)) as Document;
-    const issues = validateBrowserRenderProfile(document);
+    const issues = validateBrowserRenderProfile(document, canvas);
     if (issues.length) throw new BrowserRenderProfileError(issues);
 
     const local = new Map<string, Blob | null>();

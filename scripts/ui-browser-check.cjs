@@ -20,6 +20,10 @@ async function main() {
         viewport: { width: 1440, height: 1000 },
     });
     const errors = [];
+    const renderRequests = [];
+    page.on("request", (r) => {
+        if (r.method() === "POST" && /\/(?:export|render)$/.test(new URL(r.url()).pathname)) renderRequests.push(r.url());
+    });
     page.on("pageerror", (e) => errors.push(e.message));
     const report = {
         origin,
@@ -414,59 +418,56 @@ async function main() {
             .click();
         const apply = page.getByRole("button", { name: /^Apply \d+ changes?$/ });
         await apply.waitFor({ timeout: 80000 });
+        const beforeDiscard = (await state()).edit_state.revision;
+        await page.getByRole("button", { name: "Discard", exact: true }).click();
+        await apply.waitFor({ state: "hidden" });
+        assert.equal((await state()).edit_state.revision, beforeDiscard);
+        await page.getByLabel("Your request", { exact: true }).fill("Make captions bigger and use fade transitions");
+        await page.getByRole("button", { name: "Prepare edits", exact: true }).click();
+        await apply.waitFor({ timeout: 80000 });
         await apply.click();
+        await apply.waitFor({ state: "hidden" });
         await saved.waitFor();
         await capture("editor-desktop");
         report.checks.push("Assistant proposal and explicit application");
-        const [submitted] = await Promise.all([
-            page.waitForResponse(
-                (r) =>
-                    r.url().endsWith(`/projects/${report.projectId}/export`) &&
-                    r.request().method() === "POST",
-            ),
-            page
-                .getByRole("button", { name: "Export video", exact: true })
-                .click(),
-        ]);
-        const exportId = (await submitted.json()).export_id;
-        let exportStatus;
-        const deadline = Date.now() + 240000;
-        do {
-            exportStatus = await (
-                await page.request.get(
-                    `${origin}/projects/${report.projectId}/exports/${exportId}`,
-                )
-            ).json();
-            if (["done", "failed", "cancelled"].includes(exportStatus.status))
-                break;
-            await new Promise((r) => setTimeout(r, 1500));
-        } while (Date.now() < deadline);
-        assert.equal(
-            exportStatus.status,
-            "done",
-            exportStatus.error || "Export must complete successfully",
-        );
-        await page
-            .getByRole("heading", { name: "Export: done", exact: true })
-            .waitFor();
-        const link = page.getByRole("link", {
-            name: "Download MP4",
-            exact: true,
+        await page.getByRole("button", { name: "Export video", exact: true }).click();
+        const completion = page.getByRole("heading", { name: "Export: done", exact: true });
+        await completion.waitFor({ timeout: 120000 }).catch(async (e) => {
+            console.error(await page.getByRole("region", { name: "Export status" }).innerText());
+            throw e;
         });
-        const download = await page.request.get(
-            new URL(await link.getAttribute("href"), origin).href,
-        );
-        assert.equal(download.status(), 200);
-        report.downloadBytes = (await download.body()).length;
+        const link = page.getByRole("link", { name: "Download MP4", exact: true });
+        assert.match(await link.getAttribute("href"), /^blob:/);
+        const downloadPromise = page.waitForEvent("download");
+        await link.click();
+        const download = await downloadPromise;
+        const mp4Path = path.join(directory, "browser-export.mp4");
+        await download.saveAs(mp4Path);
+        report.downloadBytes = fs.statSync(mp4Path).size;
         assert.ok(report.downloadBytes > 1000);
+        assert.deepEqual(renderRequests, []);
         report.revision = (await state()).edit_state.revision;
         await page.reload();
         await page
             .getByRole("heading", { name: "Export: done", exact: true })
             .waitFor();
         assert.equal((await state()).edit_state.revision, report.revision);
+        await page.getByRole("button", { name: "Export video", exact: true }).click();
+        await page.getByRole("button", { name: "Cancel export", exact: true }).click();
+        const retry = page.getByRole("button", { name: "Retry export", exact: true });
+        await retry.waitFor();
+        assert.match(await link.getAttribute("href"), /^blob:/);
+        const restoredRevision = page.waitForResponse(r =>
+            r.url().endsWith(`/projects/${report.projectId}/restore-revision`) && r.request().method() === "POST");
+        await page.getByRole("button", { name: "Undo", exact: true }).click();
+        assert.equal((await restoredRevision).status(), 200);
+        assert.ok((await state()).edit_state.revision > report.revision);
+        await retry.click();
+        await completion.waitFor({ timeout: 120000 });
+        await page.getByText("Older version", { exact: true }).waitFor();
+        assert.deepEqual(renderRequests, []);
         report.checks.push(
-            "Remotion export, authorized MP4 download and reload persistence",
+            "Browser export, local MP4 download, reload, cancellation, saved-revision retry",
         );
         await page.goto(`${origin}/final/${report.projectId}`);
         await page

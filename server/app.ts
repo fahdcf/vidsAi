@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { z } from "zod";
+import { browserPlanningLimitsSchema } from "../../remotion-api/packages/contracts/index";
 import { root, origin, mediaRoot } from "./env";
 import { db, insert, update, project, scenes, json, now } from "./database";
 import {
@@ -467,11 +468,8 @@ app.post("/projects/:id/retry", (req, res) => {
     ).get(p.id) as { snapshot: string; status: string } | undefined;
     const generationFailed = lastJob?.task === "generate" && lastJob.status === "failed";
     if (!generationFailed && latestExport?.status === "failed") {
-        const id = crypto.randomUUID();
-        queueExport(p, id, normalizeExisting(latestExport.snapshot));
-        return res.status(202).json({
+        return res.json({
             success: true,
-            export_id: id,
             redirect: `/projects/${p.id}/editor`,
         });
     }
@@ -806,23 +804,33 @@ app.post("/scenes/:scene/regenerate-proxy", async (req, res) => {
 app.post("/projects/:id/agent-runs", async (req, res) => {
     const p = own(req, req.params.id);
     const input = z
-        .object({ runId: uuid, message: z.string().min(1).max(2000) })
+        .object({
+            runId: uuid,
+            message: z.string().min(1).max(2000),
+            expectedRevision: z.number().int().nonnegative().optional(),
+            browserRenderProfile: browserPlanningLimitsSchema.optional(),
+        })
         .parse(req.body);
     let run = db
         .prepare("SELECT * FROM agent_runs WHERE id=?")
         .get(input.runId) as any;
     if (run) {
-        if (run.project_id !== p.id || run.message !== input.message)
+        if (run.project_id !== p.id || run.message !== input.message ||
+            (input.expectedRevision !== undefined && run.starting_revision !== input.expectedRevision))
             fail(409, "Run ID already used");
         if (run.status === "cancelled") fail(409, "Run cancelled");
         if (run.plan)
             return res.json({
                 runId: run.id,
                 status: run.status,
+                startingRevision: run.starting_revision,
                 plan: json(run.plan, {}),
             });
     } else {
         const d = document(p);
+        if (input.expectedRevision !== undefined && input.expectedRevision !== d.revision) {
+            fail(409, "The project changed. Reload before requesting a proposal.");
+        }
         insert("agent_runs", {
             id: input.runId,
             project_id: p.id,
@@ -844,6 +852,7 @@ app.post("/projects/:id/agent-runs", async (req, res) => {
                 runId: run.id,
                 message: run.message,
                 document: json(run.snapshot, {}),
+                browserRenderProfile: input.browserRenderProfile,
             },
             true,
         );
@@ -859,7 +868,7 @@ app.post("/projects/:id/agent-runs", async (req, res) => {
             error: null,
             updated_at: now(),
         });
-        res.json({ runId: run.id, status, plan: result });
+        res.json({ runId: run.id, status, startingRevision: run.starting_revision, plan: result });
     } catch (e) {
         db.prepare(
             "UPDATE agent_runs SET status='failed',error=?,updated_at=? WHERE id=? AND status!='cancelled'",
