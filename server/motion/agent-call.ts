@@ -14,6 +14,7 @@ export type MotionAgentContext = {
     onProgress?: MotionAgentProgress;
 };
 export type MotionVisionImage = { mime: "image/jpeg" | "image/png"; bytes: Uint8Array };
+export class MotionAgentUnavailable extends Error {}
 export type MotionAgentProgress = (data: {
     role: MotionPromptRole | "referenceObserver";
     model: string;
@@ -37,7 +38,7 @@ export async function runMotionAgent<T>(
     route: MotionRoute,
     input: unknown,
     schema: z.ZodType<T>,
-    options: { images?: readonly MotionVisionImage[]; validate?: (value: T) => void; constrainedOutput?: boolean } = {},
+    options: { images?: readonly MotionVisionImage[]; validate?: (value: T) => void; constrainedOutput?: boolean; requestTimeoutMs?: number } = {},
 ) {
     const { document, brief, budget, signal, onProgress } = context;
     const mode = role === "repair" ? "deep" : motionRoleMode[role];
@@ -46,7 +47,7 @@ export async function runMotionAgent<T>(
     const providers = await qualifiedMotionProviders(route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
     ]);
-    if (!providers.length) throw new Error(`No qualified model is available for ${role}.`);
+    if (!providers.length) throw new MotionAgentUnavailable(`No qualified model is available for ${role}.`);
     const prompt = buildMotionPrompt(role, {
         brief, revision: document.revision, width: document.width, height: document.height,
         fps: document.fps, frames: document.total_frames, input, maxOutputTokens: maxTokens,
@@ -67,10 +68,11 @@ export async function runMotionAgent<T>(
         const started = performance.now();
         try {
             onProgress?.({ ...diagnostic, state: "requesting" });
+            const timeoutMs = Math.min(attempt.timeoutMs, options.requestTimeoutMs ?? attempt.timeoutMs);
             const result = await requestMotionJson(provider, {
                 ...prompt, images, mode, conciseReasoning: true, constrainedOutput: options.constrainedOutput ?? true,
                 schema, maxTokens, stream: true, signal,
-                timeoutMs: attempt.timeoutMs, firstTokenTimeoutMs: attempt.firstTokenTimeoutMs,
+                timeoutMs, firstTokenTimeoutMs: Math.min(attempt.firstTokenTimeoutMs, timeoutMs),
                 onFirstToken: (elapsedMs) => onProgress?.({ ...diagnostic, state: "responding", elapsedMs }),
             });
             actual = result.usage?.total_tokens;
@@ -99,5 +101,5 @@ export async function runMotionAgent<T>(
             attempt.release(actual);
         }
     }
-    throw providerBudget ?? new Error(`The ${role} stage could not produce a valid artifact within the configured routes.`);
+    throw providerBudget ?? new MotionAgentUnavailable(`The ${role} stage could not produce a valid artifact within the configured routes.`);
 }

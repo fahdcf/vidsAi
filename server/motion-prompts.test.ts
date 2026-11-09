@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { motionBuildSchema, motionCritiqueSchema, motionStoryboardSchema } from "./motion/agents";
+import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, motionStoryboardSchema } from "./motion/agents";
 import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
 import { validateMotionResources } from "./motion/resource-check";
@@ -32,6 +32,24 @@ test("agent schemas reject malformed and out-of-contract motion artifacts", () =
         scene: { id: "script", type: "javascript", componentVersion: 1, start_frame: 0, end_frame: 30, params: {} },
     }).success, false);
     assert.equal(motionCritiqueSchema.safeParse({ decision: "Looks good", scores: { motion: 10 }, issues: [], unresolved: [] }).success, false);
+});
+
+test("reference fallback uses measured cuts and saved observations without asserting a scene type", () => {
+    const analysis = measuredReferenceAnalysis({ kind: "video", interval: { start: 2, end: 5 },
+        measured: { timestamps: [2.5, 4.5], palette: [], candidateCuts: [
+            { time: 3, score: 0.9, before: 2.5, after: 4.5 },
+            { time: 3.1, score: 0.8, before: 2.5, after: 4.5 },
+            { time: 5, score: 0.7, before: 4.5, after: 5 },
+        ] }, observations: [
+            { time: 2.5, copy: "First", layout: "A centered title", confidence: 0.9 },
+            { time: 4.5, copy: null, layout: "A circle", confidence: 0.8 },
+        ] });
+    assert.deepEqual(analysis.scenes.map(({ timing, copy, supportedType }) => ({ timing, copy, supportedType })), [
+        { timing: { start: 2, end: 3 }, copy: "First", supportedType: null },
+        { timing: { start: 3, end: 5 }, copy: null, supportedType: null },
+    ]);
+    assert.deepEqual(analysis.scenes[0].palette, []);
+    assert.equal(analysis.unresolved.length, 1);
 });
 
 test("the structured route keeps thinking enabled and classifies an incomplete response without retaining its contents", async (t) => {

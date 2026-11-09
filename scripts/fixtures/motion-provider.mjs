@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -24,6 +24,9 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true } 
             }
             case "reference-analyst": {
                 assert.ok(artifact.observations.length > 0);
+                if (rejectReferenceOutline) {
+                    return new Response(`data: ${JSON.stringify(choices({ reasoning_content: reasoning }, "length"))}\n\ndata: [DONE]\n\n`);
+                }
                 const observed = { title: "Intro", type: "impact", end: null, sample: 0,
                     palette: ["#ee6633"], motion: null, approximation: null };
                 const { start, end } = artifact.interval;

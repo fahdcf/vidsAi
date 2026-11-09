@@ -21,7 +21,7 @@ const scene = z.object({
     timing: referenceIntervalSchema.nullable(),
     timingSource: z.enum(["estimated", "still_image"]),
     copy: z.string().trim().max(180).nullable(),
-    palette: z.array(motionColor).min(1).max(6),
+    palette: z.array(motionColor).max(6),
     shapes: z.array(z.object({ description: text, center: position, confidence }).strict()).max(10),
     motionLandmarks: z.array(z.object({ time, description: text, confidence }).strict()).max(8),
     easing: text.nullable(),

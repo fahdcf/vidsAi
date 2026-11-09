@@ -5,7 +5,8 @@ import { motionComponentTypes, describeMotionComponent } from "../../shared/moti
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
-import { runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
+import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
+import { MotionBudgetError } from "./budget";
 import { observeReferenceSheet } from "./reference-observer";
 
 const frame = z.number().int().nonnegative().max(7200);
@@ -98,7 +99,9 @@ const referenceOutlineSchema = z.object({
     unresolved: z.array(z.string().trim().min(1).max(120)).max(4),
 }).strict();
 
-function expandReferenceOutline(evidence: Pick<ReferenceAnalysis, "kind" | "interval" | "measured" | "observations">,
+type ReferenceEvidence = Pick<ReferenceAnalysis, "kind" | "interval" | "measured" | "observations">;
+
+function expandReferenceOutline(evidence: ReferenceEvidence,
     outline: z.infer<typeof referenceOutlineSchema>) {
     const interval = evidence.interval;
     let start = interval?.start ?? 0;
@@ -120,21 +123,50 @@ function expandReferenceOutline(evidence: Pick<ReferenceAnalysis, "kind" | "inte
     return referenceAnalysisSchema.parse({ ...evidence, scenes, unresolved: outline.unresolved });
 }
 
+export function measuredReferenceAnalysis(evidence: ReferenceEvidence): ReferenceAnalysis {
+    const { interval, measured, observations } = evidence;
+    const cuts = interval ? [interval.start, interval.end] : [];
+    for (const { time } of [...measured.candidateCuts].sort((a, b) => b.score - a.score)) {
+        if (!interval || cuts.length === 9) break;
+        if (time > interval.start && time < interval.end && cuts.every((cut) => Math.abs(time - cut) >= 0.25)) cuts.push(time);
+    }
+    cuts.sort((a, b) => a - b);
+    const segments = interval ? cuts.slice(0, -1).map((start, index) => ({ start, end: cuts[index + 1] })) : [null];
+    return expandReferenceOutline(evidence, {
+        scenes: segments.map((timing, index) => {
+            const midpoint = timing ? (timing.start + timing.end) / 2 : 0;
+            const sample = observations.reduce((nearest, observation, i) =>
+                Math.abs(observation.time - midpoint) < Math.abs(observations[nearest].time - midpoint) ? i : nearest, 0);
+            return { title: timing ? `Reference segment ${index + 1}` : "Reference image", type: null,
+                end: timing?.end ?? null, sample, palette: measured.palette.map(({ color }) => color), motion: null,
+                approximation: "Scene type was not confirmed. Use the sampled observations and the creative brief." };
+        }),
+        unresolved: ["The scene outline model did not complete. Segment boundaries are estimates from browser samples."],
+    });
+}
+
 export async function runReferenceAnalyst(
     context: MotionAgentContext,
-    evidence: Pick<ReferenceAnalysis, "kind" | "interval" | "measured" | "observations">,
+    evidence: ReferenceEvidence,
 ) {
     if (!evidence.observations.length) throw new Error("Reference analysis requires observations from the visual samples.");
-    const result = await runMotionAgent({ ...context, brief: "Analyze the selected reference and group the visible evidence into scenes." },
-        "referenceAnalyst", "AGENT_COMPLEX", {
-        kind: evidence.kind, interval: evidence.interval,
-        candidateCuts: evidence.measured.candidateCuts.map(({ time }) => Number(time.toFixed(3))),
-        observations: evidence.observations.map(({ time, copy, layout }, sample) => ({ sample, time: Number(time.toFixed(3)), copy, layout })),
-        supportedTypes: motionComponentTypes,
-    }, referenceOutlineSchema, {
-        validate: (outline) => { expandReferenceOutline(evidence, outline); },
-    });
-    return { ...result, value: expandReferenceOutline(evidence, result.value) };
+    try {
+        const result = await runMotionAgent({ ...context, brief: "Analyze the selected reference and group the visible evidence into scenes." },
+            "referenceAnalyst", "AGENT_COMPLEX", {
+            kind: evidence.kind, interval: evidence.interval,
+            candidateCuts: evidence.measured.candidateCuts.map(({ time }) => Number(time.toFixed(3))),
+            observations: evidence.observations.map(({ time, copy, layout }, sample) => ({ sample, time: Number(time.toFixed(3)), copy, layout })),
+            supportedTypes: motionComponentTypes,
+        }, referenceOutlineSchema, {
+            requestTimeoutMs: 20_000,
+            validate: (outline) => { expandReferenceOutline(evidence, outline); },
+        });
+        return { ...result, source: "model" as const, value: expandReferenceOutline(evidence, result.value) };
+    } catch (error) {
+        context.signal.throwIfAborted();
+        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;
+        return { source: "measured_fallback" as const, value: measuredReferenceAnalysis(evidence) };
+    }
 }
 
 export function runMotionDirector(context: MotionAgentContext, reference: ReferenceAnalysis | null) {

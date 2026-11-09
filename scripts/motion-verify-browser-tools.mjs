@@ -236,7 +236,8 @@ try {
         { ...draft.tracks.motion_graphics[0], end_frame: 225 },
         { ...draft.tracks.motion_graphics[2], start_frame: 225, end_frame: 450 },
     ];
-    const { stages, reasoning, restore } = mockMotionProviders(graphic);
+    const rejectReferenceOutline = process.argv.includes("--reference-fallback");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -256,6 +257,13 @@ try {
     assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);
     assert.equal(document(project(graphProject)).tracks.motion_graphics[1].id, graphic[1].id);
     const events = motionEvents(graphRun.id, 0);
+    if (rejectReferenceOutline) {
+        const step = motionSteps(graphRun.id).find(({ name }) => name === "reference_analysis");
+        const artifact = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));
+        assert.equal(artifact.source, "measured_fallback");
+        assert.ok(artifact.value.observations.length);
+        assert.ok(events.some(({ data }) => data.role === "referenceAnalyst" && data.artifactFailure === "token_limit"));
+    }
     assert.ok(events.some(({ data }) => data.outcome === "invalid_output"));
     assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.reasoningObserved));
     assert.ok(!JSON.stringify(events).includes(reasoning));

@@ -277,7 +277,9 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const observations = await cachedObservations(id, step, "reference_observations", signal, async () =>
             (await observeReferenceSheet(imageBytes(capture.images), capture.measured.timestamps, budget, signal, onProgress)).observations);
         const value = await runReferenceAnalyst(context, { ...metadata, measured: capture.measured, observations });
-        return { value, summary: `Analyzed ${capture.measured.timestamps.length} reference samples.` };
+        return { value, summary: value.source === "measured_fallback"
+            ? "The scene outline model did not finish. Continuing with browser cut estimates and saved visual observations."
+            : `Analyzed ${capture.measured.timestamps.length} reference samples.` };
     }
     if (step.name === "director") {
         const value = await runMotionDirector(context, reference());
