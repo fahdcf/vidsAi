@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectCritic = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -42,7 +42,9 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
             case "director":
                 assert.ok(artifact.reference.observations.length);
                 value = { title: "Motion study", summary: "A staged motion study.", look: "reference",
-                    scenes: graphic.map(({ id, type, start_frame, end_frame }) => ({ id, type, start_frame, end_frame, purpose: "Tell the story", copy: "" })) };
+                    scenes: graphic.map(({ id, type, start_frame, end_frame }) => ({ id, type, start_frame, end_frame,
+                        purpose: type === "graph" ? "Show a URL field, transcript button, and animated text rows" : "Tell the story",
+                        copy: type === "graph" ? "Get transcript" : "" })) };
                 if (stages.filter((stage) => stage === "director").length === 1) value = null;
                 break;
             case "copywriter":
@@ -57,9 +59,16 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }) => ({ palette, layout, font })) };
                 break;
             case "motion-engineer": {
+                assert.equal(typeof artifact.approvedCopy, "string");
+                if (artifact.target.type === "graph") {
+                    assert.equal(artifact.approvedCopy, "Get transcript");
+                    value = rejectGraphEngineer ? { layers: [{ kind: "group" }], decision: "Invalid scene", approximation: null }
+                        : { layers: [{ kind: "text", text: artifact.approvedCopy, x: 0.5, y: 0.5, size: 0.08,
+                            maxWidth: 0.8, color: "foreground", reveal: 0.1 }], decision: "Built the editable layout.", approximation: null };
+                    break;
+                }
                 const { params, finish, seed, motionRate, transitionIn } = graphic.find(({ id }) => id === artifact.target.id);
                 value = { decision: "Built the planned scene.", approximation: null, scene: { params, finish, seed, motionRate, transitionIn } };
-                assert.equal(typeof artifact.approvedCopy, "string");
                 break;
             }
             case "visual-critic":

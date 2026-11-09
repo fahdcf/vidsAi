@@ -238,8 +238,11 @@ try {
     ];
     const rejectReferenceOutline = process.argv.includes("--reference-fallback");
     const rejectCopywriter = process.argv.includes("--copy-fallback");
+    const rejectGraphEngineer = process.argv.includes("--engineer-fallback");
+    const useGraphEngineer = rejectGraphEngineer || process.argv.includes("--graph-engineer");
     const rejectCritic = process.argv.includes("--review-fallback");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectCritic });
+    if (useGraphEngineer) graphic[1] = { ...graphic[1], type: "graph" };
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -272,8 +275,23 @@ try {
         assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);
         assert.ok(stages.includes("repair"));
     }
-    assert.equal(document(project(graphProject)).tracks.motion_graphics[1].id, graphic[1].id);
+    const published = document(project(graphProject));
+    assert.equal(published.tracks.motion_graphics[1].id, graphic[1].id);
     const events = motionEvents(graphRun.id, 0);
+    if (useGraphEngineer) {
+        const step = motionSteps(graphRun.id).find(({ name }) => name === `engineer:${graphic[1].id}`);
+        const artifact = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));
+        const scene = published.tracks.motion_graphics[1];
+        assert.equal(published.tracks.audio.length, 0);
+        assert.equal(scene.type, "graph");
+        assert.ok(scene.params.layers.some((layer) => layer.kind === "text" && layer.text === "Get transcript" && layer.keyframes.length));
+        assert.equal(artifact.source === "graph_fallback", rejectGraphEngineer);
+        if (rejectGraphEngineer) {
+            assert.ok(scene.params.layers.length > 4);
+            assert.ok(events.filter(({ data }) => data.role === "motionEngineer" && data.artifactFailure === "schema").length >= 2);
+        }
+        console.log(`Reference-only project produced an editable custom scene ${rejectGraphEngineer ? "after both routes failed schema validation" : "from the flat model artifact"}.`);
+    }
     if (rejectCopywriter) {
         const step = motionSteps(graphRun.id).find(({ name }) => name === "copy");
         const artifact = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));

@@ -8,6 +8,7 @@ import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools"
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
+import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes } from "./graph-engineer";
 import { observeReferenceSheet } from "./reference-observer";
 
 const frame = z.number().int().nonnegative().max(7200);
@@ -269,6 +270,33 @@ export async function runMotionEngineer(
     const styling = design.scenes.find(({ id }) => id === target.id);
     if (!approved || !styling) throw new Error("The scene is missing its copy or design artifact.");
     const { copy: wording, parts } = approved;
+    if (target.type === "graph") {
+        const notes = graphSceneNotes(context.brief, wording);
+        const makeScene = (params: ReturnType<typeof compileEngineerGraph>) => motionSceneSchema.parse({
+            ...styling, id: target.id, type: target.type, start_frame: target.start_frame, end_frame: target.end_frame,
+            componentVersion: 1, assets, params,
+        });
+        try {
+            const result = await runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
+                target, approvedCopy: wording, notes, palette: styling.palette,
+                layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Use only the palette role names for colors.",
+            }, graphEngineerSchema, {
+                requestTimeoutMs: 35_000,
+                validate: ({ layers }) => { makeScene(compileEngineerGraph(layers)); },
+            });
+            const { layers, ...value } = result.value;
+            return { ...result, value: { ...value, scene: makeScene(compileEngineerGraph(layers)) } };
+        } catch (error) {
+            context.signal.throwIfAborted();
+            if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;
+            const title = wording || target.purpose.slice(0, 180).trim();
+            return { source: "graph_fallback" as const, value: {
+                scene: makeScene(fallbackEngineerGraph(title, target.purpose, notes)),
+                decision: "The custom scene model did not finish. Continuing with a simplified editable layout for this scene.",
+                approximation: "Simplified the requested custom interface or motion using editable layers.",
+            } };
+        }
+    }
     const buildScene = (proposal: z.infer<ReturnType<typeof motionEngineerSchema>>["scene"]) => {
         const { id, type, start_frame, end_frame } = target;
         const scene = motionSceneSchema.parse({ ...proposal, ...styling, id, type, start_frame, end_frame,
@@ -283,7 +311,6 @@ export async function runMotionEngineer(
         target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type),
         audioCues: context.document.metadata.motion_cues ?? [],
     }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
-        constrainedOutput: target.type !== "graph",
         validate: ({ scene }) => { buildScene(scene); },
     });
     return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
