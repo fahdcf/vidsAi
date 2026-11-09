@@ -282,6 +282,9 @@ export function applyOperations(input: unknown, ops: Operation[]): Document {
             "The requested duration would cut narration. Change narration timing first.",
           );
         d.total_frames = p.total_frames;
+        if (d.metadata.motion_cues) {
+          d.metadata.motion_cues = d.metadata.motion_cues.filter((cue) => cue.frame < p.total_frames);
+        }
         d.tracks.video = d.tracks.video
           .filter((c) => c.start_frame < p.total_frames)
           .map((c) => ({

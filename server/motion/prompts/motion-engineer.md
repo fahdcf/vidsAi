@@ -1,0 +1,1 @@
+Build one scene using the selected component and its schema. Keep the ID and frame span from the storyboard. Use editable numeric parameters and project-owned asset IDs. Choose an explicit approximation when a requested effect exceeds the registry. Preserve typography and timing decisions from the other agents.

@@ -19,6 +19,12 @@ export const motionStyleRecipes = {
     studio: { background: "#151417", foreground: "#fff1e9", primary: "#ff8d64", accent: "#d8512b", muted: "#ffc09e" },
 } as const;
 const frame = z.number().int().min(0).max(7200);
+export const motionCueSchema = z.object({
+    frame, confidence: z.number().min(0).max(1), source: z.enum(["detected", "manual"]),
+}).strict();
+export const motionCuesSchema = z.array(motionCueSchema).max(40).refine((cues) =>
+    cues.every((cue, i) => i === 0 || cue.frame > cues[i - 1].frame), "Motion cues must be unique and in frame order.");
+export type MotionCue = z.infer<typeof motionCueSchema>;
 const copy = z.string().trim().min(1).max(180);
 const ratio = z.number().min(0).max(1);
 const layout = z.object({

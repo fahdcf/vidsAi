@@ -12,6 +12,10 @@ const limitsSchema = z.object({
     browserWaitMs: limit(24 * 60 * 60_000, 7 * 24 * 60 * 60_000),
     requestMs: limit(120_000, 300_000),
     firstTokenMs: limit(50_000, 300_000),
+    accountDailyAttempts: limit(100, 10_000),
+    accountDailyTokens: limit(600_000, 10_000_000),
+    providerDailyAttempts: limit(350, 100_000),
+    providerDailyTokens: limit(3_000_000, 100_000_000),
 }).refine((limits) => limits.firstTokenMs <= limits.requestMs && limits.requestMs <= limits.activeMs,
     "Motion deadlines must satisfy first token ≤ request ≤ active run.");
 
@@ -29,7 +33,17 @@ export function motionLimits(env: NodeJS.ProcessEnv = process.env): MotionLimits
     return parsed.data;
 }
 
-export class MotionBudgetError extends Error {}
+export class MotionBudgetError extends Error {
+    constructor(message: string, readonly scope: "run" | "provider" = "run") { super(message); }
+}
+
+export type ModelReservation = {
+    timeoutMs: number;
+    firstTokenTimeoutMs: number;
+    release: (actualTokens?: number) => void;
+    backoff?: (ms: number) => void;
+};
+export type MotionModelBudget = Pick<MotionRunBudget, "reserveModel">;
 
 export class MotionRunBudget {
     private started: number;
@@ -54,7 +68,7 @@ export class MotionRunBudget {
         if (this.remainingMs() === 0) throw new MotionBudgetError("Motion active-work deadline reached.");
     }
 
-    reserveModel(estimatedPromptTokens: number, maxCompletionTokens: number) {
+    reserveModel(estimatedPromptTokens: number, maxCompletionTokens: number, _provider?: string): ModelReservation {
         this.requireActive();
         for (const count of [estimatedPromptTokens, maxCompletionTokens]) {
             if (!Number.isSafeInteger(count) || count <= 0) throw new MotionBudgetError("Invalid motion token reservation.");

@@ -1,0 +1,1 @@
+Write short copy for the planned scene roles. Preserve the supplied wording exactly when the brief requires it. Use the project language and write phrases that fit the allocated scene time. Return copy by stable scene ID and omit extra marketing claims.

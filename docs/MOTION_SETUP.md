@@ -17,3 +17,18 @@ The clean setup passed with Node 24.22.1, Chrome 157.0.8103.38 and Edge 157.0.43
 The reference frame sampler decoded four frames from the supplied 1080p/60 reel in Chrome at the requested timestamps. The development verifier independently decoded all 900 frames and the audio. See `../runtime/motion-verification/reference-sampling.log` and `reference-decode.log` in that same directory. The hosted archive timed out on this machine, so the verified local-binary path was used for installation.
 
 `npm run motion:check-models` lists configured routes without making network requests. `npm run motion:check-models -- --live` runs the bounded development qualification and saves a redacted report under `../runtime/motion-verification/model-qualification.json`. The first run qualified Super VL for thinking-enabled structured planning and the synthetic image test, Ultra for planning fallback, and Super VL stream cancellation. Nano Omni returned invalid final output in the image probe. The test establishes these specific capabilities with synthetic input.
+
+**Orchestration checkpoint**
+
+```powershell
+npm run motion:test -- --suite foundation
+npm run motion:test -- --suite prompts
+npm run typecheck
+npm run build
+npm test
+node --import tsx scripts/motion-verify-browser-tools.mjs "<path to the 15-second H.264 reference MP4>"
+```
+
+The browser harness uses the configured model inventory and qualification report to test routing. It intercepts hosted model calls with mock outputs. Chrome sampled the supplied reference, rendered preview contact sheets in the browser, and completed the specialist graph with malformed-output fallback and targeted repair. It also checked ownership, duplicate and stale results, lease recovery after closing a tab, restart recovery, cancellation, feedback, and draft retention. The server suite passed 25 tests. Targeted checks also covered unsupported provider capabilities, HTTP rate limits, distinct first-token and request deadlines, persisted account/provider budgets, and reasoning tags split across streamed chunks.
+
+The harness saves isolated SQLite and media evidence under `../runtime/motion-verification/browser-tools-*`. This checkpoint exercises the workflow internals with mock models. The live reference-driven product run is a separate acceptance step.

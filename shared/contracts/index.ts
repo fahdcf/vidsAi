@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { EditState } from "../timeline";
-import { motionTrackSchema } from "../motion/schema";
+import { motionCuesSchema, motionTrackSchema } from "../motion/schema";
 export { getClipSequenceTiming } from "./clip-sequence";
 export const browserPlanningLimitsSchema = z.object({
   version: z.literal(1),
@@ -124,6 +124,7 @@ export const documentSchema = z
     metadata: z
       .object({
         workflow: z.enum(["video_from_scratch", "motion_graphics"]).default("video_from_scratch"),
+        motion_cues: motionCuesSchema.optional(),
         language: z.string(),
         platform: z.string().nullable(),
         created_at: z.string(),
@@ -133,6 +134,9 @@ export const documentSchema = z
   })
   .passthrough()
   .superRefine((d, ctx) => {
+    if (d.metadata.motion_cues?.some((cue) => cue.frame >= d.total_frames)) {
+      ctx.addIssue({ code: "custom", message: "Audio cues must fall inside the project." });
+    }
     if (d.width % 2 || d.height % 2)
       ctx.addIssue({
         code: "custom",

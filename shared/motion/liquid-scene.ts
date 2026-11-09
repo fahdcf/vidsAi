@@ -62,7 +62,7 @@ function chooseShapes(vectors: MotionVectors, t: number) {
         return shape.fill === other.fill && shape.path.length === other.path.length &&
             shape.path.every((command, j) => command.op === other.path[j].op);
     });
-    if (!compatible) return mix < 0.5 ? a.shapes : b.shapes;
+    if (!vectors.interpolate || !compatible) return mix < 0.5 ? a.shapes : b.shapes;
     return a.shapes.map((shape, i) => ({
         ...shape,
         opacity: lerp(shape.opacity, b.shapes[i].opacity, mix),

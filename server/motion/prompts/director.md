@@ -1,0 +1,1 @@
+Turn the brief into a coherent motion reel with a hook, a progression and a readable identity hold. Allocate integer frames across the entire requested duration. Use reference evidence for pacing and scene families. Keep the final output editable and honor the requested copy, palette and aspect ratio. Flag any unmet request in the decision summary.

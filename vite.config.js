@@ -32,6 +32,7 @@ export default defineConfig({
                 "/forgot-password",
                 "/reset-password",
                 "/projects",
+                "/motion-runs",
                 "/scenes",
                 "/create",
                 "/review",

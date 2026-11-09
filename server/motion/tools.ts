@@ -10,7 +10,7 @@ import { commit, document } from "../document";
 import { fail } from "../security";
 import { validateMotionAssetOwnership } from "./assets";
 
-type ToolRole = "director" | "designer" | "motionEngineer" | "critic" | "integrator" | "editor";
+export type ToolRole = "referenceAnalyst" | "director" | "copywriter" | "designer" | "motionEngineer" | "critic" | "integrator" | "editor";
 type ToolContext = { projectId: number; accountId: number; role: ToolRole; signal: AbortSignal };
 const draftHandle = z.object({ draftId: z.uuid(), projectId: z.number().int().positive(), expectedRevision: z.number().int().nonnegative() }).strict();
 const revision = z.number().int().nonnegative();
@@ -42,7 +42,7 @@ function ownedProject(context: ToolContext) {
     return project as Record<string, any> & { id: number };
 }
 
-const reads: ToolRole[] = ["director", "designer", "motionEngineer", "critic", "integrator", "editor"];
+const reads: ToolRole[] = ["referenceAnalyst", "director", "copywriter", "designer", "motionEngineer", "critic", "integrator", "editor"];
 const builders: ToolRole[] = ["motionEngineer", "integrator", "editor"];
 function tool<I, O>(roles: ToolRole[], input: z.ZodType<I>, output: z.ZodType<O>, cost: number,
     run: (input: I, project: ReturnType<typeof ownedProject>) => unknown) {

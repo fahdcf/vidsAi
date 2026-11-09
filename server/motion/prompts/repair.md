@@ -1,0 +1,1 @@
+Repair the cited issue in the supplied scene. Keep its identity and frame span. Preserve unrelated copy, audio cues, palette and assets. Return a complete validated replacement scene with a concise explanation of the adjustment.

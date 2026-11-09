@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "vite build --configLoader native",
+    "build": "npm run motion:check-resources && vite build --configLoader native",
     "dev": "tsx watch server/start.ts",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.server.json --noEmit",
     "start": "tsx server/start.ts",
@@ -20,6 +20,7 @@
     "motion:check-models": "node --import tsx scripts/motion-check-models.ts",
     "motion:verify-render": "node scripts/motion-verify-render.mjs",
     "motion:test": "node scripts/motion-test.mjs",
+    "motion:check-resources": "node --import tsx scripts/motion-check-resources.ts",
     "import:media": "node scripts/import-media.cjs",
     "test:fresh": "node scripts/test-server.cjs --fresh"
   },

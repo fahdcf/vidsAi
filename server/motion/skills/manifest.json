@@ -1,0 +1,149 @@
+{
+  "version": 1,
+  "skills": [
+    {
+      "id": "reference-analysis",
+      "name": "Reference analysis",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "ReferenceAnalysis",
+      "output": "MotionScene",
+      "tools": [
+        "validate_motion_document",
+        "get_motion_component_schema"
+      ],
+      "components": [
+        "kinetic_words",
+        "graph"
+      ]
+    },
+    {
+      "id": "motion-direction",
+      "name": "Motion direction",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "ReferenceAnalysis",
+      "output": "MotionPlan",
+      "tools": [
+        "list_motion_components",
+        "propose_motion_plan"
+      ],
+      "components": [
+        "impact",
+        "identity"
+      ]
+    },
+    {
+      "id": "kinetic-typography",
+      "name": "Kinetic typography",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "MotionPlan",
+      "output": "MotionScene",
+      "tools": [
+        "get_motion_component_schema",
+        "patch_motion_scene"
+      ],
+      "components": [
+        "kinetic_words",
+        "impact"
+      ]
+    },
+    {
+      "id": "geometry-and-particles",
+      "name": "Geometry and particles",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "MotionPlan",
+      "output": "MotionScene",
+      "tools": [
+        "get_motion_component_schema",
+        "build_motion_scene"
+      ],
+      "components": [
+        "grid",
+        "tunnel"
+      ]
+    },
+    {
+      "id": "liquid-and-vector-tracing",
+      "name": "Liquid and vectors",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "ReferenceAnalysis",
+      "output": "MotionScene",
+      "tools": [
+        "get_motion_component_schema",
+        "build_motion_scene"
+      ],
+      "components": [
+        "liquid",
+        "graph"
+      ]
+    },
+    {
+      "id": "responsive-layout",
+      "name": "Responsive layout",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "MotionPlan",
+      "output": "MotionScene",
+      "tools": [
+        "get_motion_component_schema",
+        "patch_motion_scene"
+      ],
+      "components": [
+        "identity",
+        "kinetic_words"
+      ]
+    },
+    {
+      "id": "audio-and-pacing",
+      "name": "Audio and pacing",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "MotionCues",
+      "output": "MotionScene",
+      "tools": [
+        "validate_motion_document",
+        "patch_motion_scene"
+      ],
+      "components": [
+        "impact",
+        "easing"
+      ]
+    },
+    {
+      "id": "browser-rendering",
+      "name": "Browser rendering",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "MotionPlan",
+      "output": "MotionScene",
+      "tools": [
+        "validate_motion_document",
+        "get_motion_component_schema"
+      ],
+      "components": [
+        "grid",
+        "liquid"
+      ]
+    },
+    {
+      "id": "visual-critique",
+      "name": "Visual critique",
+      "version": 1,
+      "rendererVersion": 1,
+      "input": "RenderedPreview",
+      "output": "MotionOperations",
+      "tools": [
+        "validate_motion_document",
+        "patch_motion_scene"
+      ],
+      "components": [
+        "identity",
+        "graph"
+      ]
+    }
+  ]
+}

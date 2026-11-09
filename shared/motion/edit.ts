@@ -2,7 +2,7 @@ import { z } from "zod";
 import type { Document, Operation } from "../contracts";
 import { compileMotionPlan, motionPlanSchema } from "./compile";
 import type { MotionGraphNode } from "./graph";
-import { motionLayout, motionPalette, motionSceneId, motionSceneSchema } from "./schema";
+import { motionCuesSchema, motionLayout, motionPalette, motionSceneId, motionSceneSchema } from "./schema";
 
 export const motionEditParameters = {
     replace_motion_plan: motionPlanSchema,
@@ -25,6 +25,7 @@ export const motionEditParameters = {
         start_frame: z.number().int().nonnegative(),
         end_frame: z.number().int().positive(),
     }).strict(),
+    set_music_cues: z.object({ cues: motionCuesSchema, syncImpact: z.boolean().default(false) }).strict(),
 };
 
 function findText(nodes: MotionGraphNode[], id: string): Extract<MotionGraphNode, { kind: "text" }> | undefined {
@@ -107,6 +108,25 @@ export function applyMotionEdit(document: Document, op: Operation) {
         case "set_motion_timing": {
             const { id, ...span } = motionEditParameters.set_motion_timing.parse(op.params);
             Object.assign(find(id), span);
+            break;
+        }
+        case "set_music_cues": {
+            const { cues, syncImpact } = motionEditParameters.set_music_cues.parse(op.params);
+            document.metadata.motion_cues = cues;
+            if (syncImpact) {
+                for (const scene of scenes) {
+                    if (scene.type !== "impact") continue;
+                    const length = scene.end_frame - scene.start_frame;
+                    const original = scene.start_frame + scene.params.impactAt * length;
+                    let nearest: number | undefined;
+                    for (const { frame } of cues) {
+                        const phase = (frame - scene.start_frame) / length;
+                        if (phase < 0.15 || phase > 0.7 || Math.abs(frame - original) > document.fps * 0.18) continue;
+                        if (nearest === undefined || Math.abs(frame - original) < Math.abs(nearest - original)) nearest = frame;
+                    }
+                    if (nearest !== undefined) scene.params.impactAt = (nearest - scene.start_frame) / length;
+                }
+            }
             break;
         }
         default: throw new Error("Unknown motion operation.");

@@ -31,13 +31,23 @@ type MotionChatRequest<T> = {
     timeoutMs: number;
     firstTokenTimeoutMs?: number;
     signal: AbortSignal;
-    onFirstToken?: () => void;
+    onFirstToken?: (elapsedMs: number) => void;
 };
 
 export class MotionProviderError extends Error {
-    constructor(readonly code: "unsupported" | "http" | "invalid_output" | "transport", message: string, readonly status?: number) {
+    constructor(
+        readonly code: "unsupported" | "http" | "invalid_output" | "transport" | "first_token_timeout" | "request_timeout",
+        message: string, readonly status?: number, readonly retryAfterMs?: number,
+    ) {
         super(message);
     }
+}
+
+function retryDelay(value: string | null) {
+    if (!value) return 30_000;
+    const seconds = Number(value);
+    const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+    return Number.isFinite(delay) ? Math.max(1000, delay) : 30_000;
 }
 
 const messageSchema = z.object({
@@ -144,7 +154,8 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         });
         if (!response.ok) {
             await response.body?.cancel();
-            throw new MotionProviderError("http", `Motion provider returned HTTP ${response.status}.`, response.status);
+            throw new MotionProviderError("http", `Motion provider returned HTTP ${response.status}.`, response.status,
+                response.status === 429 || response.headers.has("Retry-After") ? retryDelay(response.headers.get("Retry-After")) : undefined);
         }
         const packets = stream && response.body
             ? streamPackets(response.body, signal)
@@ -157,7 +168,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
             if (firstTokenMs === undefined && (reasoning || message?.content)) {
                 firstTokenMs = Math.round(performance.now() - started);
                 clearTimeout(firstTokenTimer);
-                request.onFirstToken?.();
+                request.onFirstToken?.(firstTokenMs);
             }
             reasoningObserved ||= reasoning;
             content += message?.content ?? "";
@@ -166,7 +177,9 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         }
         signal.throwIfAborted();
     } catch (error) {
-        signal.throwIfAborted();
+        request.signal.throwIfAborted();
+        if (firstToken.signal.aborted) throw new MotionProviderError("first_token_timeout", "The motion provider did not start responding in time.");
+        if (timeout.aborted) throw new MotionProviderError("request_timeout", "The motion provider did not finish in time.");
         if (error instanceof MotionProviderError) throw error;
         throw new MotionProviderError("transport", "The motion provider connection failed.");
     } finally {
@@ -175,10 +188,12 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     if (finishReason && finishReason !== "stop") {
         throw new MotionProviderError("invalid_output", "The provider did not finish its final answer.");
     }
-    const thinkEnd = content.lastIndexOf("</think>");
-    if (thinkEnd >= 0) {
-        reasoningObserved ||= content.slice(0, thinkEnd).replace("<think>", "").trim().length > 0;
-        content = content.slice(thinkEnd + "</think>".length);
+    content = content.trimStart();
+    while (content.startsWith("<think>")) {
+        const end = content.indexOf("</think>", "<think>".length);
+        if (end < 0) throw new MotionProviderError("invalid_output", "The provider returned unfinished reasoning.");
+        reasoningObserved ||= content.slice("<think>".length, end).trim().length > 0;
+        content = content.slice(end + "</think>".length).trimStart();
     }
     reasoningObserved ||= (usage?.completion_tokens_details?.reasoning_tokens ?? 0) > 0;
     try {

@@ -1,9 +1,14 @@
 import { spawnSync } from "node:child_process";
 
-if (process.argv.slice(2).join(" ") !== "--suite foundation") {
-    console.error("Use npm run motion:test -- --suite foundation.");
+const suites = { foundation: "server/motion-foundation.test.ts", prompts: "server/motion-prompts.test.ts" };
+const [flag, suite] = process.argv.slice(2);
+if (process.argv.length !== 4 || flag !== "--suite" || !Object.hasOwn(suites, suite)) {
+    console.error("Use npm run motion:test -- --suite foundation or --suite prompts.");
     process.exit(1);
 }
-const result = spawnSync(process.execPath, ["--import", "tsx", "--test", "server/motion-foundation.test.ts"], { stdio: "inherit" });
+const result = spawnSync(process.execPath, ["--import", "tsx", "--test", suites[suite]], {
+    stdio: "inherit",
+    env: { ...process.env, NODE_DATABASE_PATH: ":memory:", NODE_SKIP_LEGACY_IMPORT: "1" },
+});
 if (result.error) throw result.error;
 process.exitCode = result.status ?? 1;

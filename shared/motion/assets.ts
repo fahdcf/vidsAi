@@ -29,6 +29,7 @@ const vectorFrame = z.object({
 }).strict();
 export const motionVectorAsset = z.object({
     version: z.literal(1),
+    interpolate: z.boolean().default(true),
     frames: z.array(vectorFrame).min(1).max(180),
 }).strict().superRefine(({ frames }, ctx) => {
     let total = 0;

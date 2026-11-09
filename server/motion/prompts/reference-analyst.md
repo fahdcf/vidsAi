@@ -1,0 +1,1 @@
+Analyze the labeled visual samples and measured cues. Separate visible evidence from an estimate. Group shots into a continuous proposed timeline only for video. Give copy, palette, normalized positions, movement landmarks, likely easing and transitions. A still image yields a style description without motion or timing. Name a supported scene type or propose an approximation.

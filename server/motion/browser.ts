@@ -1,0 +1,116 @@
+import { createHash } from "node:crypto";
+import { z } from "zod";
+import { captureSchema, previewSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
+import { db, project } from "../database";
+import { document } from "../document";
+import { fail } from "../security";
+import {
+    changeMotionRunStatus, extendMotionStep, finishMotionStep, isActiveMotionRun, motionBrowserInput,
+    motionLeaseMs, readyMotionSteps, recoverExpiredMotionSteps, startMotionStep,
+} from "./orchestrator";
+import { motionArtifact, motionSteps, ownedMotionRun, type MotionRun } from "./store";
+import { motionElapsed } from "./ledger";
+import { motionLimits } from "./budget";
+
+const resultSchema = z.object({
+    token: z.uuid(), expectedRevision: z.number().int().nonnegative(), result: z.unknown(),
+}).strict();
+
+function requireRevision(run: MotionRun, revision = run.starting_revision) {
+    const p = project(run.project_id);
+    if (!p || revision !== run.starting_revision || document(p).revision !== revision) {
+        fail(409, "The project changed during this browser task.");
+    }
+}
+
+function requireTime(run: MotionRun) {
+    const limits = motionLimits();
+    const { active, waiting } = motionElapsed(run);
+    if (active >= limits.activeMs || waiting >= limits.browserWaitMs) fail(409, "The motion run time budget expired.");
+}
+
+export function claimMotionBrowserTask(runId: string, accountId: number): BrowserMotionTask | null {
+    return db.transaction(() => {
+        const run = ownedMotionRun(runId, accountId);
+        if (!isActiveMotionRun(run)) return null;
+        if (!recoverExpiredMotionSteps(run)) return null;
+        const steps = motionSteps(runId);
+        if (steps.some(({ lane, status }) => lane === "browser" && status === "running")) return null;
+        const next = readyMotionSteps(runId).find(({ lane }) => lane === "browser");
+        if (!next) return null;
+        requireTime(run);
+        requireRevision(run);
+        let input: BrowserMotionTask["input"];
+        try { input = motionBrowserInput(run, next); } catch {
+            fail(409, "The browser input is unavailable. Check the selected reference and try again.");
+        }
+        const lease = startMotionStep(run, next, motionLeaseMs);
+        if (!lease?.lease_token || !lease.lease_expires) return null;
+        changeMotionRunStatus(run, "working");
+        return { id: next.id, token: lease.lease_token, expectedRevision: run.starting_revision,
+            leaseExpires: lease.lease_expires, input };
+    }).immediate();
+}
+
+export function heartbeatMotionBrowserTask(runId: string, accountId: number, taskId: string, raw: unknown) {
+    const { token } = z.object({ token: z.uuid() }).strict().parse(raw);
+    return db.transaction(() => {
+        const run = ownedMotionRun(runId, accountId);
+        const step = motionSteps(runId).find(({ id, lane }) => id === taskId && lane === "browser");
+        if (!isActiveMotionRun(run) || !step || step.lease_token !== token) fail(409, "The browser task lease expired.");
+        requireTime(run);
+        requireRevision(run);
+        const leaseExpires = extendMotionStep(runId, taskId, token);
+        if (!leaseExpires) fail(409, "The browser task lease expired.");
+        return { leaseExpires };
+    }).immediate();
+}
+
+export function submitMotionBrowserTask(runId: string, accountId: number, taskId: string, raw: unknown) {
+    const { token, expectedRevision, result } = resultSchema.parse(raw);
+    return db.transaction(() => {
+        const run = ownedMotionRun(runId, accountId);
+        const step = motionSteps(runId).find(({ id, lane }) => id === taskId && lane === "browser");
+        if (!step || step.lease_token !== token || expectedRevision !== run.starting_revision) {
+            fail(409, "The browser task lease is no longer current.");
+        }
+        const value = step.name === "reference_capture" ? captureSchema.parse(result) : previewSchema.parse(result);
+        if (step.status === "done" && step.result_id) {
+            const prior = motionArtifact(runId, step.result_id);
+            if (prior?.body.toString("utf8") === JSON.stringify(value)) return { duplicate: true };
+            fail(409, "Different evidence was already recorded for this task.");
+        }
+        if (!isActiveMotionRun(run) || step.status !== "running" || !step.lease_expires || step.lease_expires <= Date.now()) {
+            fail(409, "The browser task lease expired.");
+        }
+        requireTime(run);
+        requireRevision(run, expectedRevision);
+        let input: BrowserMotionTask["input"];
+        try { input = motionBrowserInput(run, step); } catch { fail(409, "The browser input changed."); }
+        if (input.tool === "reference_capture" && "bindingId" in value) {
+            const { bindingId, metadata: { kind, interval } } = input.reference;
+            if (value.bindingId !== bindingId) fail(409, "The reference was replaced.");
+            const times = value.measured.timestamps;
+            if (kind === "image" ? times.length !== 1 || times[0] !== 0 :
+                !interval || times.some((time) => time < interval.start - 0.2 || time > interval.end)) {
+                fail(422, "The samples are outside the selected reference.");
+            }
+        }
+        if (input.tool === "preview" && "frames" in value &&
+            (value.frames.some((frame) => frame >= input.document.total_frames) ||
+                new Set(value.frames).size !== value.frames.length)) fail(422, "The preview sample frames are invalid.");
+        for (const image of value.images) {
+            const bytes = Buffer.from(image.base64, "base64");
+            if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff ||
+                bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9 ||
+                createHash("sha256").update(bytes).digest("hex") !== image.sha256) {
+                fail(422, "The browser evidence image or checksum is invalid.");
+            }
+        }
+        const summary = "measured" in value
+            ? `The browser sampled ${value.measured.timestamps.length} reference frames.`
+            : `The browser rendered ${value.frames.length} preview frames for review.`;
+        if (!finishMotionStep(run, step, { value, summary })) fail(409, "The browser task lease expired.");
+        return { duplicate: false };
+    }).immediate();
+}

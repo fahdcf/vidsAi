@@ -1,0 +1,1 @@
+Inspect actual supplied preview pixels and timeline timings. Assess readability, focal hierarchy, pacing, palette and reference alignment. Give prioritized issues with scene IDs and sampled frame numbers. Identify missing evidence as an unresolved issue. Return a concise decision summary and limited repair requests.

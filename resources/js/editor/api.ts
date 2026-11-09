@@ -2,10 +2,12 @@ export async function api<T = any>(
     url: string,
     data?: unknown,
     method = "POST",
+    signal?: AbortSignal,
 ): Promise<T> {
     const multipart = data instanceof FormData;
     const response = await fetch(url, {
         method,
+        signal,
         credentials: "same-origin",
         headers: {
             ...(multipart ? {} : { "Content-Type": "application/json" }),
@@ -21,7 +23,7 @@ export async function api<T = any>(
     });
     const body = await response.json();
     if (!response.ok)
-        throw new Error(
+        throw Object.assign(new Error(
             response.status === 409
                 ? "This project changed. Reload to get the latest version."
                 : body.message ||
@@ -30,6 +32,6 @@ export async function api<T = any>(
                       .flat()
                       .join(" ") ||
                   "Request failed",
-        );
+        ), { status: response.status });
     return body;
 }

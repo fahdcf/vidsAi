@@ -24,6 +24,11 @@ import { wanModels, wanPayload } from "./wan";
 import { mediaDuration } from "./media";
 import { reserveProviderRequest } from "./provider-budget";
 import { saveMotionAsset } from "./motion/assets";
+import { bindMotionReference, motionReference, saveMotionReferenceAnalysis } from "./motion/references";
+import { createMotionRun, ownedMotionRun } from "./motion/store";
+import { motionCursor, motionOrchestrator, motionRunView, streamMotionEvents } from "./motion/service";
+import { motionRunDraft, queueMotionFeedback, retryMotionRun } from "./motion/orchestrator";
+import { claimMotionBrowserTask, heartbeatMotionBrowserTask, submitMotionBrowserTask } from "./motion/browser";
 const uuid = z.string().uuid();
 const projectInput = z.object({
     name: z.string().trim().min(1).max(255),
@@ -738,6 +743,60 @@ app.post(
         res.status(201).json(await saveMotionAsset(p.id, req.file, req.body.kind, provenance));
     },
 );
+function ownMotionProject(req: express.Request) {
+    const project = own(req, req.params.id);
+    if (project.workflow !== "motion_graphics") fail(404, "Motion project not found.");
+    return project;
+}
+
+app.get("/projects/:id/motion-reference", (req, res) => {
+    const project = ownMotionProject(req);
+    res.json({ reference: motionReference(project.id) });
+});
+app.put("/projects/:id/motion-reference", async (req, res) => {
+    const project = ownMotionProject(req);
+    res.json({ reference: await bindMotionReference(project.id, req.body) });
+});
+app.post("/projects/:id/motion-reference/analysis", (req, res) => {
+    const project = ownMotionProject(req);
+    res.json({ reference: saveMotionReferenceAnalysis(project.id, req.body) });
+});
+app.post("/projects/:id/motion-runs", (req, res) => {
+    const p = ownMotionProject(req);
+    const run = createMotionRun(p.id, user(req), req.body);
+    res.status(202).json({ id: run.id, status: run.status });
+});
+app.get("/motion-runs/:run", (req, res) => {
+    const run = ownedMotionRun(uuid.parse(req.params.run), user(req));
+    res.set("Cache-Control", "private, no-store").json(motionRunView(run, motionCursor.parse(req.query.after ?? 0)));
+});
+app.get("/motion-runs/:run/events", (req, res) => {
+    streamMotionEvents(req, res, ownedMotionRun(uuid.parse(req.params.run), user(req)));
+});
+app.get("/motion-runs/:run/draft", (req, res) => {
+    res.set("Cache-Control", "private, no-store").json({
+        draft: motionRunDraft(ownedMotionRun(uuid.parse(req.params.run), user(req))),
+    });
+});
+app.post("/motion-runs/:run/cancel", (req, res) => {
+    res.json({ status: motionOrchestrator.cancel(uuid.parse(req.params.run), user(req)).status });
+});
+app.post("/motion-runs/:run/retry", (req, res) => {
+    res.status(202).json({ status: retryMotionRun(uuid.parse(req.params.run), user(req)).status });
+});
+app.post("/motion-runs/:run/feedback", (req, res) => {
+    res.status(202).json(queueMotionFeedback(uuid.parse(req.params.run), user(req), req.body));
+});
+app.post("/motion-runs/:run/browser/claim", (req, res) => {
+    res.json({ task: claimMotionBrowserTask(uuid.parse(req.params.run), user(req)) });
+});
+app.put("/motion-runs/:run/browser/:task", (req, res) => {
+    res.json(submitMotionBrowserTask(uuid.parse(req.params.run), user(req), uuid.parse(req.params.task), req.body));
+});
+app.post("/motion-runs/:run/browser/:task/heartbeat", (req, res) => {
+    res.json(heartbeatMotionBrowserTask(uuid.parse(req.params.run), user(req), uuid.parse(req.params.task), req.body));
+});
+
 app.get("/projects/:id/voiceover", (req, res) => {
     const p = own(req, req.params.id);
     res.set("Cache-Control", "private, max-age=3600").sendFile(

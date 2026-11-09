@@ -27,6 +27,7 @@ function mimeType(kind: MotionAssetKind, bytes: Buffer, name: string) {
                 case ".mp3": return "audio/mpeg";
                 case ".wav": return "audio/wav";
                 case ".m4a": return "audio/mp4";
+                case ".aac": return "audio/aac";
             }
     }
     fail(422, "The asset format is unsupported for this motion tool.");
