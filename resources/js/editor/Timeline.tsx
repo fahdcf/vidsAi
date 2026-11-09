@@ -2,6 +2,8 @@ import React, { useRef, useState } from "react";
 import type { Document } from "@vidsai/contracts";
 import Icon from "./Icon";
 import MediaThumb from "./MediaThumb";
+import MotionThumb from "./motion/MotionThumb";
+import { motionSceneLabel } from "./motion/MotionStoryboard";
 export default function Timeline({
     document: doc,
     selected,
@@ -10,6 +12,7 @@ export default function Timeline({
     onSelect,
     onSeek,
     onReorder,
+    onReorderMotion,
 }: {
     document: Document;
     selected: string;
@@ -18,6 +21,7 @@ export default function Timeline({
     onSelect: (id: string) => void;
     onSeek: (frame: number) => void;
     onReorder: (ids: string[]) => void;
+    onReorderMotion?: (ids: string[]) => void;
 }) {
     const [zoom, setZoom] = useState(1);
     const dragged = useRef<string | null>(null);
@@ -96,7 +100,7 @@ export default function Timeline({
                             ))}
                         </div>
                     </div>
-                    <div className="timeline-row timeline-scenes">
+                    {(!doc.tracks.motion_graphics.length || doc.tracks.video.length > 0) && <div className="timeline-row timeline-scenes">
                         <span className="timeline-label">
                             <Icon name="film" size={13} />
                             Scenes
@@ -132,6 +136,7 @@ export default function Timeline({
                                         );
                                         const from = ids.indexOf(id),
                                             to = ids.indexOf(c.id);
+                                        if (from < 0) return;
                                         ids.splice(from, 1);
                                         ids.splice(to, 0, id);
                                         dragged.current = null;
@@ -159,7 +164,39 @@ export default function Timeline({
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    </div>}
+                    {doc.tracks.motion_graphics.length > 0 && <div className="timeline-row timeline-scenes timeline-motion">
+                        <span className="timeline-label"><Icon name="sparkles" size={13} /> Motion</span>
+                        <div className="timeline-track">
+                            {doc.tracks.motion_graphics.map((scene, index) => <button key={scene.id} type="button"
+                                className={`timeline-clip ${selected === scene.id ? "selected" : ""}`}
+                                style={span(scene.start_frame, scene.end_frame)} disabled={busy}
+                                aria-label={`Select motion scene ${index + 1}`} aria-pressed={selected === scene.id}
+                                draggable={!busy && !!onReorderMotion}
+                                onDragStart={(event) => {
+                                    dragged.current = scene.id;
+                                    event.dataTransfer.setData("text/plain", scene.id);
+                                    event.dataTransfer.effectAllowed = "move";
+                                }}
+                                onDragEnd={() => { dragged.current = null; }} onDragOver={(event) => event.preventDefault()}
+                                onDrop={(event) => {
+                                    event.preventDefault();
+                                    const id = dragged.current;
+                                    const ids = doc.tracks.motion_graphics.map(({ id }) => id);
+                                    const from = id ? ids.indexOf(id) : -1;
+                                    if (from < 0 || from === index || busy) return;
+                                    ids.splice(from, 1);
+                                    ids.splice(index, 0, id!);
+                                    dragged.current = null;
+                                    onReorderMotion?.(ids);
+                                }}
+                                onClick={() => { onSelect(scene.id); onSeek(scene.start_frame); }}>
+                                <MotionThumb scene={scene} projectId={doc.project_id} width={doc.width} height={doc.height} fps={doc.fps} />
+                                <strong>{motionSceneLabel[scene.type]}</strong>
+                                <small>{((scene.end_frame - scene.start_frame) / doc.fps).toFixed(1)}s</small>
+                            </button>)}
+                        </div>
+                    </div>}
                     <div className="timeline-row">
                         <span className="timeline-label">
                             <Icon name="caption" size={13} />

@@ -5,10 +5,10 @@ import { db, project } from "../database";
 import { document } from "../document";
 import { fail } from "../security";
 import {
-    changeMotionRunStatus, extendMotionStep, finishMotionStep, isActiveMotionRun, motionBrowserInput,
+    changeMotionRunStatus, extendMotionStep, failMotionStep, finishMotionStep, isActiveMotionRun, motionBrowserInput,
     motionLeaseMs, readyMotionSteps, recoverExpiredMotionSteps, startMotionStep,
 } from "./orchestrator";
-import { motionArtifact, motionSteps, ownedMotionRun, type MotionRun } from "./store";
+import { appendMotionEvent, motionArtifact, motionSteps, ownedMotionRun, type MotionRun } from "./store";
 import { motionElapsed } from "./ledger";
 import { motionLimits } from "./budget";
 
@@ -63,6 +63,23 @@ export function heartbeatMotionBrowserTask(runId: string, accountId: number, tas
         const leaseExpires = extendMotionStep(runId, taskId, token);
         if (!leaseExpires) fail(409, "The browser task lease expired.");
         return { leaseExpires };
+    }).immediate();
+}
+
+export function releaseMotionBrowserTask(runId: string, accountId: number, taskId: string, raw: unknown) {
+    const { token } = z.object({ token: z.uuid() }).strict().parse(raw);
+    return db.transaction(() => {
+        const run = ownedMotionRun(runId, accountId);
+        const step = motionSteps(runId).find(({ id, lane }) => id === taskId && lane === "browser");
+        if (!isActiveMotionRun(run) || step?.status !== "running" || step.lease_token !== token) return { released: false };
+        if (step.attempts >= 3) {
+            failMotionStep(run, step, "The browser could not finish this stage after three attempts. Earlier artifacts were saved.");
+            return { released: true };
+        }
+        db.prepare("UPDATE motion_steps SET status='pending',lease_token=NULL,lease_expires=NULL WHERE id=?").run(step.id);
+        appendMotionEvent(run.id, "step_interrupted", { step: step.name, lane: step.lane });
+        changeMotionRunStatus(run, "waiting_for_browser");
+        return { released: true };
     }).immediate();
 }
 

@@ -7,6 +7,8 @@ import { createServer } from "vite";
 const root = path.resolve(import.meta.dirname, "..");
 const runtime = path.resolve(root, "../runtime");
 const { ffmpeg } = JSON.parse(await readFile(path.join(root, "motion-toolchain.json"), "utf8"));
+const mixed = process.argv.indexOf("--mixed");
+const mixedSource = mixed >= 0 ? await readFile(process.argv[mixed + 1]) : null;
 const reportRoot = path.join(runtime, "motion-verification");
 await mkdir(reportRoot, { recursive: true });
 const directory = await mkdtemp(path.join(reportRoot, "render-"));
@@ -31,13 +33,14 @@ try {
     await page.route(origin + "/__motion_benchmark", (route) => route.fulfill({
         contentType: "text/html", body: "<!doctype html><title>Motion benchmark</title><main id='probe'></main>",
     }));
+    if (mixedSource) await page.route(origin + "/__motion_source.mp4", (route) => route.fulfill({ contentType: "video/mp4", body: mixedSource }));
     await page.goto(origin + "/__motion_benchmark");
     const [download, report] = await Promise.all([
         page.waitForEvent("download", { timeout: 150000 }),
-        page.evaluate(async (full) => {
-            const { verifyMotionBrowser } = await import("/scripts/fixtures/motion-browser.tsx");
-            return verifyMotionBrowser(full);
-        }, process.argv.includes("--full")),
+        page.evaluate(async ({ full, mixed }) => {
+            const { verifyMotionBrowser, verifyMixedMotionBrowser } = await import("/scripts/fixtures/motion-browser.tsx");
+            return mixed ? verifyMixedMotionBrowser() : verifyMotionBrowser(full);
+        }, { full: process.argv.includes("--full"), mixed: Boolean(mixedSource) }),
     ]);
     if (renderRequests.length) throw new Error("The motion benchmark sent a server render request.");
     const filename = path.join(directory, "motion-benchmark.mp4");

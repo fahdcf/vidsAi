@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS motion_runs (
     brief TEXT NOT NULL,
     snapshot TEXT NOT NULL,
     reference_binding_id TEXT,
+    target_scene_id TEXT,
     status TEXT NOT NULL CHECK(status IN ('queued','working','waiting_for_browser','ready','failed','cancelled')),
     error TEXT,
     created_at INTEGER NOT NULL,
@@ -88,4 +89,10 @@ CREATE TABLE IF NOT EXISTS motion_feedback (
     text TEXT NOT NULL,
     replacement_run_id TEXT REFERENCES motion_runs(id) ON DELETE SET NULL,
     PRIMARY KEY(run_id,request_id)
+);
+CREATE TABLE IF NOT EXISTS motion_setup (
+    run_id TEXT PRIMARY KEY REFERENCES motion_runs(id) ON DELETE CASCADE,
+    requirements TEXT NOT NULL,
+    setup_hash TEXT NOT NULL,
+    finished_hash TEXT
 );

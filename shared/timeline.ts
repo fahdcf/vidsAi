@@ -1,4 +1,4 @@
-import type { MotionCue, MotionScene } from "./motion/schema";
+import type { MotionCue, MotionGeneration, MotionScene } from "./motion/schema";
 
 // remotion/types/timeline.ts
 // Master data contract for VidsAI video edit state.
@@ -133,6 +133,7 @@ export interface EditStateTracks {
 export interface EditStateMetadata {
   workflow?: ProjectWorkflow;
   motion_cues?: MotionCue[];
+  motion_generation?: MotionGeneration;
   platform: Platform;
   language: string;
   created_at: string;

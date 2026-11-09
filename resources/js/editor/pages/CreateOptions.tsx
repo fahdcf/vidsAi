@@ -3,11 +3,6 @@ import Shell from "../Shell";
 
 const upcoming = [
     {
-        title: "Motion graphics video",
-        description: "Animate text, shapes, and visuals for explainers and intros.",
-        image: "motion-graphics",
-    },
-    {
         title: "Stickman animations",
         description: "Tell a story with animated stick figures.",
         image: "stickman",
@@ -40,6 +35,19 @@ export default function CreateOptions() {
                         <p id="create-from-scratch-description">
                             Start with your narration, find footage, and edit the result.
                         </p>
+                        <span className="create-option-start" aria-hidden="true">
+                            Start creating <Icon name="arrowRight" size={15} />
+                        </span>
+                    </a>
+                </li>
+                <li>
+                    <a className="create-option create-option-available" href="/create/motion-graphics"
+                        aria-labelledby="create-motion-graphics" aria-describedby="create-motion-graphics-description">
+                        <div className="create-option-preview">
+                            <img src="/workflows/motion-graphics.webp" alt="" width={800} height={450} />
+                        </div>
+                        <h2 id="create-motion-graphics">Motion graphics video</h2>
+                        <p id="create-motion-graphics-description">Animate text and shapes from a brief or visual reference.</p>
                         <span className="create-option-start" aria-hidden="true">
                             Start creating <Icon name="arrowRight" size={15} />
                         </span>

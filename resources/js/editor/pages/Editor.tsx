@@ -28,6 +28,8 @@ import StyleGallery from "../StyleGallery";
 import { api } from "../api";
 
 import MusicLibrary from "../MusicLibrary";
+import MotionSceneControls from "../motion/MotionSceneControls";
+import "../styles/motion-workspace.css";
 import { useBrowserExport } from "../browser-export/useBrowserExport";
 import { browserExportCanvas, browserRenderProfile, validateBrowserRenderProfile } from "../browser-export/profile";
 
@@ -73,7 +75,7 @@ export default function Editor({
         updateSave(value);
     }
 
-    const [selected, setSelected] = useState(doc.tracks.video[0]?.id || "");
+    const [selected, setSelected] = useState(doc.tracks.motion_graphics[0]?.id || doc.tracks.video[0]?.id || "");
 
     const [tab, setTab] = useState("Scene");
 
@@ -188,6 +190,8 @@ export default function Editor({
     const base = `/projects/${project.id}`;
 
     const clip = doc.tracks.video.find((c) => c.id === selected);
+    const motionScene = doc.tracks.motion_graphics.find(({ id }) => id === selected);
+    const motion = doc.metadata.workflow === "motion_graphics";
 
     async function upload(file: File) {
         if (!clip || busy) return;
@@ -599,6 +603,7 @@ export default function Editor({
     return (
         <Shell
             editor
+            motionStep={motion ? 3 : undefined}
             title={project.name}
             description="Your story. Your finishing touches."
         >
@@ -638,9 +643,10 @@ export default function Editor({
                     <Icon name="redo" size={14} />
                 </button>
 
-                <a href={`/review/${project.id}`}>Scenes</a>
+                <a href={motion ? base + "/motion-review" : `/review/${project.id}`}>Scenes</a>
 
-                <a href={`/subtitle-styles/${project.id}`}>Style</a>
+                <a href={motion ? base + "/motion-style" : `/subtitle-styles/${project.id}`}>Style</a>
+                {motion && <a href={base + "/motion"}>Motion chat</a>}
 
                 <button
                     aria-pressed={toolsOpen}
@@ -705,12 +711,12 @@ export default function Editor({
                             if (saveRef.current !== "Saved" || pending.current.form) {
                                 throw new Error("Save the project before exporting.");
                             }
-                            return docRef.current;
+                            return structuredClone(docRef.current);
                         }, false);
                     }}
                 >
                     <Icon name="download" size={15} />
-                    {localExport.active ? "Rendering…" : "Export"}
+                    {localExport.active ? "Rendering…" : motion ? `Export ${Math.min(outputCanvas.width, outputCanvas.height)}p` : "Export"}
                 </button>
             </div>
 
@@ -914,7 +920,9 @@ export default function Editor({
                             onSubmitCapture={captureSubmit}
                             key={`${tab}-${selected}-${formVersion}`}
                         >
-                            {tab === "Scene" && clip && (
+                            {tab === "Scene" && motionScene && <MotionSceneControls key={doc.revision} scene={motionScene}
+                                scenes={doc.tracks.motion_graphics} mode="editor" busy={busy} save={(operations) => void edit(operations)} />}
+                            {tab === "Scene" && clip && !motionScene && (
                                 <form
                                     onSubmit={(e) => {
                                         e.preventDefault();
@@ -1740,6 +1748,7 @@ export default function Editor({
                             { tool: "reorder_scenes", params: { order } },
                         ])
                     }
+                    onReorderMotion={(order) => void edit([{ tool: "reorder_motion_scenes", params: { order } }])}
                 />
             </div>
         </Shell>

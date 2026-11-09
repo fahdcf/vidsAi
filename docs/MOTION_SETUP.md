@@ -32,3 +32,19 @@ node --import tsx scripts/motion-verify-browser-tools.mjs "<path to the 15-secon
 The browser harness uses the configured model inventory and qualification report to test routing. It intercepts hosted model calls with mock outputs. Chrome sampled the supplied reference, rendered preview contact sheets in the browser, and completed the specialist graph with malformed-output fallback and targeted repair. It also checked ownership, duplicate and stale results, lease recovery after closing a tab, restart recovery, cancellation, feedback, and draft retention. The server suite passed 25 tests. Targeted checks also covered unsupported provider capabilities, HTTP rate limits, distinct first-token and request deadlines, persisted account/provider budgets, and reasoning tags split across streamed chunks.
 
 The harness saves isolated SQLite and media evidence under `../runtime/motion-verification/browser-tools-*`. This checkpoint exercises the workflow internals with mock models. The live reference-driven product run is a separate acceptance step.
+
+**Product checkpoint**
+
+```powershell
+npm run typecheck
+npm run build
+npm run motion:test -- --suite product
+npm test
+node --import tsx scripts/motion-verify-product.mjs "<reference MP4>" "<soundtrack M4A>" --journey --export
+node scripts/motion-verify-render.mjs --mixed "<reference MP4>"
+node scripts/studio-ui-check.cjs
+```
+
+The authenticated product journey passed through Create, chat, Review, Style, Editor, reopen, and browser export. Mock specialists generated and repaired a seven-scene plan from real browser reference samples and rendered preview sheets. The resulting MP4 decoded at 1280×720 with H.264 video, AAC audio, and 450 frames. Reload recovery, cancellation, retry, and a concurrent edit during export passed. Private evidence is in `../runtime/motion-verification/product-jtxKQe/`, including the MP4, decode log, and desktop and compact screenshots.
+
+The mixed-media fixture checked motion, footage, captions, a logo overlay, audio fades, and impact cue alignment. The legacy footage fixture passed in Chrome and Edge at desktop and compact widths, including browser export. The full server suite passed 27 tests.

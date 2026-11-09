@@ -20,18 +20,19 @@ export type SavedMotionReference = {
 
 const base = (projectId: number) => `/projects/${projectId}/motion-reference`;
 
-export async function uploadMotionReference(projectId: number, source: MotionReferenceSelection, signal: AbortSignal) {
+export async function uploadMotionReference(projectId: number, source: MotionReferenceSelection, signal: AbortSignal, relinkBindingId?: string) {
     const form = new FormData();
     form.append("file", source.file);
     const { asset_id: assetId } = await api<{ asset_id: string }>(`/projects/${projectId}/assets`, form, "POST", signal);
-    return bindUploadedMotionReference(projectId, assetId, source, signal);
+    return bindUploadedMotionReference(projectId, assetId, source, signal, relinkBindingId);
 }
 
 export async function bindUploadedMotionReference(
     projectId: number, assetId: string, metadata: Pick<MotionReferenceSelection, "width" | "height" | "interval">, signal: AbortSignal,
+    relinkBindingId?: string,
 ) {
     const { reference } = await api<{ reference: SavedMotionReference }>(base(projectId), {
-        assetId, width: metadata.width, height: metadata.height, interval: metadata.interval,
+        assetId, width: metadata.width, height: metadata.height, interval: metadata.interval, relinkBindingId,
     }, "PUT", signal);
     return reference;
 }

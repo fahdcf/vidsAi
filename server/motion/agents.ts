@@ -170,6 +170,11 @@ export function integrateMotionScenes(document: Document, storyboard: MotionStor
     requireSceneIds(storyboard, scenes);
     for (const scene of scenes) requireSceneSpan(scene, storyboard.scenes.find(({ id }) => id === scene.id)!);
     const plan = { title: storyboard.title, scenes };
+    const blockers = motionDraftBlockers(scenes);
+    return { plan, document: blockers.length ? null : compileMotionPlan(plan, document), blockers };
+}
+
+export function motionDraftBlockers(scenes: readonly MotionScene[]) {
     const blockers: MotionCritique["issues"] = [];
     for (const scene of scenes) {
         const where = { sceneId: scene.id, frame: scene.start_frame, priority: "blocking" as const };
@@ -191,7 +196,7 @@ export function integrateMotionScenes(document: Document, storyboard: MotionStor
             repair: "Separate the text and background colors while preserving the approved copy and the rest of the palette.",
         });
     }
-    return { plan, document: blockers.length ? null : compileMotionPlan(plan, document), blockers };
+    return blockers;
 }
 
 const critiqueIssue = z.object({
@@ -215,6 +220,7 @@ export function runMotionCritic(
     draft: Document,
     preview: { frames: readonly number[]; images: readonly MotionVisionImage[] },
     reference: ReferenceAnalysis | null,
+    targetSceneId?: string,
 ) {
     if (!preview.images.length || preview.images.length > 4 || !preview.frames.length || preview.frames.length > 32 ||
         preview.frames.some((value) => !Number.isInteger(value) || value < 0 || value >= draft.total_frames)) {
@@ -227,14 +233,31 @@ export function runMotionCritic(
         scenes: draft.tracks.motion_graphics.map(({ id, type, start_frame, end_frame, palette }) =>
             ({ id, type, start_frame, end_frame, palette })),
         reference,
+        targetSceneId,
     }, motionCritiqueSchema, {
         images: preview.images,
         validate: ({ issues }) => {
             for (const issue of issues) {
                 const scene = draft.tracks.motion_graphics.find(({ id }) => id === issue.sceneId);
-                if (!scene || !preview.frames.includes(issue.frame) || issue.frame < scene.start_frame || issue.frame >= scene.end_frame) {
+                if (!scene || (targetSceneId && issue.sceneId !== targetSceneId) ||
+                    !preview.frames.includes(issue.frame) || issue.frame < scene.start_frame || issue.frame >= scene.end_frame) {
                     throw new Error("A visual critique issue must identify observed scene evidence.");
                 }
+            }
+        },
+    });
+}
+
+export function runMotionRevision(context: MotionAgentContext, scene: MotionScene) {
+    return runMotionAgent(context, "repair", "AGENT_COMPLEX", {
+        task: "Revise this one scene using the user brief. Change requested text or colors only if asked. For faster or slower motion use motionRate. The scene must keep its original duration and assets.",
+        scene, component: describeMotionComponent(scene.type),
+    }, motionBuildSchema, {
+        validate: ({ scene: next }) => {
+            if (next.type !== scene.type || next.id !== scene.id || next.layer !== scene.layer ||
+                next.start_frame !== scene.start_frame || next.end_frame !== scene.end_frame ||
+                next.fontAssetId !== scene.fontAssetId || JSON.stringify(next.assets) !== JSON.stringify(scene.assets)) {
+                throw new Error("The focused revision changed protected scene fields.");
             }
         },
     });

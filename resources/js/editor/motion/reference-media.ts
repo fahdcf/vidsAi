@@ -3,8 +3,12 @@ import { inspectBrowserMedia } from "../browser-export/inspect-media";
 
 export async function inspectMotionReference(source: Blob, kind: "image" | "video", signal: AbortSignal) {
     const metadata = await inspectBrowserMedia(source, kind, signal);
-    if ("duration" in metadata && metadata.duration !== undefined && metadata.duration > 30.001) {
-        throw new Error("Use a motion reference of 30 seconds or less.");
+    if (metadata.video) {
+        const { duration } = metadata.video;
+        if (!(duration > 0 && duration <= 30.001)) {
+            throw new Error("Use a motion reference of 30 seconds or less.");
+        }
+        return { ...metadata, duration };
     }
     return metadata;
 }

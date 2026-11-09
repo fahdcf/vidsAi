@@ -24,7 +24,7 @@ export async function api<T = any>(
     const body = await response.json();
     if (!response.ok)
         throw Object.assign(new Error(
-            response.status === 409
+            response.status === 409 && !url.startsWith("/motion-runs/") && url !== "/projects/motion" && !url.endsWith("/motion-reference")
                 ? "This project changed. Reload to get the latest version."
                 : body.message ||
                   body.error ||

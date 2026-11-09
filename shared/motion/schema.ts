@@ -18,6 +18,13 @@ export const motionStyleRecipes = {
     reference: defaultMotionPalette,
     studio: { background: "#151417", foreground: "#fff1e9", primary: "#ff8d64", accent: "#d8512b", muted: "#ffc09e" },
 } as const;
+export const motionGenerationSchema = z.object({
+    runId: z.uuid(),
+    rendererVersion: z.number().int().positive(),
+    skills: z.array(z.object({ id: z.string().regex(/^[a-z-]+$/), version: z.number().int().positive() }).strict()).max(20),
+    reference: z.object({ bindingId: z.uuid(), assetId: z.uuid().nullable(), sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable() }).strict().nullable(),
+}).strict();
+export type MotionGeneration = z.infer<typeof motionGenerationSchema>;
 const frame = z.number().int().min(0).max(7200);
 export const motionCueSchema = z.object({
     frame, confidence: z.number().min(0).max(1), source: z.enum(["detected", "manual"]),
@@ -53,6 +60,7 @@ const base = {
         framing: z.boolean().default(false),
     }).strict().default({ grain: 0.045, vignette: 0.18, framing: false }),
     assets: z.array(asset).max(4).default([]),
+    motionRate: z.number().min(0.5).max(2).default(1),
     transitionIn: z.object({
         kind: z.enum(["fade", "wipe", "scale"]),
         frames: z.number().int().min(1).max(60),

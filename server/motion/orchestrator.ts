@@ -2,7 +2,8 @@ import { randomUUID } from "node:crypto";
 import { db, json, project, update } from "../database";
 import { commit, document } from "../document";
 import { fail } from "../security";
-import { motionPlanSchema } from "../../shared/motion/compile";
+import { compileMotionPlan, motionPlanSchema } from "../../shared/motion/compile";
+import { motionRendererVersion } from "../../shared/motion/registry";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
@@ -10,12 +11,14 @@ import { captureSchema, previewSchema, evidenceImages, referenceMetadata, type B
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import type { MotionAgentProgress } from "./agent-call";
+import { motionSkillManifest } from "./prompts";
+import { pendingMotionSetup } from "./setup";
 import { motionReference, saveMotionReferenceAnalysis } from "./references";
 import { observeReferenceSheet } from "./reference-observer";
 import {
-    integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionStoryboardSchema,
+    integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionDraftBlockers, motionStoryboardSchema,
     motionCritiqueSchema, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
-    runMotionRepair, runReferenceAnalyst, type MotionBuild, type MotionCritique,
+    runMotionRepair, runMotionRevision, runReferenceAnalyst, type MotionBuild, type MotionCritique,
 } from "./agents";
 import {
     addMotionStep, appendMotionEvent, appendMotionMessage, createMotionRun, motionArtifact, motionRun, motionSnapshot,
@@ -61,21 +64,26 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
     const { id } = run;
     const done = (name: string) => steps.some((step) => step.name === name && step.status === "done");
     const add = (step: MotionStepInput) => addMotionStep(id, step);
-    if (run.reference_binding_id) {
-        add({ name: "reference_capture", lane: "browser" });
-        add({ name: "reference_analysis", lane: "provider", dependencies: ["reference_capture"] });
+    if (run.target_scene_id) {
+        add({ name: "revise", lane: "provider" });
+        add({ name: "assemble", lane: "local", dependencies: ["revise"], input: { round: 1 } });
+    } else {
+        if (run.reference_binding_id) {
+            add({ name: "reference_capture", lane: "browser" });
+            add({ name: "reference_analysis", lane: "provider", dependencies: ["reference_capture"] });
+        }
+        add({ name: "director", lane: "provider", dependencies: run.reference_binding_id ? ["reference_analysis"] : [] });
+        add({ name: "copy", lane: "provider", dependencies: ["director"] });
+        add({ name: "design", lane: "provider", dependencies: ["director"] });
+        if (!done("director")) return;
+        const storyboard = agentResult(id, "director", motionStoryboardSchema);
+        const engineers = storyboard.scenes.map((target) => {
+            const name = `engineer:${target.id}`;
+            add({ name, lane: "provider", dependencies: ["copy", "design"], input: { sceneId: target.id } });
+            return name;
+        });
+        add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
     }
-    add({ name: "director", lane: "provider", dependencies: run.reference_binding_id ? ["reference_analysis"] : [] });
-    add({ name: "copy", lane: "provider", dependencies: ["director"] });
-    add({ name: "design", lane: "provider", dependencies: ["director"] });
-    if (!done("director")) return;
-    const storyboard = agentResult(id, "director", motionStoryboardSchema);
-    const engineers = storyboard.scenes.map((target) => {
-        const name = `engineer:${target.id}`;
-        add({ name, lane: "provider", dependencies: ["copy", "design"], input: { sceneId: target.id } });
-        return name;
-    });
-    add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
     for (let round = 1; round <= maxRounds; round++) {
         const { assemble, preview, critique, repair } = stepNames(round);
         if (!done(assemble)) return;
@@ -121,7 +129,7 @@ export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMot
             bindingId: reference.bindingId, url: reference.url, metadata: referenceMetadata.parse(reference.metadata),
         } };
     }
-    const { round } = json<{ round: number }>(step.input, { round: 1 });
+    const { round = 1 } = json<{ round?: number }>(step.input, {});
     const { document } = result<BuildArtifact>(run.id, stepNames(round).assemble);
     if (!document) throw new Error("The draft needs repairs before the browser can preview it.");
     return { tool: "preview", document };
@@ -205,10 +213,20 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
     const context = { brief: run.brief, document: motionSnapshot(run), budget, signal, onProgress };
     const input = json<{ round?: number; sceneId?: string; issues?: string[] }>(step.input, {});
     const round = input.round ?? 1;
-    const reference = (): ReferenceAnalysis | null => run.reference_binding_id
-        ? agentResult(id, "reference_analysis", referenceAnalysisSchema) : null;
+    const reference = (): ReferenceAnalysis | null => {
+        if (!run.reference_binding_id) return null;
+        if (!run.target_scene_id) return agentResult(id, "reference_analysis", referenceAnalysisSchema);
+        const stored = motionReference(run.project_id);
+        const analysis = stored?.bindingId === run.reference_binding_id ? referenceAnalysisSchema.safeParse(stored.analysis) : null;
+        return analysis?.success ? analysis.data : null;
+    };
     const storyboard = () => agentResult(id, "director", motionStoryboardSchema);
     const build = (n: number) => result<BuildArtifact>(id, stepNames(n).assemble);
+    if (step.name === "revise") {
+        const scene = context.document.tracks.motion_graphics.find(({ id }) => id === run.target_scene_id)!;
+        const value = await runMotionRevision(context, scene);
+        return { value, summary: value.value.decision };
+    }
     if (step.name === "reference_analysis") {
         const selected = motionReference(run.project_id);
         const capture = captureSchema.parse(result(id, "reference_capture"));
@@ -239,6 +257,14 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return { value, summary: value.value.decision };
     }
     if (step.name === stepNames(round).assemble) {
+        if (run.target_scene_id) {
+            const target = run.target_scene_id;
+            const source = round === 1 ? "revise" : stepNames(round - 1).repair(target);
+            const { scene } = agentResult(id, source, motionBuildSchema);
+            const plan = { title: "Focused scene revision", scenes: context.document.tracks.motion_graphics.map((item) => item.id === target ? scene : item) };
+            const blockers = motionDraftBlockers([scene]);
+            return { value: { plan, blockers, document: blockers.length ? null : compileMotionPlan(plan, context.document) } };
+        }
         const plan = storyboard();
         const builds: MotionBuild[] = round === 1
             ? plan.scenes.map(({ id: sceneId }) => agentResult(id, `engineer:${sceneId}`, motionBuildSchema))
@@ -256,7 +282,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const draft = build(round).document;
         if (!draft) throw new Error("The draft needs repairs before review.");
         const value = await runMotionCritic(context, draft,
-            { frames: preview.frames, images: imageBytes(preview.images) }, reference());
+            { frames: preview.frames, images: imageBytes(preview.images) }, reference(), run.target_scene_id ?? undefined);
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("repair:")) {
@@ -287,8 +313,13 @@ function applyStepOutput(run: MotionRun, step: MotionStep, output: StepOutput) {
         changeMotionRunStatus(run, "failed", "The project changed during generation. The draft is available.");
         return;
     }
+    if (motionNeedsApproval(run)) {
+        appendMotionMessage(run.id, "assistant", "The revision is ready to review. The saved project still has the previous version.");
+        changeMotionRunStatus(run, "ready");
+        return;
+    }
     commit(p, { commandId: run.id, expectedRevision: run.starting_revision,
-        operations: [{ tool: "replace_motion_plan", params: plan }] });
+        operations: [{ tool: "replace_motion_plan", params: motionPlanProvenance(run, plan) }] });
     update("projects", run.project_id, { status: "completed" });
     changeMotionRunStatus(run, "ready");
 }
@@ -301,6 +332,59 @@ export function motionRunDraft(run: MotionRun) {
         if (draft.document) return { document: draft.document, plan: draft.plan, startingRevision: run.starting_revision };
     }
     return null;
+}
+
+export function motionRunStoryboard(run: MotionRun) {
+    if (!motionSteps(run.id).some(({ name, status }) => name === "director" && status === "done")) return null;
+    const artifact = result<{ value?: unknown }>(run.id, "director");
+    const parsed = motionStoryboardSchema.safeParse(artifact.value);
+    return parsed.success ? parsed.data : null;
+}
+
+export function motionNeedsApproval(run: MotionRun) {
+    return motionSnapshot(run).tracks.motion_graphics.length > 0;
+}
+
+function motionPlanProvenance(run: MotionRun, plan: z.infer<typeof motionPlanSchema>) {
+    const bindingId = run.reference_binding_id;
+    const selected = bindingId ? motionReference(run.project_id) : null;
+    const matching = selected?.bindingId === bindingId ? selected : null;
+    const metadata = matching && referenceMetadata.safeParse(matching.metadata);
+    return { ...plan, provenance: {
+        runId: run.id,
+        rendererVersion: motionRendererVersion,
+        skills: motionSkillManifest.map(({ id, version }) => ({ id, version })),
+        reference: bindingId ? { bindingId, assetId: matching?.assetId ?? null,
+            sha256: metadata && metadata.success ? metadata.data.sha256 : null } : null,
+    } };
+}
+
+export function applySavedMotionDraft(runId: string, accountId: number, raw: unknown) {
+    const { expectedRevision, partial } = z.object({
+        expectedRevision: z.number().int().nonnegative(),
+        partial: z.boolean(),
+    }).strict().parse(raw);
+    return db.transaction(() => {
+        const run = ownedMotionRun(runId, accountId);
+        if (expectedRevision !== run.starting_revision) fail(409, "This draft was made from another project revision.");
+        const p = project(run.project_id);
+        const prior = db.prepare("SELECT result FROM edit_commands WHERE id=? AND project_id=?")
+            .get(run.id, p.id) as { result: string } | undefined;
+        if (prior) return json(prior.result, {});
+        if (partial ? !["failed", "cancelled"].includes(run.status) : run.status !== "ready" || !motionNeedsApproval(run)) {
+            fail(409, "This motion draft is still being reviewed.");
+        }
+        if (db.prepare("SELECT 1 FROM motion_runs WHERE project_id=? AND status IN ('queued','working','waiting_for_browser')").get(p.id)) {
+            fail(409, "Stop the active motion run before opening this draft in the editor.");
+        }
+        const draft = motionRunDraft(run);
+        if (!draft) fail(404, "There is no playable draft to apply.");
+        const result = commit(p, { commandId: run.id, expectedRevision,
+            operations: [{ tool: "replace_motion_plan", params: motionPlanProvenance(run, draft.plan) }] });
+        update("projects", p.id, { status: "completed" });
+        appendMotionEvent(run.id, "draft_applied", { revision: document(project(p.id)).revision, partial });
+        return result;
+    }).immediate();
 }
 
 type Feedback = { request_id: string; text: string; replacement_run_id: string | null };
@@ -355,7 +439,8 @@ function applyPendingFeedback(run: MotionRun) {
     changeMotionRunStatus(run, "cancelled");
     const replacement = createMotionRun(run.project_id, run.account_id, {
         requestId: randomUUID(), brief: steeredBrief(run.brief, feedback), referenceBindingId: run.reference_binding_id,
-    });
+        targetSceneId: run.target_scene_id,
+    }, false);
     db.prepare("UPDATE motion_feedback SET replacement_run_id=? WHERE run_id=? AND replacement_run_id IS NULL")
         .run(replacement.id, run.id);
     appendMotionMessage(run.id, "assistant", "I started a new run with your feedback. The earlier draft and artifacts remain available here.");
@@ -410,6 +495,7 @@ export class MotionOrchestrator {
         const claimed = db.transaction(() => {
             const run = motionRun(id);
             if (!run || !isActiveMotionRun(run)) return null;
+            if (pendingMotionSetup(id)) return null;
             if (!recoverExpiredMotionSteps(run)) return null;
             if (applyPendingFeedback(run)) return null;
             const { active, waiting } = motionElapsed(run);

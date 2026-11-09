@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import Shell from "../Shell";
 import Icon from "../Icon";
 import MediaThumb from "../MediaThumb";
+import MotionThumb from "../motion/MotionThumb";
+import type { MotionScene } from "../motion/MotionSceneControls";
 const inProgress = ["pending", "processing", "subtitle_generating"];
 const statusNames: Record<string, string> = {
     pending: "Queued",
@@ -12,18 +14,30 @@ const statusNames: Record<string, string> = {
     completed: "Ready",
     failed: "Needs attention",
 };
+const motionStatusNames: Record<string, string> = {
+    queued: "Queued", working: "Making a draft", waiting_for_browser: "Waiting for browser",
+    ready: "Ready", failed: "Needs attention", cancelled: "Stopped",
+};
+type MotionCover = { scene: MotionScene | null; width: number; height: number; fps: number };
 export default function Dashboard({ projects }: { projects: any[] }) {
     const [filter, setFilter] = useState("All projects"),
         [search, setSearch] = useState(""),
         [limit, setLimit] = useState(9);
+    const effectiveStatus = (p: any) => {
+        if (p.workflow !== "motion_graphics") return p.status;
+        if (p.motion_review_pending) return "reviewing";
+        if (["queued", "working", "waiting_for_browser"].includes(p.motion_status)) return "processing";
+        if (["failed", "cancelled"].includes(p.motion_status)) return "failed";
+        return p.status;
+    };
     const filtered = projects.filter(
         (p) =>
             (filter === "All projects" ||
-                (filter === "In progress" && inProgress.includes(p.status)) ||
-                (filter === "Ready" && p.status === "completed") ||
+                (filter === "In progress" && inProgress.includes(effectiveStatus(p))) ||
+                (filter === "Ready" && effectiveStatus(p) === "completed") ||
                 (filter === "Drafts" &&
                     ["reviewing", "subtitle_selection", "failed"].includes(
-                        p.status,
+                        effectiveStatus(p),
                     ))) &&
             p.name.toLowerCase().includes(search.toLowerCase()),
     );
@@ -57,7 +71,7 @@ export default function Dashboard({ projects }: { projects: any[] }) {
                     <span>
                         <strong>
                             {
-                                projects.filter((p) => p.status === "completed")
+                                projects.filter((p) => effectiveStatus(p) === "completed")
                                     .length
                             }
                         </strong>{" "}
@@ -102,7 +116,12 @@ export default function Dashboard({ projects }: { projects: any[] }) {
             </div>
             <div className="project-grid">
                 {filtered.slice(0, limit).map((p) => {
-                    const href = [
+                    const motion = p.workflow === "motion_graphics";
+                    const status = effectiveStatus(p);
+                    const cover = p.motion_cover ? JSON.parse(p.motion_cover) as MotionCover : null;
+                    const href = motion
+                        ? `/projects/${p.id}/${status === "completed" ? "editor" : "motion"}`
+                        : [
                         "subtitle_selection",
                         "subtitle_generating",
                         "completed",
@@ -114,16 +133,18 @@ export default function Dashboard({ projects }: { projects: any[] }) {
                     return (
                         <a className="project-card" key={p.id} href={href}>
                             <div className="project-cover">
-                                <MediaThumb
+                                {cover?.scene ? <MotionThumb scene={cover.scene} projectId={String(p.id)}
+                                    width={cover.width} height={cover.height} fps={cover.fps} /> : <MediaThumb
                                     url={p.thumbnail_url}
                                     type={p.media_type}
                                     label="Your next story"
-                                />
+                                />}
                                 <span
-                                    className={`status-pill ${p.status === "completed" ? "ready" : p.status === "failed" ? "failed" : inProgress.includes(p.status) ? "progress" : ""}`}
+                                    className={`status-pill ${status === "completed" ? "ready" : status === "failed" ? "failed" : inProgress.includes(status) ? "progress" : ""}`}
                                 >
                                     <span className="live-dot" />
-                                    {statusNames[p.status] || p.status}
+                                    {p.motion_review_pending ? "Revision ready" : motion && p.motion_status
+                                        ? motionStatusNames[p.motion_status] : statusNames[status] || status}
                                 </span>
                                 <span className="project-open">
                                     <Icon name="arrowRight" size={15} />
@@ -133,7 +154,7 @@ export default function Dashboard({ projects }: { projects: any[] }) {
                                 <h2>{p.name}</h2>
                                 <p>
                                     <span>
-                                        {p.category || "Video project"}
+                                        {motion ? <span className="motion-workflow-badge">Motion graphics</span> : p.category || "Video project"}
                                         {p.duration
                                             ? " · " +
                                               Number(p.duration).toFixed(1) +

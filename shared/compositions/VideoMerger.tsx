@@ -630,14 +630,16 @@ const OverlayRenderer: React.FC<{
 
 const AudioTrackRenderer: React.FC<{
   audioTracks: TimelineAudioItem[];
-}> = ({audioTracks}) => {
+  projectId: string;
+}> = ({audioTracks, projectId}) => {
   const frame = useCurrentFrame();
   const {Audio} = React.useContext(CompositionMedia);
 
   return (
     <>
       {audioTracks.map((track) => {
-        const src = compositionMediaUrl(track.url);
+        const asset = /^asset:([a-f0-9-]{36})$/i.exec(track.url)?.[1];
+        const src = asset ? `/projects/${encodeURIComponent(projectId)}/assets/${asset}` : compositionMediaUrl(track.url);
         const volume = (() => {
           if (frame < track.start_frame || frame > track.end_frame) {
             return 0;
@@ -844,7 +846,7 @@ export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionA
           </MediaSettings.Provider>
         ))}
 
-        {audioTracks.length > 0 ? <AudioTrackRenderer audioTracks={audioTracks} /> : null}
+        {audioTracks.length > 0 ? <AudioTrackRenderer audioTracks={audioTracks} projectId={String(editState.project_id)} /> : null}
 
         {motionGraphics.map((scene) => (
           <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.end_frame - scene.start_frame} layout='none'>

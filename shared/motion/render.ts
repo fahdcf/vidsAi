@@ -105,7 +105,7 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
 export function drawMotionFrame(frame: MotionFrame, assets: ReadyMotionAssets) {
     const { ctx, scene, width, height } = frame;
     const duration = scene.end_frame - scene.start_frame;
-    const progress = clamp(frame.frame / Math.max(1, duration - 1));
+    const progress = clamp(frame.frame / Math.max(1, duration - 1)) ** (1 / (scene.motionRate ?? 1));
     ctx.reset();
     const transition = scene.transitionIn;
     let opacity = 1;

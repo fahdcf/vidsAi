@@ -26,6 +26,9 @@ db.transaction(() => {
     if (!(db.pragma("table_info(projects)") as { name: string }[]).some(({ name }) => name === "workflow")) {
         db.exec("ALTER TABLE projects ADD COLUMN workflow TEXT NOT NULL DEFAULT 'video_from_scratch' CHECK (workflow IN ('video_from_scratch','motion_graphics'))");
     }
+    if (!(db.pragma("table_info(motion_runs)") as { name: string }[]).some(({ name }) => name === "target_scene_id")) {
+        db.exec("ALTER TABLE motion_runs ADD COLUMN target_scene_id TEXT");
+    }
 }).immediate();
 if (
     !(db.pragma("table_info(project_assets)") as any[]).some(

@@ -14,6 +14,8 @@ export const motionEditParameters = {
             font: z.enum(["archivo_black", "space_mono", "system"]).optional(),
             layout: motionLayout.partial().optional(),
             layer: z.number().int().min(0).max(31).optional(),
+            motionRate: z.number().min(0.5).max(2).optional(),
+            transitionIn: z.object({ kind: z.enum(["fade", "wipe", "scale"]), frames: z.number().int().min(1).max(60) }).strict().nullable().optional(),
         }).strict(),
     }).strict(),
     remove_motion_scene: z.object({ id: motionSceneId }).strict(),
@@ -25,6 +27,7 @@ export const motionEditParameters = {
         start_frame: z.number().int().nonnegative(),
         end_frame: z.number().int().positive(),
     }).strict(),
+    set_motion_cut: z.object({ id: motionSceneId, frame: z.number().int().positive() }).strict(),
     set_music_cues: z.object({ cues: motionCuesSchema, syncImpact: z.boolean().default(false) }).strict(),
 };
 
@@ -46,9 +49,12 @@ export function applyMotionEdit(document: Document, op: Operation) {
         return scene;
     }
     switch (op.tool) {
-        case "replace_motion_plan":
-            document.tracks.motion_graphics = compileMotionPlan(op.params, document).tracks.motion_graphics;
+        case "replace_motion_plan": {
+            const next = compileMotionPlan(op.params, document);
+            document.tracks.motion_graphics = next.tracks.motion_graphics;
+            if (next.metadata.motion_generation) document.metadata.motion_generation = next.metadata.motion_generation;
             break;
+        }
         case "add_motion_scene":
             scenes.push(motionEditParameters.add_motion_scene.parse(op.params));
             break;
@@ -57,6 +63,7 @@ export function applyMotionEdit(document: Document, op: Operation) {
             const scene = find(id);
             scenes[scenes.indexOf(scene)] = motionSceneSchema.parse({
                 ...scene, ...patch,
+                transitionIn: patch.transitionIn === null ? undefined : patch.transitionIn ?? scene.transitionIn,
                 layout: { ...scene.layout, ...patch.layout },
                 params: { ...scene.params, ...patch.params },
             });
@@ -108,6 +115,24 @@ export function applyMotionEdit(document: Document, op: Operation) {
         case "set_motion_timing": {
             const { id, ...span } = motionEditParameters.set_motion_timing.parse(op.params);
             Object.assign(find(id), span);
+            break;
+        }
+        case "set_motion_cut": {
+            const { id, frame } = motionEditParameters.set_motion_cut.parse(op.params);
+            const scene = find(id);
+            const next = scenes.find((item) => item.start_frame === scene.end_frame);
+            if (!next || frame <= scene.start_frame || frame >= next.end_frame) {
+                throw new Error("Keep the cut between the neighboring scene boundaries.");
+            }
+            scene.end_frame = frame;
+            next.start_frame = frame;
+            for (const item of [scene, next]) {
+                if (item.transitionIn) {
+                    const available = item.end_frame - item.start_frame - 1;
+                    if (available < 1) delete item.transitionIn;
+                    else item.transitionIn.frames = Math.min(available, item.transitionIn.frames);
+                }
+            }
             break;
         }
         case "set_music_cues": {

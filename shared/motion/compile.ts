@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { normalizeDocument, type Document } from "../contracts";
-import { motionTrackSchema, type MotionScene } from "./schema";
+import { motionGenerationSchema, motionTrackSchema, type MotionScene } from "./schema";
 import { motionSceneCost } from "./registry";
 
 export const motionPlanSchema = z.object({
     title: z.string().trim().min(1).max(100),
     scenes: motionTrackSchema.min(1),
+    provenance: motionGenerationSchema.optional(),
 }).strict();
 
 export function motionSceneExceedsBudget(scene: MotionScene) {
@@ -16,7 +17,7 @@ export function motionSceneExceedsBudget(scene: MotionScene) {
 export function compileMotionPlan(input: unknown, draft: unknown): Document {
     const document = normalizeDocument(draft);
     if (document.metadata.workflow !== "motion_graphics") throw new Error("A motion project is required.");
-    const { scenes } = motionPlanSchema.parse(input);
+    const { scenes, provenance } = motionPlanSchema.parse(input);
     const ordered = [...scenes].sort((a, b) => a.start_frame - b.start_frame || a.layer - b.layer);
     let covered = 0;
     for (const scene of ordered) {
@@ -27,5 +28,6 @@ export function compileMotionPlan(input: unknown, draft: unknown): Document {
         }
     }
     if (covered !== document.total_frames) throw new Error("The motion plan must cover the requested duration.");
-    return normalizeDocument({ ...document, tracks: { ...document.tracks, motion_graphics: ordered } });
+    return normalizeDocument({ ...document, tracks: { ...document.tracks, motion_graphics: ordered },
+        metadata: provenance ? { ...document.metadata, motion_generation: provenance } : document.metadata });
 }

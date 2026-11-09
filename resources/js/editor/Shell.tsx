@@ -6,12 +6,14 @@ export default function Shell({
     description,
     actions,
     editor = false,
+    motionStep,
 }: {
     children: React.ReactNode;
     title: string;
     description?: string;
     actions?: React.ReactNode;
     editor?: boolean;
+    motionStep?: 0 | 1 | 2 | 3;
 }) {
     const path = window.location.pathname;
     const createPage = path === "/create" || path.startsWith("/create/");
@@ -28,13 +30,14 @@ export default function Shell({
         "/reset-password",
     ].includes(path);
     const studio = Boolean(projectId);
-    const step = path.startsWith("/review")
+    const motion = motionStep !== undefined;
+    const step = motionStep ?? (path.startsWith("/review")
         ? 1
         : path.startsWith("/subtitle-styles")
           ? 2
           : path.startsWith("/projects") || path.startsWith("/final")
             ? 3
-            : 0;
+            : 0);
     const links = [
         { href: "/dashboard", name: "Projects", icon: "grid" },
         { href: "/create", name: "New video", icon: "plus" },
@@ -132,18 +135,18 @@ export default function Shell({
                         aria-label="Video creation progress"
                     >
                         {[
-                            "Create",
+                            motion ? "Motion chat" : "Create",
                             "Review scenes",
                             "Style video",
                             "Edit & export",
                         ].map((name, i) => {
                             const url =
                                 i === 0
-                                    ? "/create"
+                                    ? motion ? `/projects/${projectId}/motion` : "/create"
                                     : i === 1
-                                      ? `/review/${projectId}`
+                                      ? motion ? `/projects/${projectId}/motion-review` : `/review/${projectId}`
                                       : i === 2
-                                        ? `/subtitle-styles/${projectId}`
+                                        ? motion ? `/projects/${projectId}/motion-style` : `/subtitle-styles/${projectId}`
                                         : `/projects/${projectId}/editor`;
                             return (
                                 <React.Fragment key={name}>

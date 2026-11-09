@@ -25,10 +25,11 @@ import { mediaDuration } from "./media";
 import { reserveProviderRequest } from "./provider-budget";
 import { saveMotionAsset } from "./motion/assets";
 import { bindMotionReference, motionReference, saveMotionReferenceAnalysis } from "./motion/references";
-import { createMotionRun, ownedMotionRun } from "./motion/store";
+import { createMotionRun, motionSnapshot, ownedMotionRun } from "./motion/store";
 import { motionCursor, motionOrchestrator, motionRunView, streamMotionEvents } from "./motion/service";
-import { motionRunDraft, queueMotionFeedback, retryMotionRun } from "./motion/orchestrator";
-import { claimMotionBrowserTask, heartbeatMotionBrowserTask, submitMotionBrowserTask } from "./motion/browser";
+import { applySavedMotionDraft, motionNeedsApproval, motionRunDraft, queueMotionFeedback, retryMotionRun } from "./motion/orchestrator";
+import { finalizeMotionSetup, pendingMotionSetup, setupMotionProject } from "./motion/setup";
+import { claimMotionBrowserTask, heartbeatMotionBrowserTask, releaseMotionBrowserTask, submitMotionBrowserTask } from "./motion/browser";
 const uuid = z.string().uuid();
 const projectInput = z.object({
     name: z.string().trim().min(1).max(255),
@@ -293,13 +294,49 @@ app.get("/api/page", (req, res) => {
             props: {
                 projects: db
                     .prepare(
-                        "SELECT p.id,p.name,p.status,p.created_at,p.category,p.language,  (SELECT COALESCE(thumbnail_path,video_url) FROM scenes WHERE project_id=p.id ORDER BY scene_number LIMIT 1) AS thumbnail_url,  (SELECT CASE WHEN thumbnail_path IS NOT NULL THEN 'image' ELSE type END FROM scenes WHERE project_id=p.id ORDER BY scene_number LIMIT 1) AS media_type,  COALESCE(CASE WHEN json_valid(p.edit_state) THEN json_extract(p.edit_state,'$.total_frames')*1.0/NULLIF(json_extract(p.edit_state,'$.fps'),0) END,  (SELECT SUM(COALESCE(trimmed_duration,gemini_duration,duration_seconds,0)) FROM scenes WHERE project_id=p.id)) AS duration  FROM projects p WHERE p.user_id=? ORDER BY p.id DESC",
+                        `SELECT p.id,p.name,p.status,p.created_at,p.category,p.language,p.workflow,r.status AS motion_status,
+                            CASE WHEN r.status='ready' AND json_array_length(r.snapshot,'$.tracks.motion_graphics')>0
+                                THEN NOT EXISTS(SELECT 1 FROM edit_commands WHERE id=r.id AND project_id=p.id) ELSE 0 END AS motion_review_pending,
+                            CASE WHEN p.workflow='motion_graphics' AND json_valid(p.edit_state) THEN json_object(
+                                'scene',json_extract(p.edit_state,'$.tracks.motion_graphics[0]'),
+                                'width',json_extract(p.edit_state,'$.width'),
+                                'height',json_extract(p.edit_state,'$.height'),
+                                'fps',json_extract(p.edit_state,'$.fps')
+                            ) END AS motion_cover,
+                            (SELECT COALESCE(thumbnail_path,video_url) FROM scenes WHERE project_id=p.id ORDER BY scene_number LIMIT 1) AS thumbnail_url,
+                            (SELECT CASE WHEN thumbnail_path IS NOT NULL THEN 'image' ELSE type END FROM scenes WHERE project_id=p.id ORDER BY scene_number LIMIT 1) AS media_type,
+                            COALESCE(CASE WHEN json_valid(p.edit_state) THEN json_extract(p.edit_state,'$.total_frames')*1.0/
+                                NULLIF(json_extract(p.edit_state,'$.fps'),0) END,
+                                (SELECT SUM(COALESCE(trimmed_duration,gemini_duration,duration_seconds,0)) FROM scenes WHERE project_id=p.id)) AS duration
+                         FROM projects p LEFT JOIN motion_runs r ON r.id=(SELECT id FROM motion_runs WHERE project_id=p.id ORDER BY rowid DESC LIMIT 1)
+                         WHERE p.user_id=? ORDER BY p.id DESC`,
                     )
                     .all(id),
             },
         });
     if (pathname === "/create") return res.json({ page: "CreateOptions", props: {} });
     if (pathname === "/create/from-scratch") return res.json({ page: "Create", props: {} });
+    if (pathname === "/create/motion-graphics") return res.json({ page: "MotionCreate", props: {} });
+    const motion = pathname.match(/^\/projects\/(\d+)\/motion$/);
+    if (motion) {
+        const p = own(req, motion[1]);
+        if (p.workflow !== "motion_graphics") fail(404, "Motion project not found.");
+        const run = req.query.run
+            ? ownedMotionRun(uuid.parse(req.query.run), id)
+            : db.prepare("SELECT id FROM motion_runs WHERE project_id=? ORDER BY rowid DESC LIMIT 1").get(p.id) as { id: string } | undefined;
+        if (run && "project_id" in run && run.project_id !== p.id) fail(404, "Motion run not found.");
+        const snapshot = document(p);
+        return res.json({ page: "MotionChat", props: { projectId: p.id, name: p.name, runId: run?.id ?? null,
+            seconds: snapshot.total_frames / snapshot.fps,
+            pendingSetup: run ? pendingMotionSetup(run.id) : null } });
+    }
+    const motionStage = pathname.match(/^\/projects\/(\d+)\/motion-(review|style)$/);
+    if (motionStage) {
+        const p = own(req, motionStage[1]);
+        if (p.workflow !== "motion_graphics") fail(404, "Motion project not found.");
+        return res.json({ page: "MotionReview", props: { projectId: p.id, name: p.name, document: document(p),
+            stage: motionStage[2] } });
+    }
     if (pathname === "/profile")
         return res.json({ page: "Profile", props: { user: currentUser(id) } });
     const match =
@@ -766,6 +803,13 @@ app.post("/projects/:id/motion-runs", (req, res) => {
     const run = createMotionRun(p.id, user(req), req.body);
     res.status(202).json({ id: run.id, status: run.status });
 });
+app.post("/projects/motion", (req, res) => {
+    res.status(202).json(setupMotionProject(user(req), req.body));
+});
+app.post("/motion-runs/:run/setup", (req, res) => {
+    const run = finalizeMotionSetup(uuid.parse(req.params.run), user(req), req.body);
+    res.json({ id: run.id, status: run.status });
+});
 app.get("/motion-runs/:run", (req, res) => {
     const run = ownedMotionRun(uuid.parse(req.params.run), user(req));
     res.set("Cache-Control", "private, no-store").json(motionRunView(run, motionCursor.parse(req.query.after ?? 0)));
@@ -774,9 +818,14 @@ app.get("/motion-runs/:run/events", (req, res) => {
     streamMotionEvents(req, res, ownedMotionRun(uuid.parse(req.params.run), user(req)));
 });
 app.get("/motion-runs/:run/draft", (req, res) => {
+    const run = ownedMotionRun(uuid.parse(req.params.run), user(req));
     res.set("Cache-Control", "private, no-store").json({
-        draft: motionRunDraft(ownedMotionRun(uuid.parse(req.params.run), user(req))),
+        draft: motionRunDraft(run),
+        before: motionNeedsApproval(run) ? motionSnapshot(run) : null,
     });
+});
+app.post("/motion-runs/:run/apply", (req, res) => {
+    res.json(applySavedMotionDraft(uuid.parse(req.params.run), user(req), req.body));
 });
 app.post("/motion-runs/:run/cancel", (req, res) => {
     res.json({ status: motionOrchestrator.cancel(uuid.parse(req.params.run), user(req)).status });
@@ -795,6 +844,9 @@ app.put("/motion-runs/:run/browser/:task", (req, res) => {
 });
 app.post("/motion-runs/:run/browser/:task/heartbeat", (req, res) => {
     res.json(heartbeatMotionBrowserTask(uuid.parse(req.params.run), user(req), uuid.parse(req.params.task), req.body));
+});
+app.post("/motion-runs/:run/browser/:task/release", (req, res) => {
+    res.json(releaseMotionBrowserTask(uuid.parse(req.params.run), user(req), uuid.parse(req.params.task), req.body));
 });
 
 app.get("/projects/:id/voiceover", (req, res) => {

@@ -11,6 +11,7 @@ const binding = z.object({
     width: z.number().int().positive().max(4096),
     height: z.number().int().positive().max(4096),
     interval: referenceIntervalSchema.nullable(),
+    relinkBindingId: z.uuid().optional(),
 }).strict();
 
 type ReferenceRow = {
@@ -68,7 +69,13 @@ export async function bindMotionReference(projectId: number, value: unknown) {
     const metadata = JSON.stringify({ kind, width, height, interval, sha256: hash.digest("hex") });
     db.transaction(() => {
         const saved = row(projectId);
-        if (saved?.asset_id === input.assetId && saved.metadata === metadata) return;
+        if (input.relinkBindingId && (saved?.binding_id !== input.relinkBindingId || saved.metadata !== metadata)) {
+            fail(409, "Use the original file and reference interval to relink this run.");
+        }
+        if (saved?.metadata === metadata) {
+            if (saved.asset_id !== input.assetId) db.prepare("UPDATE motion_references SET asset_id=? WHERE project_id=?").run(input.assetId, projectId);
+            return;
+        }
         db.prepare(
             "INSERT INTO motion_references(project_id,binding_id,asset_id,metadata) VALUES(?,?,?,?) ON CONFLICT(project_id) DO UPDATE SET binding_id=excluded.binding_id,asset_id=excluded.asset_id,metadata=excluded.metadata,analysis=NULL",
         ).run(projectId, randomUUID(), input.assetId, metadata);

@@ -15,10 +15,16 @@ import {
 import Recovery from "./pages/Recovery";
 import Public from "./pages/Public";
 import "./editor.css";
+const MotionCreate = React.lazy(() => import("./pages/MotionCreate"));
+const MotionChat = React.lazy(() => import("./pages/MotionChat"));
+const MotionReview = React.lazy(() => import("./pages/MotionReview"));
 const pages: any = {
     Dashboard,
     Create,
     CreateOptions,
+    MotionCreate,
+    MotionChat,
+    MotionReview,
     Editor,
     Processing,
     Review,
@@ -54,17 +60,20 @@ async function boot() {
         window.location.href = "/login";
         return;
     }
-    const response = await fetch(
-        "/api/page?path=" +
-            encodeURIComponent(pathname === "/" ? "/dashboard" : pathname),
-        { credentials: "same-origin" },
-    );
+    const query = new URLSearchParams({ path: pathname === "/" ? "/dashboard" : pathname });
+    if (/^\/projects\/\d+\/motion$/.test(pathname)) {
+        const run = new URLSearchParams(window.location.search).get("run");
+        if (run) query.set("run", run);
+    }
+    const response = await fetch("/api/page?" + query, { credentials: "same-origin" });
     const data = await response.json();
     if (!response.ok) throw new Error(data.message || "Page unavailable");
     const Component = pages[data.page];
     if (!Component) throw new Error("Unknown page");
     createRoot(document.getElementById("app")!).render(
-        <Component key={pathname} {...data.props} accountId={String(session.user.id)} />,
+        <React.Suspense fallback={<p role="status" className="motion-loading">Opening workspace…</p>}>
+            <Component key={pathname} {...data.props} accountId={String(session.user.id)} />
+        </React.Suspense>,
     );
 }
 void boot().catch((e) => {

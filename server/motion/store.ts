@@ -4,6 +4,7 @@ import { db, insert, json, project } from "../database";
 import { document } from "../document";
 import { fail, hash } from "../security";
 import type { Document } from "../../shared/contracts";
+import { motionSceneId } from "../../shared/motion/schema";
 
 export type RunStatus = "queued" | "working" | "waiting_for_browser" | "ready" | "failed" | "cancelled";
 export type MotionRun = {
@@ -14,6 +15,7 @@ export type MotionRun = {
     brief: string;
     snapshot: string;
     reference_binding_id: string | null;
+    target_scene_id: string | null;
     status: RunStatus;
     error: string | null;
     created_at: number;
@@ -40,6 +42,7 @@ const runInput = z.object({
     requestId: z.uuid(),
     brief: z.string().trim().min(1).max(4000),
     referenceBindingId: z.uuid().nullable().default(null),
+    targetSceneId: motionSceneId.nullable().default(null),
 }).strict();
 
 export function motionRun(id: string) {
@@ -53,7 +56,7 @@ export function ownedMotionRun(id: string, accountId: number) {
     return row;
 }
 
-export function createMotionRun(projectId: number, accountId: number, raw: unknown) {
+export function createMotionRun(projectId: number, accountId: number, raw: unknown, recordBrief = true) {
     const input = runInput.parse(raw);
     const digest = hash(JSON.stringify(input));
     return db.transaction(() => {
@@ -62,7 +65,10 @@ export function createMotionRun(projectId: number, accountId: number, raw: unkno
         const prior = db.prepare("SELECT id,input_hash FROM motion_runs WHERE project_id=? AND request_id=?")
             .get(projectId, input.requestId) as { id: string; input_hash: string } | undefined;
         if (prior) {
-            if (prior.input_hash !== digest) fail(409, "This run request already has different inputs.");
+            const { targetSceneId, ...legacyInput } = input;
+            if (prior.input_hash !== digest && (targetSceneId || prior.input_hash !== hash(JSON.stringify(legacyInput)))) {
+                fail(409, "This run request already has different inputs.");
+            }
             return motionRun(prior.id)!;
         }
         if (db.prepare("SELECT id FROM motion_runs WHERE project_id=? AND status IN ('queued','working','waiting_for_browser')").get(projectId)) {
@@ -71,15 +77,18 @@ export function createMotionRun(projectId: number, accountId: number, raw: unkno
         if (input.referenceBindingId && !db.prepare("SELECT 1 FROM motion_references WHERE project_id=? AND binding_id=?")
             .get(projectId, input.referenceBindingId)) fail(409, "The selected reference was replaced.");
         const snapshot = document(p);
+        if (input.targetSceneId && !snapshot.tracks.motion_graphics.some(({ id }) => id === input.targetSceneId)) {
+            fail(422, "Choose an existing motion scene to revise.");
+        }
         const timestamp = Date.now();
         const id = randomUUID();
         insert("motion_runs", {
             id, project_id: projectId, account_id: accountId, request_id: input.requestId,
             input_hash: digest, starting_revision: snapshot.revision, brief: input.brief,
-            snapshot: JSON.stringify(snapshot), reference_binding_id: input.referenceBindingId,
+            snapshot: JSON.stringify(snapshot), reference_binding_id: input.referenceBindingId, target_scene_id: input.targetSceneId,
             status: "queued", created_at: timestamp, updated_at: timestamp,
         });
-        appendMotionMessage(id, "user", input.brief);
+        if (recordBrief) appendMotionMessage(id, "user", input.brief);
         appendMotionEvent(id, "run_queued", { status: "queued" });
         return motionRun(id)!;
     }).immediate();
@@ -119,6 +128,15 @@ export function appendMotionMessage(runId: string, role: "user" | "assistant" | 
 
 export function motionMessages(runId: string) {
     return db.prepare("SELECT id,role,text,created_at FROM motion_messages WHERE run_id=? ORDER BY id").all(runId);
+}
+
+export function motionConversation(run: MotionRun) {
+    return db.prepare(`SELECT * FROM (
+        SELECT m.id,m.role,m.text,m.created_at,m.run_id FROM motion_messages m
+        JOIN motion_runs r ON r.id=m.run_id
+        WHERE r.project_id=? AND r.account_id=?
+        ORDER BY m.id DESC LIMIT 150
+    ) ORDER BY id`).all(run.project_id, run.account_id);
 }
 
 export function writeMotionArtifact(runId: string, kind: string, body: Buffer) {

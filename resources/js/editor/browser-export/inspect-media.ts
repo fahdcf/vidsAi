@@ -70,9 +70,10 @@ async function audioInfo(track: InputAudioTrack) {
 }
 
 async function videoInfo(track: InputVideoTrack, signal: AbortSignal) {
-    const [codec, width, height, displayWidth, displayHeight, rotation, hdr] = await Promise.all([
+    const [codec, width, height, displayWidth, displayHeight, rotation, hdr, videoEnd, videoStart] = await Promise.all([
         track.getCodec(), track.getCodedWidth(), track.getCodedHeight(),
         track.getDisplayWidth(), track.getDisplayHeight(), track.getRotation(), track.hasHighDynamicRange(),
+        track.computeDuration({ metadataOnly: true }), track.getFirstTimestamp(),
     ]);
     if (codec !== "avc" || hdr) throw new Error("Use an SDR H.264 MP4 for video.");
     for (const [w, h] of [[width, height], [displayWidth, displayHeight]]) {
@@ -104,7 +105,7 @@ async function videoInfo(track: InputVideoTrack, signal: AbortSignal) {
     )) {
         throw new Error(frameRateError);
     }
-    return { codec, width, height, displayWidth, displayHeight, rotation, fps: 1 / framePeriod };
+    return { codec, width, height, displayWidth, displayHeight, rotation, fps: 1 / framePeriod, duration: videoEnd - videoStart };
 }
 
 export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, signal: AbortSignal) {

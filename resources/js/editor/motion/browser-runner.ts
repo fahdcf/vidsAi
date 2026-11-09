@@ -162,6 +162,11 @@ export async function runNextMotionBrowserTask(runId: string, signal: AbortSigna
         const result = await runMotionBrowserInput(task.input, taskSignal);
         await api(taskUrl, { token: task.token, expectedRevision: task.expectedRevision, result }, "PUT", taskSignal);
         return true;
+    } catch (error) {
+        if (!signal.aborted) {
+            await api(taskUrl + "/release", { token: task.token }, "POST", AbortSignal.timeout(3000)).catch(() => {});
+        }
+        throw error;
     } finally {
         clearInterval(heartbeat);
         clearTimeout(expiry);
