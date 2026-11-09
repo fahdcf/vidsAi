@@ -3,7 +3,7 @@ import { referenceFrameObservation } from "../../shared/motion/reference";
 import { MotionBudgetError, type ModelReservation, type MotionModelBudget } from "./budget";
 import { qualifiedMotionProviders } from "./providers/qualified";
 import { MotionProviderError, motionReasoningEffort, requestMotionJson } from "./providers/chat";
-import type { MotionAgentProgress } from "./agent-call";
+import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
 
 export const referenceObservationsSchema = z.object({
     observations: z.array(referenceFrameObservation).min(1).max(32),
@@ -66,5 +66,5 @@ export async function observeReferenceSheet(
             attempt.release(tokens);
         }
     }
-    throw providerBudget ?? new Error("The reference could not be read by a qualified image model.");
+    throw providerBudget ?? new MotionAgentUnavailable("The reference could not be read by a qualified image model.");
 }

@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { db, project } from "../database";
 import { document } from "../document";
-import { MotionOrchestrator, isActiveMotionRun, motionNeedsApproval, motionRunStoryboard } from "./orchestrator";
+import { MotionOrchestrator, isActiveMotionRun, motionNeedsApproval, motionReviewUnavailable, motionRunStoryboard } from "./orchestrator";
 import { motionConversation, motionEvents, motionSnapshot, motionSteps, ownedMotionRun, type MotionRun } from "./store";
 import { pendingMotionSetup } from "./setup";
 import { motionReference } from "./references";
@@ -23,6 +23,7 @@ export function motionRunView(run: MotionRun, after = 0) {
     const replaced = db.prepare("SELECT replacement_run_id FROM motion_feedback WHERE run_id=? AND replacement_run_id IS NOT NULL LIMIT 1")
         .get(run.id) as { replacement_run_id: string } | undefined;
     const applied = db.prepare("SELECT 1 FROM edit_commands WHERE id=? AND project_id=?").get(run.id, run.project_id);
+    const reviewUnavailable = motionReviewUnavailable(run, steps);
     return {
         id: run.id,
         projectId: run.project_id,
@@ -35,7 +36,8 @@ export function motionRunView(run: MotionRun, after = 0) {
         replacementRunId: replaced?.replacement_run_id ?? null,
         draftVersion: steps.filter(({ name, status }) => (name === "assemble" || name.startsWith("assemble:")) && status === "done").at(-1)?.result_id ?? null,
         draftApplied: Boolean(applied),
-        needsApproval: motionNeedsApproval(run),
+        needsApproval: motionNeedsApproval(run, reviewUnavailable),
+        reviewUnavailable,
         editorAvailable: document(project(run.project_id)).tracks.motion_graphics.length > 0,
         canRetry: ["failed", "cancelled"].includes(run.status) && !replaced && !applied &&
             !steps.some(({ name, status }) => name === "publish" && status === "done"),

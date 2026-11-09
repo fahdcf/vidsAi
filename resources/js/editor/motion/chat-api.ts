@@ -15,6 +15,7 @@ export type MotionRunView = {
     draftVersion: string | null;
     draftApplied: boolean;
     needsApproval: boolean;
+    reviewUnavailable: boolean;
     editorAvailable: boolean;
     canRetry: boolean;
     counts: { complete: number; total: number };

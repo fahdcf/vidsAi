@@ -258,7 +258,7 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
         setControlError("");
         try {
             await api(motionRunUrl(run.id) + "/apply", { expectedRevision: run.startingRevision, partial });
-            if (partial) window.location.assign(`/projects/${projectId}/editor`);
+            if (partial || run.reviewUnavailable) window.location.assign(`/projects/${projectId}/editor`);
             else refresh.current();
         } catch (error) {
             setControlError(error instanceof Error ? error.message : "The draft could not be applied.");
@@ -351,7 +351,7 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
                     <button type="button" onClick={() => void applyDraft(true)} disabled={sending}>Open saved partial draft</button>}
                 {draft && run.needsApproval && run.status === "ready" && !run.draftApplied &&
                     <button type="button" className="primary" onClick={() => void applyDraft(false)} disabled={sending}>
-                        {run.targetSceneId ? "Apply scene revision" : "Apply revision"}
+                        {run.reviewUnavailable ? "Open draft in editor" : run.targetSceneId ? "Apply scene revision" : "Apply revision"}
                     </button>}
                 {run.needsApproval && run.draftApplied && <span role="status" className="status-pill ready">Revision applied</span>}
             </div>}

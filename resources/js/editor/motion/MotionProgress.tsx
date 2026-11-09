@@ -30,6 +30,8 @@ export default function MotionProgress({ run, browserError }: { run: MotionRunVi
     const [now, setNow] = useState(Date.now());
     const current = run.stages.filter(({ status }) => status === "running");
     const running = current.length > 0;
+    const unreviewedStage = run.reviewUnavailable ? run.stages.filter(({ name }) => name.startsWith("critique:")).at(-1)?.name : null;
+    const statusLabel = run.status === "ready" && run.reviewUnavailable && !run.draftApplied ? "Ready for manual review" : statusText[run.status];
     useEffect(() => {
         if (!running) return;
         const timer = setInterval(() => setNow(Date.now()), 1000);
@@ -38,7 +40,7 @@ export default function MotionProgress({ run, browserError }: { run: MotionRunVi
     return <section className="panel motion-progress" aria-label="Workflow progress">
         <div className="motion-progress-head">
             <div><h2>Workflow</h2><p className="muted">{run.counts.complete} of {run.counts.total} planned steps complete</p></div>
-            <span className={`status-pill ${run.status === "ready" ? "ready" : ""}`} role="status">{statusText[run.status]}</span>
+            <span className={`status-pill ${run.status === "ready" ? "ready" : ""}`} role="status">{statusLabel}</span>
         </div>
         {current.length > 0 && <ul className="motion-current-stages" aria-label="Current stages">
             {current.map(({ name, startedAt, activity }) => <li key={name}>
@@ -54,7 +56,7 @@ export default function MotionProgress({ run, browserError }: { run: MotionRunVi
         {run.stages.length > 0 && <details>
             <summary>All planned steps</summary>
             <ol>{run.stages.map(({ name, status, error }) => <li key={name}>
-                {motionStageName(name)} <span className="muted">· {status}</span>{error && <p>{error}</p>}
+                {motionStageName(name)} <span className="muted">· {name === unreviewedStage ? "manual review" : status}</span>{error && <p>{error}</p>}
             </li>)}</ol>
         </details>}
     </section>;

@@ -382,6 +382,7 @@ export async function runMotionCritic(
         reference: targetSceneId ? null : reference?.scenes.map(({ supportedType, palette, motionLandmarks }) =>
             ({ supportedType, palette, motionLandmarks })) ?? null,
     }, visualReviewSchema, {
+        requestTimeoutMs: 25_000,
         validate: ({ issues }) => {
             for (const { sceneId, frame } of issues) {
                 if (!scenes.some(({ id, samples }) => id === sceneId && samples.some((sample) => sample.frame === frame))) {

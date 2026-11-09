@@ -11,7 +11,7 @@ import type { Document } from "../../shared/contracts";
 import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
-import type { MotionAgentProgress } from "./agent-call";
+import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
 import { motionSkillManifest } from "./prompts";
 import { pendingMotionSetup } from "./setup";
 import { motionReference, saveMotionReferenceAnalysis } from "./references";
@@ -130,12 +130,15 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         const { blockers = [] } = result<BuildArtifact>(id, assemble);
         let issues = blockers;
         let unresolved: string[] = [];
+        let reviewUnavailable = false;
         let dependency = assemble;
         if (!blockers.length) {
             add({ name: preview, lane: "browser", dependencies: [assemble], input: { round } });
             add({ name: critique, lane: "provider", dependencies: [preview], input: { round } });
             if (!done(critique)) return;
-            ({ issues, unresolved } = agentResult(id, critique, motionCritiqueSchema));
+            const review = result<{ source?: string; value?: unknown }>(id, critique);
+            reviewUnavailable = review.source === "review_unavailable";
+            if (!reviewUnavailable) ({ issues, unresolved } = motionCritiqueSchema.parse(review.value));
             dependency = critique;
         }
         if (issues.length && round < maxRounds && !run.target_scene_id) {
@@ -148,7 +151,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             continue;
         }
         add({ name: "publish", lane: "local", dependencies: [dependency],
-            input: { round, issues: [...unresolved, ...issues.map(({ issue }) => issue)] } });
+            input: { round, issues: [...unresolved, ...issues.map(({ issue }) => issue)], reviewUnavailable } });
         return;
     }
 }
@@ -252,7 +255,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         appendMotionEvent(id, "provider_progress", { step: step.name, ...data });
     };
     const context = { brief: run.brief, document: motionSnapshot(run), budget, signal, onProgress };
-    const input = json<{ round?: number; sceneId?: string; issues?: string[] }>(step.input, {});
+    const input = json<{ round?: number; sceneId?: string; issues?: string[]; reviewUnavailable?: boolean }>(step.input, {});
     const round = input.round ?? 1;
     const reference = (): ReferenceAnalysis | null => {
         if (!run.reference_binding_id) return null;
@@ -333,10 +336,17 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const preview = previewSchema.parse(result(id, stepNames(round).preview));
         const draft = build(round).document;
         if (!draft) throw new Error("The draft needs repairs before review.");
-        const value = await runMotionCritic(context, draft,
-            { ...preview, images: imageBytes(preview.images) }, reference(), run.target_scene_id ?? undefined,
-            (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read));
-        return { value, summary: value.value.decision };
+        try {
+            const value = await runMotionCritic(context, draft,
+                { ...preview, images: imageBytes(preview.images) }, reference(), run.target_scene_id ?? undefined,
+                (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read));
+            return { value, summary: value.value.decision };
+        } catch (error) {
+            signal.throwIfAborted();
+            if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
+            return { value: { source: "review_unavailable" },
+                summary: "Automated visual review could not finish. Review the saved preview before applying the draft." };
+        }
     }
     if (step.name.startsWith("repair:")) {
         const previous = build(round);
@@ -345,7 +355,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const value = await runMotionRepair(context, scene, issues);
         return { value, summary: value.value.decision };
     }
-    if (step.name === "publish") return { value: { plan: build(round).plan, issues: input.issues ?? [] } };
+    if (step.name === "publish") return { value: { plan: build(round).plan, issues: input.issues ?? [],
+        reviewUnavailable: input.reviewUnavailable === true } };
     throw new Error("Unknown motion workflow stage.");
 };
 
@@ -355,7 +366,8 @@ function applyStepOutput(run: MotionRun, step: MotionStep, output: StepOutput) {
         saveMotionReferenceAnalysis(run.project_id, { bindingId: run.reference_binding_id, analysis });
     }
     if (step.name !== "publish") return;
-    const { plan, issues } = z.object({ plan: motionPlanSchema, issues: z.array(z.string()) }).parse(output.value);
+    const { plan, issues, reviewUnavailable } = z.object({ plan: motionPlanSchema, issues: z.array(z.string()),
+        reviewUnavailable: z.boolean().optional() }).parse(output.value);
     if (issues.length) {
         appendMotionMessage(run.id, "assistant", "The draft is saved with unresolved visual review notes.");
         changeMotionRunStatus(run, "failed", "Visual review left unresolved issues. The draft is available.");
@@ -364,6 +376,10 @@ function applyStepOutput(run: MotionRun, step: MotionStep, output: StepOutput) {
     const p = project(run.project_id);
     if (!p || p.user_id !== run.account_id || document(p).revision !== run.starting_revision) {
         changeMotionRunStatus(run, "failed", "The project changed during generation. The draft is available.");
+        return;
+    }
+    if (reviewUnavailable) {
+        changeMotionRunStatus(run, "ready");
         return;
     }
     if (motionNeedsApproval(run)) {
@@ -394,8 +410,13 @@ export function motionRunStoryboard(run: MotionRun) {
     return parsed.success ? parsed.data : null;
 }
 
-export function motionNeedsApproval(run: MotionRun) {
-    return motionSnapshot(run).tracks.motion_graphics.length > 0;
+export function motionReviewUnavailable(run: MotionRun, steps = motionSteps(run.id)) {
+    const publish = steps.find(({ name, status }) => name === "publish" && status === "done");
+    return !!publish && result<{ reviewUnavailable?: boolean }>(run.id, "publish").reviewUnavailable === true;
+}
+
+export function motionNeedsApproval(run: MotionRun, reviewUnavailable = motionReviewUnavailable(run)) {
+    return reviewUnavailable || motionSnapshot(run).tracks.motion_graphics.length > 0;
 }
 
 function motionPlanProvenance(run: MotionRun, plan: z.infer<typeof motionPlanSchema>) {

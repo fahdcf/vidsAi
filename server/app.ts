@@ -27,7 +27,7 @@ import { saveMotionAsset } from "./motion/assets";
 import { bindMotionReference, motionReference, saveMotionReferenceAnalysis } from "./motion/references";
 import { createMotionRun, motionSnapshot, ownedMotionRun } from "./motion/store";
 import { motionCursor, motionOrchestrator, motionRunView, streamMotionEvents } from "./motion/service";
-import { applySavedMotionDraft, motionNeedsApproval, motionRunDraft, queueMotionFeedback, retryMotionRun } from "./motion/orchestrator";
+import { applySavedMotionDraft, motionRunDraft, queueMotionFeedback, retryMotionRun } from "./motion/orchestrator";
 import { finalizeMotionSetup, pendingMotionSetup, setupMotionProject } from "./motion/setup";
 import { claimMotionBrowserTask, heartbeatMotionBrowserTask, releaseMotionBrowserTask, submitMotionBrowserTask } from "./motion/browser";
 const uuid = z.string().uuid();
@@ -819,9 +819,10 @@ app.get("/motion-runs/:run/events", (req, res) => {
 });
 app.get("/motion-runs/:run/draft", (req, res) => {
     const run = ownedMotionRun(uuid.parse(req.params.run), user(req));
+    const before = motionSnapshot(run);
     res.set("Cache-Control", "private, no-store").json({
         draft: motionRunDraft(run),
-        before: motionNeedsApproval(run) ? motionSnapshot(run) : null,
+        before: before.tracks.motion_graphics.length ? before : null,
     });
 });
 app.post("/motion-runs/:run/apply", (req, res) => {

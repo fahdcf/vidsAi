@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectCritic = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -65,6 +65,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
             case "visual-critic":
                 assert.equal(typeof message, "string");
                 assert.ok(artifact.scenes.some(({ samples }) => samples.length));
+                if (rejectCritic) { value = null; break; }
                 value = { decision: "Reviewed the browser frames.", scores: { readability: 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
                     issues: stages.filter((stage) => stage === "visual-critic").length === 1
                         ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame, priority: "polish", issue: "Impact settles early", repair: "Move impact later" }]

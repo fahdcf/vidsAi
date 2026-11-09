@@ -238,7 +238,8 @@ try {
     ];
     const rejectReferenceOutline = process.argv.includes("--reference-fallback");
     const rejectCopywriter = process.argv.includes("--copy-fallback");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter });
+    const rejectCritic = process.argv.includes("--review-fallback");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectCritic });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -255,7 +256,22 @@ try {
         restore();
     }
     assert.equal(motionRun(graphRun.id).status, "ready");
-    assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);
+    if (rejectCritic) {
+        assert.equal(document(project(graphProject)).tracks.motion_graphics.length, 0);
+        await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);
+        await graphPage.getByText("Ready for manual review", { exact: true }).waitFor();
+        await graphPage.getByRole("button", { name: "Open draft in editor", exact: true }).click();
+        await graphPage.waitForURL("**/projects/*/editor");
+        await graphPage.getByRole("button", { name: "Select motion scene 2", exact: true }).waitFor();
+        const step = motionSteps(graphRun.id).find(({ name }) => name === "critique:1");
+        const review = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));
+        assert.deepEqual(review, { source: "review_unavailable" });
+        assert.ok(!stages.includes("repair"));
+        console.log("Unavailable visual review preserved the draft and required approval before opening it in the editor.");
+    } else {
+        assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);
+        assert.ok(stages.includes("repair"));
+    }
     assert.equal(document(project(graphProject)).tracks.motion_graphics[1].id, graphic[1].id);
     const events = motionEvents(graphRun.id, 0);
     if (rejectCopywriter) {
@@ -274,7 +290,6 @@ try {
     assert.ok(events.some(({ data }) => data.outcome === "invalid_output"));
     assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.reasoningObserved));
     assert.ok(!JSON.stringify(events).includes(reasoning));
-    assert.ok(stages.includes("repair"));
     console.log("Browser evidence, ownership, idempotency, leases, restart, cancellation, steering, draft recovery and stale revision passed.");
     console.log("Complete mocked specialist handoffs with real reference/preview evidence, malformed JSON fallback, and targeted repair passed.");
 } finally {
