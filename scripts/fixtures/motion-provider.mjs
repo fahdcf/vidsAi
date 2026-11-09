@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -46,6 +46,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 if (stages.filter((stage) => stage === "director").length === 1) value = null;
                 break;
             case "copywriter":
+                if (rejectCopywriter) { value = null; break; }
                 value = { decision: "Kept the opening and closing copy.", scenes: graphic.map(({ type, params }) => {
                     const parts = type === "impact" ? params.headline.split("\n") : type === "kinetic_words" ? params.words
                         : type === "easing" ? [params.heading, ...params.labels] : type === "identity" ? [params.title, params.detail, params.tag] : [];

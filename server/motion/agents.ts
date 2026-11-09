@@ -7,6 +7,7 @@ import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/mo
 import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
+import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
 import { observeReferenceSheet } from "./reference-observer";
 
 const frame = z.number().int().nonnegative().max(7200);
@@ -186,31 +187,33 @@ export function runMotionDirector(context: MotionAgentContext, reference: Refere
 
 export async function runMotionCopywriter(context: MotionAgentContext, storyboard: MotionStoryboard, exactCopy: readonly string[] = []) {
     const schema = motionCopySchema.extend({ scenes: z.array(copyScene.omit({ id: true }).required({ parts: true })).length(storyboard.scenes.length) });
+    const literalParts = storyboard.scenes.map(({ type, copy }) => explicitCopyParts(type, copy, context.brief));
     const normalize = (scenes: z.infer<typeof schema>["scenes"]) => scenes.map(({ copy, parts }, index) => {
         const { id, type, copy: plannedCopy } = storyboard.scenes[index];
-        const text = type === "identity" && parts.length <= 3
+        const proposed = type === "identity" && parts.length <= 3
             ? [parts[0] || copy || plannedCopy, parts[1] ?? "", parts[2] ?? ""] : parts;
-        if (!validCopyParts(type, text)) throw new Error("The copy artifact has invalid text fields for its scene.");
-        return { id, copy, parts: text };
+        const text = literalParts[index] ?? (validCopyParts(type, proposed) ? proposed : storyboardCopyParts(type, plannedCopy, storyboard.title));
+        return { id, copy: plannedCopy || copy, parts: text };
     });
-    const result = await runMotionAgent(context, "copywriter", "WRITING", {
-        storyboard, language: context.document.metadata.language, exactCopy,
-    }, schema, {
-        validate: ({ scenes }) => {
-            const copy = normalize(scenes).flatMap(({ parts }) => parts).join(" ");
-            if (exactCopy.some((text) => !copy.includes(text))) throw new Error("Required copy was changed.");
-        },
-    });
-    return { ...result, value: { ...result.value, scenes: normalize(result.value.scenes) } };
-}
-
-function validCopyParts(type: MotionScene["type"], parts: string[]) {
-    switch (type) {
-        case "impact": return parts.length >= 1 && parts.length <= 3 && parts.every(Boolean) && parts.join("\n").length <= 180;
-        case "kinetic_words": return parts.length >= 1 && parts.every((part) => part.length >= 1 && part.length <= 50);
-        case "easing": return parts.length === 4 && parts.every((part, index) => part.length >= 1 && (index === 0 || part.length <= 32));
-        case "identity": return parts.length === 3 && parts[0].length > 0 && parts[1].length <= 100 && parts[2].length <= 80;
-        default: return parts.length === 0;
+    const checkCopy = (scenes: MotionCopy["scenes"]) => {
+        const copy = scenes.flatMap(({ parts }) => parts ?? []).join(" ");
+        if (exactCopy.some((text) => !copy.includes(text))) throw new Error("Required copy was changed.");
+        return scenes;
+    };
+    try {
+        const result = await runMotionAgent(context, "copywriter", "WRITING", {
+            storyboard, language: context.document.metadata.language, exactCopy,
+        }, schema, {
+            requestTimeoutMs: 15_000,
+            validate: ({ scenes }) => { checkCopy(normalize(scenes)); },
+        });
+        return { ...result, value: { ...result.value, scenes: normalize(result.value.scenes) } };
+    } catch (error) {
+        context.signal.throwIfAborted();
+        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;
+        const scenes = checkCopy(storyboard.scenes.map(({ id, type, copy }, index) => ({ id, copy,
+            parts: literalParts[index] ?? storyboardCopyParts(type, copy, storyboard.title) })));
+        return { source: "storyboard_fallback" as const, value: { scenes, decision: "The copywriter did not finish. Continuing with copy from the saved storyboard and brief." } };
     }
 }
 

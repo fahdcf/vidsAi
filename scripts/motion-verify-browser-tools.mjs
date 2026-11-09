@@ -237,7 +237,8 @@ try {
         { ...draft.tracks.motion_graphics[2], start_frame: 225, end_frame: 450 },
     ];
     const rejectReferenceOutline = process.argv.includes("--reference-fallback");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline });
+    const rejectCopywriter = process.argv.includes("--copy-fallback");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -257,6 +258,12 @@ try {
     assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);
     assert.equal(document(project(graphProject)).tracks.motion_graphics[1].id, graphic[1].id);
     const events = motionEvents(graphRun.id, 0);
+    if (rejectCopywriter) {
+        const step = motionSteps(graphRun.id).find(({ name }) => name === "copy");
+        const artifact = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));
+        assert.equal(artifact.source, "storyboard_fallback");
+        assert.equal(artifact.value.scenes.length, graphic.length);
+    }
     if (rejectReferenceOutline) {
         const step = motionSteps(graphRun.id).find(({ name }) => name === "reference_analysis");
         const artifact = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));

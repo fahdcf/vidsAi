@@ -5,6 +5,7 @@ import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, mot
 import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
 import { validateMotionResources } from "./motion/resource-check";
+import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
 
 test("the packaged prompts, skills, schemas and tools are available", () => {
     assert.deepEqual(validateMotionResources(), { skills: 9, prompts: 7, examples: 18 });
@@ -50,6 +51,23 @@ test("reference fallback uses measured cuts and saved observations without asser
     ]);
     assert.deepEqual(analysis.scenes[0].palette, []);
     assert.equal(analysis.unresolved.length, 1);
+});
+
+test("copy recovery keeps quoted headlines, word punctuation and multi-word labels", () => {
+    const brief = [
+        'Reveal “I MAKE” above “THINGS MOVE.” Highlight “MOVE.”',
+        'Reveal “TIMING”, “SPACING”, “EASING”, and “FEEL.” one at a time.',
+        'Label three dots “LINEAR”, “EASE OUT”, and “CUSTOM”.',
+        'Show “VIDSAI”, “MOTION DESIGN / SHOWREEL”, and “MAKE THINGS MOVE”.',
+    ].join("\n");
+    assert.deepEqual(explicitCopyParts("impact", "I MAKE THINGS MOVE.", brief), ["I MAKE", "THINGS MOVE."]);
+    assert.deepEqual(explicitCopyParts("kinetic_words", "TIMING SPACING EASING FEEL", brief), ["TIMING", "SPACING", "EASING", "FEEL."]);
+    assert.deepEqual(explicitCopyParts("easing", "LINEAR EASE OUT CUSTOM", brief), ["EASING", "LINEAR", "EASE OUT", "CUSTOM"]);
+    assert.deepEqual(explicitCopyParts("identity", "VIDSAI MOTION DESIGN / SHOWREEL MAKE THINGS MOVE", brief),
+        ["VIDSAI", "MOTION DESIGN / SHOWREEL", "MAKE THINGS MOVE"]);
+    assert.deepEqual(storyboardCopyParts("identity", "One title", "Project"), ["One title", "", ""]);
+    assert.deepEqual(storyboardCopyParts("grid", "Internal scene note", "Project"), []);
+    assert.ok(validCopyParts("kinetic_words", storyboardCopyParts("kinetic_words", "word ".repeat(35).trim(), "Project")));
 });
 
 test("the structured route keeps thinking enabled and classifies an incomplete response without retaining its contents", async (t) => {
