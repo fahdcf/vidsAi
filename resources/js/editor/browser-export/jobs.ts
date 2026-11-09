@@ -159,6 +159,7 @@ export async function runBrowserExport(
             }, {
                 id: job.id,
                 canvas,
+                motionAssets: prepared.motionAssets,
                 onRendering: async () => {
                     await setState("rendering");
                     resetWatchdog();

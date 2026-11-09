@@ -12,6 +12,8 @@ import {
 import {AnimatedMediaClip, MediaSettings} from './AnimatedMediaClip';
 import {CompositionMedia, compositionMediaUrl} from './CompositionMedia';
 import {getClipSequenceTiming} from '../contracts/clip-sequence';
+import {MotionLayer} from './MotionLayer';
+import type {MotionAssetFiles} from '../motion/assets';
 import {
   EditState,
   TimelineAudioItem,
@@ -678,7 +680,7 @@ const AudioTrackRenderer: React.FC<{
   );
 };
 
-export const VideoMerger: React.FC<{editState: EditState}> = ({editState}) => {
+export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionAssetFiles; motionScale?: number}> = ({editState, motionAssets, motionScale = 1}) => {
   const {isClientSideRendering} = useRemotionEnvironment();
 
   const {width: canvasWidth, height: canvasHeight, fps: compositionFps, durationInFrames: compositionDuration} = useVideoConfig();
@@ -695,7 +697,7 @@ export const VideoMerger: React.FC<{editState: EditState}> = ({editState}) => {
   const subtitles = editState.tracks.subtitles || [];
   const overlays = editState.tracks.overlays || [];
   const audioTracks = editState.tracks.audio || [];
-  const motionGraphics = editState.tracks.motion_graphics || [];
+  const motionGraphics = [...(editState.tracks.motion_graphics || [])].sort((a, b) => a.layer - b.layer || a.start_frame - b.start_frame);
 
   const renderedClips = videoTrack.map((clip, index) => {
     const clipDurationFrames = Math.max(1, clip.end_frame - clip.start_frame);
@@ -844,17 +846,18 @@ export const VideoMerger: React.FC<{editState: EditState}> = ({editState}) => {
 
         {audioTracks.length > 0 ? <AudioTrackRenderer audioTracks={audioTracks} /> : null}
 
+        {motionGraphics.map((scene) => (
+          <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.end_frame - scene.start_frame} layout='none'>
+            <MotionLayer scene={scene} projectId={editState.project_id} width={finalVideoWidth} height={finalVideoHeight}
+              left={leftOffset} top={topOffset} fps={fps} scale={motionScale} preloaded={motionAssets} />
+          </Sequence>
+        ))}
+
         {!isClientSideRendering ? captions : null}
 
         {overlays.length > 0 ? <OverlayRenderer overlays={overlays} /> : null}
         {isClientSideRendering ? captions : null}
 
-        {/* Reserved slot for future motion graphic components. */}
-        {motionGraphics.map((item) => (
-          <Sequence key={item.id} from={item.start_frame} durationInFrames={Math.max(1, item.end_frame - item.start_frame)} layout='none'>
-            {null}
-          </Sequence>
-        ))}
       </AbsoluteFill>
     </Sequence>
   );

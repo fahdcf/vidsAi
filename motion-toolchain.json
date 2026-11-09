@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "nodeMinimum": 24,
+  "browserChannels": ["chrome", "msedge"],
+  "lockfile": "package-lock.json",
+  "fonts": [
+    "motion-fonts/ArchivoBlack-Regular.ttf",
+    "motion-fonts/SpaceMono-Regular.ttf"
+  ],
+  "ffmpeg": {
+    "platform": "win32",
+    "architecture": "x64",
+    "version": "9.0.2",
+    "url": "https://files.pythonhosted.org/packages/82/0c/a1d49f3dd2688bd750b4986f8e271ad11f8e729a896070ea25f587b44da8/imageio_ffmpeg-0.8.1-py3-none-win_amd64.whl",
+    "archiveSha256": "f27ca4cb85e2d4946deedbce1a81245dfd942a2bcf94b53676fb3956aa95bf1b",
+    "entry": "imageio_ffmpeg/binaries/ffmpeg-win-x86_64-v9.0.2.exe",
+    "sha256": "3256173f3f8bffd7df12227c68adf68025edb1832273a9530688a7bb1ed8edec",
+    "runtimePath": "motion-tools/ffmpeg/ffmpeg.exe"
+  }
+}

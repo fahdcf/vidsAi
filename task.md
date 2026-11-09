@@ -1,5 +1,7 @@
 # VidsAI browser rendering migration tasks
 
+Current development checklist (9 November 2026): [Motion graphics tasks](motion-graphics-tasks.md) covers prompt/reference creation, the multi-agent thinking/chat workflow, configured `.env` models, and browser-rendered motion videos. This file preserves the browser migration's completed history.
+
 Updated 2026-11-07. Execute tasks in order. This file is the execution checklist for `docs/BROWSER_MVP_ROADMAP.md`. The final task delivers the existing VidsAI product with browser-side video composition, audio mixing, encoding, and MP4 creation.
 
 ## Completion contract

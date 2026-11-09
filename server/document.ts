@@ -4,6 +4,7 @@ import { legacyPayloadToEditState } from "./legacy-document";
 import { json, db, scenes, project, insert, update, now } from "./database";
 import { origin } from "./env";
 import { fail, hash } from "./security";
+import { validateMotionAssetOwnership } from "./motion/assets";
 export function normalizeExisting(value: unknown): Document {
     return normalizeDocument(json(value, {}));
 }
@@ -77,6 +78,7 @@ export function document(p: any, fps?: number): Document {
             if (a.type === "voiceover") a.end_frame = d.total_frames;
     }
     d.project_id = String(p.id);
+    d.metadata = { ...d.metadata, workflow: p.workflow ?? "video_from_scratch" };
     for (const track of [d.tracks.video, d.tracks.audio, d.tracks.overlays])
         for (const item of track) {
             const key =
@@ -130,6 +132,7 @@ export function commit(p: any, input: any) {
             commandSchema.parse({ ...input, projectId: String(p.id) });
             next = applyOperations(current, input.operations);
         }
+        validateMotionAssetOwnership(p.id, next);
         for (const d of [current, next])
             db.prepare(
                 "INSERT OR IGNORE INTO edit_revisions(project_id,revision,document,created_at,updated_at) VALUES(?,?,?,?,?)",

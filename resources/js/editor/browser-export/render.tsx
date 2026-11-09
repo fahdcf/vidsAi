@@ -9,6 +9,7 @@ import { prepareBrowserAudio } from "./audio";
 import { BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
 import { checkBrowserOutput, invalidateBrowserOutputProbe, mp4Encoding } from "./capabilities";
 import { openBrowserOutput } from "./output";
+import type { MotionAssetFiles } from "../../../../shared/motion/assets";
 
 type VideoProps = ComponentProps<ContextType<typeof CompositionMedia>["Video"]>;
 
@@ -19,7 +20,7 @@ function BrowserVideo({ style, ...props }: VideoProps) {
     return <Video {...props} style={layout} objectFit={fit} disallowFallbackToOffthreadVideo />;
 }
 
-function BrowserComposition(props: { editState: Document }) {
+function BrowserComposition(props: { editState: Document; motionAssets?: MotionAssetFiles; motionScale?: number }) {
     return (
         <CompositionMedia.Provider value={{ Video: BrowserVideo, Audio }}>
             <VideoMerger {...props} />
@@ -34,6 +35,7 @@ export async function renderBrowserMp4(
     lifecycle?: {
         id: string;
         canvas?: { width: number; height: number; scale: number };
+        motionAssets?: MotionAssetFiles;
         onRendering: () => Promise<void>;
         onFinalizing: () => Promise<void>;
     },
@@ -71,13 +73,16 @@ export async function renderBrowserMp4(
     try {
         await lifecycle?.onRendering();
         signal.throwIfAborted();
+        const ExportComposition = (props: { editState: Document }) => (
+            <BrowserComposition {...props} motionAssets={lifecycle?.motionAssets} motionScale={canvas.scale} />
+        );
         await renderMediaOnWeb({
             ...options,
             scale: canvas.scale,
             outputWritable: output.writable,
             composition: {
                 id: "VidsAIBrowserExport",
-                component: BrowserComposition,
+                component: ExportComposition,
                 width,
                 height,
                 fps,

@@ -23,6 +23,7 @@ import { requestReset, resetPassword } from "./recovery";
 import { wanModels, wanPayload } from "./wan";
 import { mediaDuration } from "./media";
 import { reserveProviderRequest } from "./provider-budget";
+import { saveMotionAsset } from "./motion/assets";
 const uuid = z.string().uuid();
 const projectInput = z.object({
     name: z.string().trim().min(1).max(255),
@@ -708,7 +709,7 @@ app.post(
 app.get("/projects/:id/assets/:asset", (req, res) => {
     own(req, req.params.id);
     const asset = db
-        .prepare("SELECT * FROM project_assets WHERE id=? AND project_id=?")
+        .prepare("SELECT a.*, m.sha256 FROM project_assets a LEFT JOIN motion_asset_metadata m ON m.asset_id=a.id WHERE a.id=? AND a.project_id=?")
         .get(req.params.asset, req.params.id) as any;
     if (!asset) fail(404, "Asset not found");
     let file;
@@ -717,10 +718,26 @@ app.get("/projects/:id/assets/:asset", (req, res) => {
     } catch {
         file = mediaFile(asset.path, "private");
     }
+    if (asset.sha256) res.set("X-VidsAI-Asset-SHA256", asset.sha256);
     res.set("Cache-Control", "private, max-age=3600")
         .type(asset.mime)
         .sendFile(file);
 });
+const uploadMotion = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 1, fields: 3, fieldSize: 4096 },
+});
+app.post(
+    "/projects/:id/motion-assets",
+    (req, _res, next) => { own(req, req.params.id); next(); },
+    uploadMotion.single("file"),
+    async (req, res) => {
+        const p = own(req, req.params.id);
+        if (!req.file) fail(422, "File required");
+        const provenance = json(req.body.provenance, null);
+        res.status(201).json(await saveMotionAsset(p.id, req.file, req.body.kind, provenance));
+    },
+);
 app.get("/projects/:id/voiceover", (req, res) => {
     const p = own(req, req.params.id);
     res.set("Cache-Control", "private, max-age=3600").sendFile(

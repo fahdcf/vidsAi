@@ -1,3 +1,5 @@
+import type { MotionScene } from "./motion/schema";
+
 // remotion/types/timeline.ts
 // Master data contract for VidsAI video edit state.
 // This single object drives: Remotion render, browser Player preview,
@@ -36,11 +38,10 @@ export type OverlayPosition =
   | 'bottom-right'
   | 'center';
 
-export type MotionGraphicPosition = OverlayPosition | 'full';
-
 export type AudioType = 'voiceover' | 'music' | 'sfx';
 
 export type Platform = 'tiktok' | 'youtube' | 'reels' | 'ads' | null;
+export type ProjectWorkflow = 'video_from_scratch' | 'motion_graphics';
 
 // --- Track Item Interfaces ---------------------------------------------------
 
@@ -119,28 +120,18 @@ export interface TimelineAudioItem {
   fade_out_frames: number;
 }
 
-export interface TimelineMotionGraphicItem {
-  id: string;
-  /** Name of the registered Remotion component to render */
-  component_name: string;
-  /** Props passed directly to the component */
-  props: Record<string, unknown>;
-  start_frame: number;
-  end_frame: number;
-  position: MotionGraphicPosition;
-}
-
 // --- Master Edit State -------------------------------------------------------
 
 export interface EditStateTracks {
   video: TimelineClipItem[];
   subtitles: TimelineSubtitleItem[];
   overlays: TimelineOverlayItem[];
-  motion_graphics: TimelineMotionGraphicItem[];
+  motion_graphics: MotionScene[];
   audio: TimelineAudioItem[];
 }
 
 export interface EditStateMetadata {
+  workflow?: ProjectWorkflow;
   platform: Platform;
   language: string;
   created_at: string;

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { applyMotionEdit, motionEditParameters } from "../motion/edit";
 import {
   normalizeDocument,
   styles,
@@ -87,6 +88,7 @@ const schemas = {
   }),
 };
 export const toolNames = Object.keys(schemas);
+export const motionToolNames = Object.keys(motionEditParameters);
 export { schemas as editingToolParameters };
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
@@ -98,7 +100,11 @@ function assert(condition: unknown, message: string): asserts condition {
 export function applyOperations(input: unknown, ops: Operation[]): Document {
   const d = normalizeDocument(input);
   for (const op of ops) {
-    assert(op.tool in schemas, `Unknown tool: ${op.tool}`);
+    if (motionToolNames.includes(op.tool)) {
+      applyMotionEdit(d, op);
+      continue;
+    }
+    assert(Object.hasOwn(schemas, op.tool), `Unknown tool: ${op.tool}`);
     // Each branch validates its own argument type before changing the document.
     switch (op.tool) {
       case "set_subtitle_style": {
@@ -282,10 +288,26 @@ export function applyOperations(input: unknown, ops: Operation[]): Document {
             ...c,
             end_frame: Math.min(c.end_frame, p.total_frames),
           }));
-        assert(d.tracks.video.length, "A video needs at least one scene");
-        const last = d.tracks.video.at(-1)!;
-        last.end_frame = p.total_frames;
-        last.transition_out = null;
+        d.tracks.motion_graphics = d.tracks.motion_graphics
+          .filter((scene) => scene.start_frame < p.total_frames)
+          .map((scene) => {
+            const end_frame = Math.min(scene.end_frame, p.total_frames);
+            const trimmed = { ...scene, end_frame };
+            if (trimmed.transitionIn && trimmed.transitionIn.frames >= end_frame - scene.start_frame) {
+              delete trimmed.transitionIn;
+            }
+            return trimmed;
+          });
+        assert(d.tracks.video.length || d.tracks.motion_graphics.length, "A video needs at least one scene");
+        const last = d.tracks.video.at(-1);
+        if (last) {
+          last.end_frame = p.total_frames;
+          last.transition_out = null;
+        } else {
+          const finalMotion = d.tracks.motion_graphics.reduce((latest, scene) =>
+            scene.end_frame > latest.end_frame ? scene : latest);
+          finalMotion.end_frame = p.total_frames;
+        }
         d.tracks.subtitles = d.tracks.subtitles
           .filter((s) => s.start_frame < p.total_frames)
           .map((s) => {

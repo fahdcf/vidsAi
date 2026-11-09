@@ -1,4 +1,5 @@
 import { getClipSequenceTiming, type Document } from "@vidsai/contracts";
+import { motionSceneCost } from "../../../../shared/motion/registry";
 
 export const browserRenderProfile = {
     version: 1,
@@ -25,12 +26,22 @@ export const browserRenderProfile = {
     maxAudioRate: 48000,
 } as const;
 
+export const motionRenderProfile = {
+    maxSeconds: 15,
+    maxScenes: 8,
+    maxActiveScenes: 2,
+    maxGeometry: 1000,
+    maxParticles: 1000,
+    maxVectorAssets: 2,
+} as const;
+
 export type BrowserRenderIssue = {
     code:
         | "empty_timeline"
         | "duration"
         | "frame_rate"
         | "canvas"
+        | "motion_complexity"
         | "clip_count"
         | "clip_overlap"
         | "video_concurrency"
@@ -94,10 +105,28 @@ export function validateBrowserRenderProfile(
         if (exceeds) issues.push({ code, message });
     }
 
-    limit(!tracks.video.length, "empty_timeline", "Add a video clip or image before exporting.");
+    const motion = tracks.motion_graphics;
+    limit(!tracks.video.length && !motion.length, "empty_timeline", "Add a video clip, image, or motion scene before exporting.");
     limit(frames > p.maxFrames || frames > fps * p.maxSeconds, "duration",
         `Shorten the timeline to ${p.maxSeconds} seconds or less.`);
     limit(fps > p.maxFps, "frame_rate", `Use a frame rate of ${p.maxFps} FPS or less.`);
+    if (motion.length) {
+        const m = motionRenderProfile;
+        limit(frames > fps * m.maxSeconds, "duration", `Keep motion exports at ${m.maxSeconds} seconds or less.`);
+        limit(motion.length > m.maxScenes || peakActive(motion) > m.maxActiveScenes, "motion_complexity",
+            "Use up to eight motion scenes and no more than two overlapping scenes.");
+        const costs = motion.map((scene) => ({ scene, cost: motionSceneCost(scene) }));
+        const overloaded = motion.some(({ start_frame: frame }) => {
+            const totals = costs.filter(({ scene }) => scene.start_frame <= frame && frame < scene.end_frame)
+                .reduce((sum, { cost }) => ({
+                    geometry: sum.geometry + cost.geometry,
+                    particles: sum.particles + cost.particles,
+                    vectors: sum.vectors + cost.vectors,
+                }), { geometry: 0, particles: 0, vectors: 0 });
+            return totals.geometry > m.maxGeometry || totals.particles > m.maxParticles || totals.vectors > m.maxVectorAssets;
+        });
+        limit(overloaded, "motion_complexity", "Reduce overlapping shapes or particles to fit the browser motion limit.");
+    }
     const maxWidth = width > height ? p.longEdge : p.shortEdge;
     const maxHeight = height > width ? p.longEdge : p.shortEdge;
     limit(width > maxWidth || height > maxHeight, "canvas",

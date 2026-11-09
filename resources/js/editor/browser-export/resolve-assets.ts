@@ -2,11 +2,12 @@ import { documentSchema, type Document } from "@vidsai/contracts";
 import { inspectBrowserMedia, type BrowserMediaKind } from "./inspect-media";
 import { browserRenderProfile, BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
 import { exportDirectoryName, removeExportDirectory } from "./storage";
+import { motionAssetByteLimit, parseMotionVectors, type MotionVectors } from "../../../../shared/motion/assets";
 
 type AssetRequest = {
     projectId: string;
     source: string;
-    kind: BrowserMediaKind;
+    kind: BrowserMediaKind | "font" | "vectors";
 };
 
 export type AssetResolverOptions = {
@@ -51,6 +52,8 @@ export async function resolveBrowserAssets(
     const downloaded = new Map<string, File>();
     const objectUrls = new Map<Blob, string>();
     const inspected = new Map<Blob, Set<BrowserMediaKind>>();
+    const counted = new Set<Blob>();
+    const motionAssets: Record<string, { kind: "font" | "image"; file: Blob } | { kind: "vectors"; data: MotionVectors }> = {};
     let totalBytes = 0;
     let root: FileSystemDirectoryHandle | undefined;
     let directory: FileSystemDirectoryHandle | undefined;
@@ -63,6 +66,8 @@ export async function resolveBrowserAssets(
         local.clear();
         downloaded.clear();
         inspected.clear();
+        counted.clear();
+        for (const id of Object.keys(motionAssets)) delete motionAssets[id];
         if (root && directory) {
             await removeExportDirectory(root, "media", id);
             directory = undefined;
@@ -123,6 +128,12 @@ export async function resolveBrowserAssets(
                 },
             })).pipeTo(writer, { signal: downloadSignal });
             const file = await entry.getFile();
+            const digest = response.headers.get("X-VidsAI-Asset-SHA256");
+            if (digest) {
+                const raw = await crypto.subtle.digest("SHA-256", await file.arrayBuffer());
+                const actual = Array.from(new Uint8Array(raw), (byte) => byte.toString(16).padStart(2, "0")).join("");
+                if (actual !== digest) throw new Error("The project asset checksum did not match.");
+            }
             downloaded.set(url.href, file);
             return file;
         } catch (error) {
@@ -138,9 +149,10 @@ export async function resolveBrowserAssets(
             if (!local.has(source)) local.set(source, await options.readLocal?.(request, signal) ?? null);
             const file = local.get(source) ?? await download(request, remoteUrl(document.project_id, source));
             let url = objectUrls.get(file);
-            if (!url) {
+            if (!counted.has(file)) {
                 checkBytes(file.size);
                 totalBytes += file.size;
+                counted.add(file);
             }
             const kinds = inspected.get(file) ?? new Set<BrowserMediaKind>();
             if (!kinds.has(kind)) {
@@ -169,8 +181,29 @@ export async function resolveBrowserAssets(
         for (const [index, overlay] of document.tracks.overlays.entries()) {
             overlay.src = await resolve(overlay.src, "image", `Overlay ${index + 1}`);
         }
+        for (const scene of document.tracks.motion_graphics) {
+            for (const ref of scene.assets) {
+                if (Object.hasOwn(motionAssets, ref.id)) continue;
+                const request = { projectId: document.project_id, source: `asset:${ref.id}`, kind: ref.kind };
+                const file = await download(request, remoteUrl(document.project_id, request.source));
+                if (!file.size || file.size > motionAssetByteLimit[ref.kind]) {
+                    throw new Error(`Motion asset for ${scene.id} is too large or empty.`);
+                }
+                if (!counted.has(file)) {
+                    checkBytes(file.size);
+                    totalBytes += file.size;
+                    counted.add(file);
+                }
+                if (ref.kind === "vectors") {
+                    motionAssets[ref.id] = { kind: ref.kind, data: parseMotionVectors(await file.text()) };
+                } else {
+                    if (ref.kind === "image") await inspectBrowserMedia(file, "image", signal);
+                    motionAssets[ref.id] = { kind: ref.kind, file };
+                }
+            }
+        }
         signal.throwIfAborted();
-        return { document, release };
+        return { document, motionAssets, release };
     } catch (error) {
         await release().catch(() => {});
         throw error;

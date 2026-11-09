@@ -13,6 +13,13 @@
     "local:stop": "node scripts/node-local.cjs stop",
     "local:status": "node scripts/node-local.cjs status",
     "test:browser": "node scripts/node-browser-check.cjs",
+    "motion:setup": "node scripts/motion-setup.mjs",
+    "motion:doctor": "node scripts/motion-doctor.mjs",
+    "motion:tools": "node scripts/motion-tools.mjs",
+    "motion:inventory": "node --import tsx scripts/motion-inventory.ts",
+    "motion:check-models": "node --import tsx scripts/motion-check-models.ts",
+    "motion:verify-render": "node scripts/motion-verify-render.mjs",
+    "motion:test": "node scripts/motion-test.mjs",
     "import:media": "node scripts/import-media.cjs",
     "test:fresh": "node scripts/test-server.cjs --fresh"
   },
