@@ -47,7 +47,7 @@ const builders: ToolRole[] = ["motionEngineer", "integrator", "editor"];
 function tool<I, O>(roles: ToolRole[], input: z.ZodType<I>, output: z.ZodType<O>, cost: number,
     run: (input: I, project: ReturnType<typeof ownedProject>) => unknown) {
     return {
-        roles, cost, input,
+        roles, cost,
         execute(value: unknown, project: ReturnType<typeof ownedProject>) {
             return output.parse(run(input.parse(value), project));
         },
@@ -101,7 +101,7 @@ const registry = {
 
 export function motionToolManifest(role: ToolRole) {
     return Object.entries(registry).filter(([, entry]) => entry.roles.includes(role)).map(([name, entry]) => ({
-        name, cost: entry.cost, input: z.toJSONSchema(entry.input, { io: "input", unrepresentable: "any" }),
+        name, cost: entry.cost,
     }));
 }
 

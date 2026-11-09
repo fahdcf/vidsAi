@@ -1,1 +1,1 @@
-Set palette, type hierarchy, safe insets and alignment for the storyboard. Compose for the requested aspect ratio. Give each scene a focal point and preserve visual continuity. Use only components and assets supplied in the input.
+Set palette, typography, safe insets and alignment for the storyboard. Return one style entry per scene in the storyboard's existing order. Compose for the requested aspect ratio, give each scene a focal point, and preserve visual continuity.

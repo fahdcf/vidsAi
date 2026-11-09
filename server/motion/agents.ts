@@ -2,9 +2,11 @@ import { z } from "zod";
 import type { Document } from "../../shared/contracts";
 import { compileMotionPlan, motionSceneExceedsBudget } from "../../shared/motion/compile";
 import { motionComponentTypes, describeMotionComponent } from "../../shared/motion/registry";
-import { motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
-import { referenceAnalysisSchema, referenceSceneEstimateSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
+import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
+import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
+import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
 import { runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
+import { observeReferenceSheet } from "./reference-observer";
 
 const frame = z.number().int().nonnegative().max(7200);
 const storyboardScene = z.object({
@@ -38,6 +40,7 @@ export type MotionStoryboard = z.infer<typeof motionStoryboardSchema>;
 const copyScene = z.object({
     id: motionSceneId,
     copy: z.string().trim().max(180),
+    parts: z.array(z.string().trim().max(180)).max(12).optional(),
 }).strict();
 export const motionCopySchema = z.object({
     scenes: z.array(copyScene).min(1).max(8),
@@ -62,6 +65,18 @@ export const motionBuildSchema = z.object({
 }).strict();
 export type MotionBuild = z.infer<typeof motionBuildSchema>;
 
+function motionBuildForScene(type: MotionScene["type"]) {
+    const component = motionSceneSchema.options.find(({ shape }) => shape.type.value === type)!;
+    return motionBuildSchema.extend({ scene: component });
+}
+
+function motionEngineerSchema(type: MotionScene["type"], duration: number) {
+    const build = motionBuildForScene(type);
+    const { params, finish, seed, motionRate, transitionIn } = build.shape.scene.shape;
+    const transition = duration > 1 ? transitionIn.unwrap().extend({ frames: frame.min(1).max(Math.min(120, duration - 1)) }) : z.never();
+    return build.extend({ scene: z.object({ params, finish, seed, motionRate, transitionIn: transition.optional() }).strict() });
+}
+
 function requireSceneIds(storyboard: MotionStoryboard, scenes: readonly { id: string }[]) {
     const ids = new Set(scenes.map(({ id }) => id));
     if (ids.size !== storyboard.scenes.length || ids.size !== scenes.length ||
@@ -70,20 +85,56 @@ function requireSceneIds(storyboard: MotionStoryboard, scenes: readonly { id: st
     }
 }
 
+const referenceOutlineSchema = z.object({
+    scenes: z.array(z.object({
+        title: z.string().trim().min(1).max(80),
+        type: z.enum(motionComponentTypes).nullable(),
+        end: z.number().min(0).max(30.001).nullable(),
+        sample: z.number().int().nonnegative().max(31),
+        palette: z.array(motionColor).min(1).max(6),
+        motion: z.string().trim().min(1).max(120).nullable(),
+        approximation: z.string().trim().min(1).max(120).nullable(),
+    }).strict()).min(1).max(8),
+    unresolved: z.array(z.string().trim().min(1).max(120)).max(4),
+}).strict();
+
+function expandReferenceOutline(evidence: Pick<ReferenceAnalysis, "kind" | "interval" | "measured" | "observations">,
+    outline: z.infer<typeof referenceOutlineSchema>) {
+    const interval = evidence.interval;
+    let start = interval?.start ?? 0;
+    const scenes = outline.scenes.map((item, index): ReferenceAnalysis["scenes"][number] => {
+        const observation = evidence.observations[item.sample];
+        if (!observation) throw new Error("The outline selected an unavailable reference observation.");
+        const last = index === outline.scenes.length - 1;
+        const end = last ? interval?.end : item.end;
+        const timing = interval ? { start, end: end ?? start } : null;
+        if (timing && interval && timing.end > interval.end) throw new Error("A reference scene extends beyond the selected interval.");
+        if (timing) start = timing.end;
+        const { time, confidence, copy } = observation;
+        const motionLandmarks = item.motion && timing && time >= timing.start && time <= timing.end
+            ? [{ time, description: item.motion, confidence }] : [];
+        return { title: item.title, supportedType: item.type, timing, timingSource: timing ? "estimated" : "still_image",
+            evidence: [{ time, confidence }], copy, confidence, palette: item.palette, shapes: [],
+            motionLandmarks, easing: null, transition: null, approximation: item.approximation };
+    });
+    return referenceAnalysisSchema.parse({ ...evidence, scenes, unresolved: outline.unresolved });
+}
+
 export async function runReferenceAnalyst(
     context: MotionAgentContext,
     evidence: Pick<ReferenceAnalysis, "kind" | "interval" | "measured" | "observations">,
-    images: readonly MotionVisionImage[],
 ) {
-    if (!images.length || images.length > 3) throw new Error("Reference analysis requires bounded visual evidence.");
-    const result = await runMotionAgent(context, "referenceAnalyst", "MEDIA_UNDERSTANDING", {
-        ...evidence,
+    if (!evidence.observations.length) throw new Error("Reference analysis requires observations from the visual samples.");
+    const result = await runMotionAgent({ ...context, brief: "Analyze the selected reference and group the visible evidence into scenes." },
+        "referenceAnalyst", "AGENT_COMPLEX", {
+        kind: evidence.kind, interval: evidence.interval,
+        candidateCuts: evidence.measured.candidateCuts.map(({ time }) => Number(time.toFixed(3))),
+        observations: evidence.observations.map(({ time, copy, layout }, sample) => ({ sample, time: Number(time.toFixed(3)), copy, layout })),
         supportedTypes: motionComponentTypes,
-    }, referenceSceneEstimateSchema, {
-        images,
-        validate: (estimate) => { referenceAnalysisSchema.parse({ ...evidence, ...estimate }); },
+    }, referenceOutlineSchema, {
+        validate: (outline) => { expandReferenceOutline(evidence, outline); },
     });
-    return { ...result, value: referenceAnalysisSchema.parse({ ...evidence, ...result.value }) };
+    return { ...result, value: expandReferenceOutline(evidence, result.value) };
 }
 
 export function runMotionDirector(context: MotionAgentContext, reference: ReferenceAnalysis | null) {
@@ -101,22 +152,51 @@ export function runMotionDirector(context: MotionAgentContext, reference: Refere
     });
 }
 
-export function runMotionCopywriter(context: MotionAgentContext, storyboard: MotionStoryboard, exactCopy: readonly string[] = []) {
-    return runMotionAgent(context, "copywriter", "WRITING", {
+export async function runMotionCopywriter(context: MotionAgentContext, storyboard: MotionStoryboard, exactCopy: readonly string[] = []) {
+    const schema = motionCopySchema.extend({ scenes: z.array(copyScene.omit({ id: true }).required({ parts: true })).length(storyboard.scenes.length) });
+    const normalize = (scenes: z.infer<typeof schema>["scenes"]) => scenes.map(({ copy, parts }, index) => {
+        const { id, type, copy: plannedCopy } = storyboard.scenes[index];
+        const text = type === "identity" && parts.length <= 3
+            ? [parts[0] || copy || plannedCopy, parts[1] ?? "", parts[2] ?? ""] : parts;
+        if (!validCopyParts(type, text)) throw new Error("The copy artifact has invalid text fields for its scene.");
+        return { id, copy, parts: text };
+    });
+    const result = await runMotionAgent(context, "copywriter", "WRITING", {
         storyboard, language: context.document.metadata.language, exactCopy,
-    }, motionCopySchema, {
+    }, schema, {
         validate: ({ scenes }) => {
-            requireSceneIds(storyboard, scenes);
-            const copy = storyboard.scenes.map(({ id }) => scenes.find((scene) => scene.id === id)!.copy).join(" ");
+            const copy = normalize(scenes).flatMap(({ parts }) => parts).join(" ");
             if (exactCopy.some((text) => !copy.includes(text))) throw new Error("Required copy was changed.");
         },
     });
+    return { ...result, value: { ...result.value, scenes: normalize(result.value.scenes) } };
 }
 
-export function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard) {
-    return runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX", { storyboard }, motionDesignSchema, {
-        validate: ({ scenes }) => requireSceneIds(storyboard, scenes),
-    });
+function validCopyParts(type: MotionScene["type"], parts: string[]) {
+    switch (type) {
+        case "impact": return parts.length >= 1 && parts.length <= 3 && parts.every(Boolean) && parts.join("\n").length <= 180;
+        case "kinetic_words": return parts.length >= 1 && parts.every((part) => part.length >= 1 && part.length <= 50);
+        case "easing": return parts.length === 4 && parts.every((part, index) => part.length >= 1 && (index === 0 || part.length <= 32));
+        case "identity": return parts.length === 3 && parts[0].length > 0 && parts[1].length <= 100 && parts[2].length <= 80;
+        default: return parts.length === 0;
+    }
+}
+
+function applyCopyParts(scene: MotionScene, parts: string[]) {
+    switch (scene.type) {
+        case "impact": return { ...scene, params: { ...scene.params, headline: parts.join("\n") } };
+        case "kinetic_words": return { ...scene, params: { ...scene.params, words: parts } };
+        case "easing": return { ...scene, params: { ...scene.params, heading: parts[0], labels: parts.slice(1) } };
+        case "identity": return { ...scene, params: { ...scene.params, title: parts[0], detail: parts[1], tag: parts[2] } };
+        default: return scene;
+    }
+}
+
+export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard) {
+    const schema = motionDesignSchema.extend({ scenes: z.array(designScene.omit({ id: true })).length(storyboard.scenes.length) });
+    const result = await runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX", { storyboard }, schema);
+    const scenes = result.value.scenes.map((scene, index) => ({ ...scene, id: storyboard.scenes[index].id }));
+    return { ...result, value: { ...result.value, scenes } };
 }
 
 function sceneCopy(scene: MotionScene): string | null {
@@ -127,6 +207,14 @@ function sceneCopy(scene: MotionScene): string | null {
         case "easing": return scene.params.heading;
         default: return null;
     }
+}
+
+function sameSceneCopy(a: MotionScene, b: MotionScene) {
+    if (sceneCopy(a) !== sceneCopy(b)) return false;
+    if (a.type === "kinetic_words" && b.type === "kinetic_words") return JSON.stringify(a.params.words) === JSON.stringify(b.params.words);
+    if (a.type === "easing" && b.type === "easing") return JSON.stringify(a.params.labels) === JSON.stringify(b.params.labels);
+    if (a.type === "identity" && b.type === "identity") return a.params.detail === b.params.detail && a.params.tag === b.params.tag;
+    return true;
 }
 
 function requireSceneSpan(scene: MotionScene, expected: MotionStoryboard["scenes"][number]) {
@@ -142,27 +230,28 @@ export async function runMotionEngineer(
     design: MotionDesign,
     assets: readonly MotionScene["assets"][number][] = [],
 ) {
-    const wording = copy.scenes.find(({ id }) => id === target.id)?.copy;
+    const approved = copy.scenes.find(({ id }) => id === target.id);
     const styling = design.scenes.find(({ id }) => id === target.id);
-    if (wording === undefined || !styling) throw new Error("The scene is missing its copy or design artifact.");
+    if (!approved || !styling) throw new Error("The scene is missing its copy or design artifact.");
+    const { copy: wording, parts } = approved;
+    const buildScene = (proposal: z.infer<ReturnType<typeof motionEngineerSchema>>["scene"]) => {
+        const { id, type, start_frame, end_frame } = target;
+        const scene = motionSceneSchema.parse({ ...proposal, ...styling, id, type, start_frame, end_frame,
+            componentVersion: 1, assets });
+        const actual = sceneCopy(scene);
+        if (!parts && wording && actual !== null && actual.replace(/\s+/g, " ") !== wording.replace(/\s+/g, " ")) {
+            throw new Error("The scene changed the approved copy.");
+        }
+        return parts?.length ? motionSceneSchema.parse(applyCopyParts(scene, parts)) : scene;
+    };
     const result = await runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
-        target, approvedCopy: wording, styling, assets, component: describeMotionComponent(target.type),
+        target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type),
         audioCues: context.document.metadata.motion_cues ?? [],
-    }, motionBuildSchema, {
-        validate: ({ scene, approximation }) => {
-            requireSceneSpan(scene, target);
-            if (scene.type !== target.type && !approximation) throw new Error("An alternate component needs an approximation note.");
-            if (scene.assets.some((ref) => !assets.some((asset) => asset.id === ref.id && asset.kind === ref.kind))) {
-                throw new Error("The scene referenced an unavailable asset.");
-            }
-            const actual = sceneCopy(scene);
-            if (wording && actual !== null && actual.replace(/\s+/g, " ") !== wording.replace(/\s+/g, " ")) {
-                throw new Error("The scene changed the approved copy.");
-            }
-        },
+    }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
+        constrainedOutput: target.type !== "graph",
+        validate: ({ scene }) => { buildScene(scene); },
     });
-    const { font, layout, palette } = styling;
-    return { ...result, value: { ...result.value, scene: motionSceneSchema.parse({ ...result.value.scene, font, layout, palette }) } };
+    return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
 }
 
 export function integrateMotionScenes(document: Document, storyboard: MotionStoryboard, builds: readonly MotionBuild[]) {
@@ -213,54 +302,91 @@ export const motionCritiqueSchema = z.object({
     issues: z.array(critiqueIssue).max(8),
     unresolved: z.array(z.string().trim().min(1).max(240)).max(8),
 }).strict();
+const visualReviewSchema = motionCritiqueSchema.extend({ issues: z.array(critiqueIssue).max(3),
+    unresolved: z.array(z.string().trim().min(1).max(240)).max(3) });
 export type MotionCritique = z.infer<typeof motionCritiqueSchema>;
 
-export function runMotionCritic(
+export async function runMotionCritic(
     context: MotionAgentContext,
     draft: Document,
-    preview: { frames: readonly number[]; images: readonly MotionVisionImage[] },
+    preview: { frames: readonly number[]; images: readonly MotionVisionImage[]; framesPerSheet?: number },
     reference: ReferenceAnalysis | null,
     targetSceneId?: string,
+    observe = (_index: number, read: () => Promise<ReferenceAnalysis["observations"]>) => read(),
 ) {
-    if (!preview.images.length || preview.images.length > 4 || !preview.frames.length || preview.frames.length > 32 ||
+    const size = preview.framesPerSheet ?? motionEvidenceFramesPerSheet;
+    if (!preview.frames.length || preview.frames.length > 32 ||
+        preview.images.length !== Math.ceil(preview.frames.length / size) ||
         preview.frames.some((value) => !Number.isInteger(value) || value < 0 || value >= draft.total_frames)) {
         throw new Error("Visual critique requires actual rendered preview samples.");
     }
-    return runMotionAgent(context, "visualCritic", "MEDIA_UNDERSTANDING", {
-        frames: preview.frames,
-        fps: draft.fps,
-        samples: "Contact sheet labels show seconds. Neighboring frames sample movement. Score visible evidence only.",
-        scenes: draft.tracks.motion_graphics.map(({ id, type, start_frame, end_frame, palette }) =>
-            ({ id, type, start_frame, end_frame, palette })),
-        reference,
-        targetSceneId,
-    }, motionCritiqueSchema, {
-        images: preview.images,
+    const observations: ReferenceAnalysis["observations"] = [];
+    for (const [index, image] of preview.images.entries()) {
+        const offset = index * size;
+        const frames = preview.frames.slice(offset, offset + size);
+        if (targetSceneId && !draft.tracks.motion_graphics.some(({ id, start_frame, end_frame }) => id === targetSceneId &&
+            frames.some((frame) => frame >= start_frame && frame < end_frame))) continue;
+        observations.push(...await observe(index, async () => (await observeReferenceSheet([image],
+            frames.map((frame) => frame / draft.fps), context.budget, context.signal, context.onProgress, true)).observations));
+    }
+    if (!observations.length) throw new Error("The browser preview has no samples of the scene under review.");
+    const frames = observations.map(({ time, ...observation }) => ({ ...observation,
+        frame: preview.frames.reduce((nearest, frame) => Math.abs(frame / draft.fps - time) < Math.abs(nearest / draft.fps - time) ? frame : nearest),
+    }));
+    const scenes = draft.tracks.motion_graphics.filter(({ id }) => !targetSceneId || id === targetSceneId).map((scene) => {
+        const { id, type, start_frame, end_frame, palette, font } = scene;
+        const samples = frames.filter(({ frame }) => frame >= start_frame && frame < end_frame);
+        const copy = scene.type === "easing" ? [scene.params.heading, ...scene.params.labels]
+            : scene.type === "identity" ? [scene.params.title, scene.params.detail, scene.params.tag]
+                : scene.type === "kinetic_words" ? scene.params.words : sceneCopy(scene);
+        const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
+        return { id, type, samples, palette, font, copy, vectorTrace };
+    });
+    const review = await runMotionAgent(context, "visualCritic", "AGENT_COMPLEX", {
+        fps: draft.fps, scenes, focused: Boolean(targetSceneId),
+        reference: targetSceneId ? null : reference?.scenes.map(({ supportedType, palette, motionLandmarks }) =>
+            ({ supportedType, palette, motionLandmarks })) ?? null,
+    }, visualReviewSchema, {
         validate: ({ issues }) => {
-            for (const issue of issues) {
-                const scene = draft.tracks.motion_graphics.find(({ id }) => id === issue.sceneId);
-                if (!scene || (targetSceneId && issue.sceneId !== targetSceneId) ||
-                    !preview.frames.includes(issue.frame) || issue.frame < scene.start_frame || issue.frame >= scene.end_frame) {
+            for (const { sceneId, frame } of issues) {
+                if (!scenes.some(({ id, samples }) => id === sceneId && samples.some((sample) => sample.frame === frame))) {
                     throw new Error("A visual critique issue must identify observed scene evidence.");
                 }
             }
         },
     });
+    return { ...review, observations };
 }
 
-export function runMotionRevision(context: MotionAgentContext, scene: MotionScene) {
-    return runMotionAgent(context, "repair", "AGENT_COMPLEX", {
-        task: "Revise this one scene using the user brief. Change requested text or colors only if asked. For faster or slower motion use motionRate. The scene must keep its original duration and assets.",
+export async function runMotionRevision(context: MotionAgentContext, scene: MotionScene) {
+    const base = motionBuildForScene(scene.type);
+    const fields = base.shape.scene.shape;
+    const sparse = (shape: Record<string, z.ZodType>) => z.object(Object.fromEntries(Object.entries(shape)
+        .map(([key, field]) => [key, z.optional(field instanceof z.ZodDefault ? field.removeDefault() : field)]))).strict().meta({ minProperties: 1 });
+    const params = fields.params instanceof z.ZodObject ? sparse(fields.params.shape) : z.record(z.string(), z.unknown());
+    const patch = z.object({ params: params.optional(), palette: motionPalette.partial().optional(),
+        layout: sparse(motionLayout.shape).optional(), font: fields.font.removeDefault().optional(),
+        finish: sparse(fields.finish.removeDefault().shape).optional(), motionRate: fields.motionRate.removeDefault().optional(),
+        transitionIn: fields.transitionIn.unwrap().nullable().optional() }).strict().meta({ minProperties: 1 });
+    const schema = base.omit({ scene: true }).extend({ patch });
+    const apply = (next: z.infer<typeof patch>) => {
+        const { params, palette, layout, finish, transitionIn, ...fields } = next;
+        const changesMode = scene.type === "liquid" && params && "mode" in params && params.mode !== scene.params.mode;
+        return motionSceneSchema.parse({ ...scene, ...fields, params: changesMode ? params : { ...scene.params, ...params },
+            palette: { ...scene.palette, ...palette }, layout: { ...scene.layout, ...layout }, finish: { ...scene.finish, ...finish },
+            transitionIn: transitionIn === null ? undefined : transitionIn ?? scene.transitionIn });
+    };
+    const result = await runMotionAgent(context, "repair", "AGENT_COMPLEX", {
+        task: "Return a sparse patch for this focused revision. Include only the fields explicitly requested. Leave all other fields out of the patch. Use motionRate for faster or slower movement.",
         scene, component: describeMotionComponent(scene.type),
-    }, motionBuildSchema, {
-        validate: ({ scene: next }) => {
-            if (next.type !== scene.type || next.id !== scene.id || next.layer !== scene.layer ||
-                next.start_frame !== scene.start_frame || next.end_frame !== scene.end_frame ||
-                next.fontAssetId !== scene.fontAssetId || JSON.stringify(next.assets) !== JSON.stringify(scene.assets)) {
-                throw new Error("The focused revision changed protected scene fields.");
-            }
+    }, schema, {
+        constrainedOutput: false,
+        validate: ({ patch }) => {
+            if (JSON.stringify(apply(patch)) === JSON.stringify(scene)) throw new Error("The focused edit returned no changes.");
         },
     });
+    const { patch: changes, ...value } = result.value;
+    return { ...result, value: { ...value, scene: apply(changes) } };
 }
 
 export function runMotionRepair(context: MotionAgentContext, scene: MotionScene, issues: readonly MotionCritique["issues"][number][]) {
@@ -268,12 +394,14 @@ export function runMotionRepair(context: MotionAgentContext, scene: MotionScene,
     if (!relevant.length || relevant.length > 8) throw new Error("A repair needs a bounded issue for this scene.");
     return runMotionAgent(context, "repair", "AGENT_COMPLEX", {
         scene, issues: relevant, component: describeMotionComponent(scene.type),
-    }, motionBuildSchema, {
+    }, motionBuildForScene(scene.type), {
+        constrainedOutput: scene.type !== "graph",
         validate: ({ scene: next }) => {
+            motionSceneSchema.parse(next);
             if (next.type !== scene.type || next.id !== scene.id ||
                 next.start_frame !== scene.start_frame || next.end_frame !== scene.end_frame ||
                 JSON.stringify(next.assets) !== JSON.stringify(scene.assets) ||
-                sceneCopy(next) !== sceneCopy(scene)) {
+                !sameSceneCopy(next, scene)) {
                 throw new Error("The repair changed protected scene content.");
             }
         },

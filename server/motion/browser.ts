@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { captureSchema, previewSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
-import { db, project } from "../database";
+import { captureSchema, previewSchema, traceResultSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
+import { motionAssetProvenance } from "../../shared/motion/assets";
+import { db, json, project } from "../database";
 import { document } from "../document";
 import { fail } from "../security";
 import {
@@ -91,7 +92,8 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         if (!step || step.lease_token !== token || expectedRevision !== run.starting_revision) {
             fail(409, "The browser task lease is no longer current.");
         }
-        const value = step.name === "reference_capture" ? captureSchema.parse(result) : previewSchema.parse(result);
+        const value = step.name === "reference_capture" ? captureSchema.parse(result)
+            : step.name.startsWith("trace:") ? traceResultSchema.parse(result) : previewSchema.parse(result);
         if (step.status === "done" && step.result_id) {
             const prior = motionArtifact(runId, step.result_id);
             if (prior?.body.toString("utf8") === JSON.stringify(value)) return { duplicate: true };
@@ -104,6 +106,23 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         requireRevision(run, expectedRevision);
         let input: BrowserMotionTask["input"];
         try { input = motionBrowserInput(run, step); } catch { fail(409, "The browser input changed."); }
+        if (input.tool === "trace" && "status" in value) {
+            if (value.bindingId !== input.reference.bindingId) fail(409, "The reference was replaced.");
+            if (value.status === "traced") {
+                const saved = db.prepare(`SELECT m.provenance FROM motion_asset_metadata m JOIN project_assets a ON a.id=m.asset_id
+                    WHERE m.asset_id=? AND a.project_id=? AND m.kind='vectors'`).get(value.assetId, run.project_id) as { provenance: string } | undefined;
+                const source = saved && motionAssetProvenance.safeParse(json(saved.provenance, null));
+                if (!source?.success || source.data.kind !== "reference_derived" || source.data.sourceId !== input.reference.assetId ||
+                    source.data.startSeconds !== input.interval.start || source.data.endSeconds !== input.interval.end) {
+                    fail(422, "The traced asset does not match the assigned reference interval.");
+                }
+            }
+            const summary = value.status === "traced" ? "The browser traced the reference into editable liquid shapes."
+                : "The browser could not isolate the liquid shapes. The scene will use a procedural approximation.";
+            if (!finishMotionStep(run, step, { value, summary })) fail(409, "The browser task lease expired.");
+            return { duplicate: false };
+        }
+        if (!("images" in value)) fail(422, "The browser tool result did not match its request.");
         if (input.tool === "reference_capture" && "bindingId" in value) {
             const { bindingId, metadata: { kind, interval } } = input.reference;
             if (value.bindingId !== bindingId) fail(409, "The reference was replaced.");

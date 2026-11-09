@@ -2,7 +2,7 @@ import type { z } from "zod";
 import type { Document } from "../../shared/contracts";
 import { MotionBudgetError, type ModelReservation, type MotionModelBudget } from "./budget";
 import { buildMotionPrompt, type MotionPromptRole } from "./prompts";
-import { MotionProviderError, motionRoleMode, requestMotionJson } from "./providers/chat";
+import { MotionProviderError, motionReasoningEffort, motionRoleMode, requestMotionJson } from "./providers/chat";
 import type { MotionRoute } from "./providers/inventory";
 import { qualifiedMotionProviders } from "./providers/qualified";
 
@@ -22,10 +22,13 @@ export type MotionAgentProgress = (data: {
     promptVersion?: number;
     promptHash?: string;
     maxTokens?: number;
+    reasoningEffort?: ReturnType<typeof motionReasoningEffort>;
+    phase?: "observe";
     elapsedMs?: number;
     tokens?: number;
     reasoningObserved?: boolean;
     outcome?: string;
+    artifactFailure?: NonNullable<MotionProviderError["artifact"]>["reason"];
 }) => void;
 
 export async function runMotionAgent<T>(
@@ -34,12 +37,12 @@ export async function runMotionAgent<T>(
     route: MotionRoute,
     input: unknown,
     schema: z.ZodType<T>,
-    options: { images?: readonly MotionVisionImage[]; validate?: (value: T) => void } = {},
+    options: { images?: readonly MotionVisionImage[]; validate?: (value: T) => void; constrainedOutput?: boolean } = {},
 ) {
     const { document, brief, budget, signal, onProgress } = context;
     const mode = role === "repair" ? "deep" : motionRoleMode[role];
     const images = options.images ?? [];
-    const maxTokens = mode === "off" ? 2048 : 8192;
+    const maxTokens = mode === "off" ? 2048 : ["referenceAnalyst", "director", "visualCritic"].includes(role) ? 6400 : 4096;
     const providers = await qualifiedMotionProviders(route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
     ]);
@@ -60,12 +63,13 @@ export async function runMotionAgent<T>(
         }
         let actual: number | undefined;
         const diagnostic = { role, model: provider.alias, mode, promptVersion: prompt.version.promptVersion,
-            promptHash: prompt.version.promptHash, maxTokens };
+            promptHash: prompt.version.promptHash, maxTokens, reasoningEffort: motionReasoningEffort(provider.model, mode, true) };
         const started = performance.now();
         try {
             onProgress?.({ ...diagnostic, state: "requesting" });
             const result = await requestMotionJson(provider, {
-                ...prompt, images, mode, schema, maxTokens, stream: true, signal,
+                ...prompt, images, mode, conciseReasoning: true, constrainedOutput: options.constrainedOutput ?? true,
+                schema, maxTokens, stream: true, signal,
                 timeoutMs: attempt.timeoutMs, firstTokenTimeoutMs: attempt.firstTokenTimeoutMs,
                 onFirstToken: (elapsedMs) => onProgress?.({ ...diagnostic, state: "responding", elapsedMs }),
             });
@@ -82,8 +86,11 @@ export async function runMotionAgent<T>(
             };
         } catch (error) {
             signal.throwIfAborted();
+            const providerFailure = error instanceof MotionProviderError ? error : undefined;
+            actual ??= providerFailure?.artifact?.totalTokens;
             onProgress?.({ ...diagnostic, state: "rejected", elapsedMs: Math.round(performance.now() - started), tokens: actual,
-                outcome: error instanceof MotionProviderError ? error.status === 429 ? "rate_limited" : error.code : "artifact_validation" });
+                outcome: providerFailure?.status === 429 ? "rate_limited" : providerFailure?.code ?? "artifact_validation",
+                artifactFailure: providerFailure?.artifact?.reason });
             if (error instanceof MotionProviderError && error.retryAfterMs !== undefined) {
                 attempt.backoff?.(error.retryAfterMs);
                 providerBudget = new MotionBudgetError("This motion provider is waiting for its rate limit to reset.", "provider");

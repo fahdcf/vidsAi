@@ -1,10 +1,9 @@
 import React, { useRef, useState } from "react";
-import type { PlayerRef } from "@remotion/player";
 import type { Document, Operation } from "@vidsai/contracts";
 import Shell from "../Shell";
 import MusicLibrary from "../MusicLibrary";
 import { api } from "../api";
-import MotionPreview from "../motion/MotionPreview";
+import MotionPreview, { type MotionPreviewHandle } from "../motion/MotionPreview";
 import MotionSceneControls from "../motion/MotionSceneControls";
 import { motionSceneLabel } from "../motion/MotionStoryboard";
 import "../styles/motion-workspace.css";
@@ -18,7 +17,7 @@ export default function MotionReview({ projectId, name, document: initial, stage
     const [error, setError] = useState("");
     const [busy, setBusy] = useState(false);
     const [saved, setSaved] = useState(false);
-    const player = useRef<PlayerRef>(null);
+    const player = useRef<MotionPreviewHandle>(null);
     const scenes = doc.tracks.motion_graphics;
     const scene = scenes.find(({ id }) => id === selected) ?? scenes[0];
     const music = doc.tracks.audio.find(({ type }) => type === "music");

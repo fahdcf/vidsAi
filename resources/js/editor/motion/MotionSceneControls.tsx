@@ -60,6 +60,13 @@ export default function MotionSceneControls({ scene, scenes, mode, busy, save }:
                     tool: "set_motion_text", params: { id: scene.id, text: changed, ...(field.id ? { layerId: field.id } : {}) },
                 });
             }
+            if (scene.type === "identity") {
+                const detail = String(data.get("identity-detail") ?? "").trim();
+                const tag = String(data.get("identity-tag") ?? "").trim();
+                if (detail !== scene.params.detail || tag !== scene.params.tag) operations.push({
+                    tool: "update_motion_scene", params: { id: scene.id, patch: { params: { detail, tag } } },
+                });
+            }
             const cut = Number(data.get("cut"));
             if (next && cut !== scene.end_frame) operations.push({ tool: "set_motion_cut", params: { id: scene.id, frame: cut } });
         }
@@ -94,6 +101,10 @@ export default function MotionSceneControls({ scene, scenes, mode, busy, save }:
                 {text.map((field, i) => <label key={field.id}>{field.id ? `Scene text ${i + 1}` : "Scene text"}
                     <textarea name={"text-" + field.id} rows={2} required maxLength={180} defaultValue={field.text} />
                 </label>)}
+                {scene.type === "identity" && <>
+                    <label>Supporting line<input name="identity-detail" maxLength={100} defaultValue={scene.params.detail} /></label>
+                    <label>Tagline<input name="identity-tag" maxLength={80} defaultValue={scene.params.tag} /></label>
+                </>}
                 {next && <label>End frame<input name="cut" type="number" required step={1}
                     min={scene.start_frame + 1} max={next.end_frame - 1} defaultValue={scene.end_frame} /></label>}
                 {scenes.length > 1 && <div className="motion-scene-actions">

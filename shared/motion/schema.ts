@@ -63,7 +63,7 @@ const base = {
     motionRate: z.number().min(0.5).max(2).default(1),
     transitionIn: z.object({
         kind: z.enum(["fade", "wipe", "scale"]),
-        frames: z.number().int().min(1).max(60),
+        frames: z.number().int().min(1).max(120),
     }).strict().optional(),
 };
 
@@ -72,7 +72,8 @@ const effectParams = {
         headline: copy,
         ringCount: z.number().int().min(1).max(8).default(3),
         particles: z.number().int().min(0).max(240).default(80),
-        impactAt: z.number().min(0.15).max(0.7).default(0.38),
+        impactAt: z.number().min(0.15).max(0.7).default(0.46),
+        highlightLastWord: z.boolean().default(false),
     }).strict(),
     kinetic_words: z.object({
         words: z.array(copy.max(50)).min(1).max(12),
@@ -98,7 +99,7 @@ const effectParams = {
     }).strict(),
     liquid: z.discriminatedUnion("mode", [
         z.object({ mode: z.literal("procedural"), blobs: z.number().int().min(2).max(10).default(6) }).strict(),
-        z.object({ mode: z.literal("vectors"), assetId: z.uuid() }).strict(),
+        z.object({ mode: z.literal("vectors"), assetId: z.uuid(), style: z.enum(["solid", "liquid_gradient"]).default("solid") }).strict(),
     ]),
     identity: z.object({
         title: copy,

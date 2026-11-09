@@ -43,7 +43,7 @@ export async function createReferenceSheet(frames: readonly MotionReferenceFrame
             const w = bitmap.width * scale, h = bitmap.height * scale;
             context.drawImage(bitmap, x + (cellWidth - w) / 2, y + (mediaHeight - h) / 2, w, h);
             context.fillStyle = "#fff0d5";
-            context.fillText(`${frame.sourceTime.toFixed(3)}s`, x + 10, y + 138);
+            context.fillText(`${frame.sourceTime.toFixed(3)}s`, x + 10, y + mediaHeight + 12);
         } finally {
             bitmap.close();
         }

@@ -18,6 +18,7 @@ type OutputConfig = {
     fps: number;
     muted: boolean;
     outputTarget: "arraybuffer" | "web-fs";
+    videoBitrate?: number;
 };
 
 let verifiedConfig: string | undefined;
@@ -36,7 +37,7 @@ async function roundTrip(config: OutputConfig, signal: AbortSignal) {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     const target = new BufferTarget();
     const output = new Output({ format: new Mp4OutputFormat(), target });
-    const video = new CanvasSource(canvas, { codec: "avc", bitrate: mp4Encoding.videoBitrate });
+    const video = new CanvasSource(canvas, { codec: "avc", bitrate: config.videoBitrate ?? mp4Encoding.videoBitrate });
     const audio = config.muted
         ? null
         : new AudioSampleSource({ codec: "aac", bitrate: mp4Encoding.audioBitrate });
@@ -107,7 +108,7 @@ export async function checkBrowserOutput(config: OutputConfig, signal: AbortSign
     if (!support.canRender) {
         throw new Error(support.issues.map(({ message }) => message).join(" "));
     }
-    const key = JSON.stringify([config.width, config.height, config.fps, config.muted, config.outputTarget]);
+    const key = JSON.stringify([config.width, config.height, config.fps, config.muted, config.outputTarget, config.videoBitrate]);
     if (verifiedConfig === key) return;
     try {
         await roundTrip(config, signal);

@@ -73,6 +73,27 @@ export function MotionLayer({ scene, projectId, width, height, left, top, fps, s
         draw();
     }, [frame, scene, fps, pixelWidth, pixelHeight]);
 
+    useLayoutEffect(() => {
+        const target = canvas.current;
+        if (!target) return;
+        const lost = (event: Event) => {
+            event.preventDefault();
+            const message = "The browser graphics context was lost while drawing this scene.";
+            if (isClientSideRendering) cancelRender(new Error(message));
+            else setFailure(message);
+        };
+        const restored = () => {
+            setFailure(undefined);
+            draw();
+        };
+        target.addEventListener("contextlost", lost);
+        target.addEventListener("contextrestored", restored);
+        return () => {
+            target.removeEventListener("contextlost", lost);
+            target.removeEventListener("contextrestored", restored);
+        };
+    }, [scene, fps, pixelWidth, pixelHeight, isClientSideRendering, cancelRender]);
+
     return (
         <>
             <canvas ref={canvas} width={pixelWidth} height={pixelHeight}

@@ -268,6 +268,10 @@ export function applyOperations(input: unknown, ops: Operation[]): Document {
       }
       case "set_format": {
         const p = schemas.set_format.parse(op.params);
+        if (d.metadata.workflow === "motion_graphics") {
+          const ratio = p.width / d.width;
+          d.tracks.overlays = d.tracks.overlays.map((overlay) => ({ ...overlay, width: Math.max(1, Math.round(overlay.width * ratio)) }));
+        }
         d.width = p.width;
         d.height = p.height;
         break;

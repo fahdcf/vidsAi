@@ -5,8 +5,9 @@ import {
 } from "./job-store";
 import type { AssetResolverOptions, resolveBrowserAssets } from "./resolve-assets";
 import type { renderBrowserMp4 } from "./render";
-import { browserExportCanvas } from "./profile";
+import { browserExportCanvas, prepareBrowserExportTimeline, type BrowserExportQuality } from "./profile";
 import { exportDirectoryName, removeExportDirectory } from "./storage";
+import { browserExportFailure } from "./failures";
 
 const lockName = "vidsai-browser-export";
 const activeStates: BrowserExportState[] = ["preparing", "rendering", "finalizing"];
@@ -90,6 +91,7 @@ export async function runBrowserExport(
     options: AssetResolverOptions,
     externalSignal: AbortSignal,
     onUpdate: (status: BrowserExportProgress) => void,
+    quality: BrowserExportQuality = "standard",
 ) {
     validateScope(scope);
     externalSignal.throwIfAborted();
@@ -103,6 +105,7 @@ export async function runBrowserExport(
     if (sources.some((source) => /^blob:/i.test(source.trimStart()))) {
         throw new Error("Relink temporary media before saving an export.");
     }
+    const timeline = prepareBrowserExportTimeline(savedSnapshot, quality);
 
     return exportLocks().request(lockName, { ifAvailable: true }, async (lock) => {
         if (!lock) throw new Error("An export is already running in another tab. Try again when it finishes.");
@@ -112,6 +115,7 @@ export async function runBrowserExport(
             ...scope,
             id: crypto.randomUUID(),
             snapshot: savedSnapshot,
+            quality,
             state: "preparing",
             output: previous?.output,
             supersededOutputId: previous?.supersededOutputId,
@@ -149,8 +153,8 @@ export async function runBrowserExport(
         try {
             emit();
             const [assets, renderer] = await Promise.all([import("./resolve-assets"), import("./render")]);
-            const canvas = browserExportCanvas(savedSnapshot);
-            prepared = await assets.resolveBrowserAssets(savedSnapshot, options, signal, job.id, canvas);
+            const canvas = browserExportCanvas(timeline, quality);
+            prepared = await assets.resolveBrowserAssets(timeline, options, signal, job.id, canvas, quality);
             artifact = await renderer.renderBrowserMp4(prepared.document, signal, (next) => {
                 if (next <= progress) return;
                 progress = Math.min(1, next);
@@ -159,6 +163,7 @@ export async function runBrowserExport(
             }, {
                 id: job.id,
                 canvas,
+                quality,
                 motionAssets: prepared.motionAssets,
                 onRendering: async () => {
                     await setState("rendering");
@@ -189,7 +194,7 @@ export async function runBrowserExport(
                     ? "Export stopped making progress. Try again or shorten the timeline."
                     : deadline.aborted
                       ? "Export took too long. Try again or shorten the timeline."
-                      : error instanceof Error ? error.message : "Export failed.";
+                      : browserExportFailure(error);
                 await setState("failed");
             }
             throw new Error(job.error ?? "Export cancelled.", { cause: error });

@@ -2,7 +2,7 @@ import { normalizeDocument } from "../../shared/contracts";
 import { motionStyleRecipes } from "../../shared/motion/schema";
 
 const reference = [
-    { id: "gravity", type: "impact", end: 2, params: { headline: "I MAKE\nTHINGS MOVE." }, samples: [0.6, 1.1, 1.8] },
+    { id: "gravity", type: "impact", end: 2, params: { headline: "I MAKE\nTHINGS MOVE.", highlightLastWord: true }, samples: [0.6, 1.1, 1.8] },
     { id: "typography", type: "kinetic_words", end: 4, params: { words: ["TIMING", "SPACING", "EASING", "FEEL."] }, samples: [2.3, 2.8, 3.3, 3.8] },
     { id: "systems", type: "grid", end: 6, params: {}, samples: [4.1, 4.6, 5.1, 5.6] },
     { id: "curve", type: "easing", end: 8, params: {}, samples: [6.2, 6.9, 7.6] },

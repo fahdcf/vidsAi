@@ -8,7 +8,7 @@ type Frame<T extends MotionSceneType> = MotionFrame<Extract<MotionScene, { type:
 export function drawGrid({ ctx, scene, width, height }: Frame<"grid">, t: number) {
     const { columns, rows, spin, stagger } = scene.params;
     const { accent, foreground, muted, primary } = scene.palette;
-    const step = Math.max(width / Math.max(1, columns - 2), height / Math.max(1, rows - 2));
+    const step = Math.max(width / Math.max(1, columns - 2), height / Math.max(1, rows - 2), Math.min(width, height) * 0.104);
     ctx.fillStyle = accent;
     ctx.fillRect(0, 0, width, height);
     ctx.save();
@@ -23,7 +23,7 @@ export function drawGrid({ ctx, scene, width, height }: Frame<"grid">, t: number
             const reveal = overshoot((t - normalizedDistance * 0.68 * stagger) / 0.16);
             if (reveal <= 0) continue;
             const wave = Math.sin(distance * 0.9 - t * 15.6);
-            const size = step * (0.62 + wave * 0.07) * reveal;
+            const size = step * (0.66 + wave * 0.07) * reveal;
             const morph = clamp((t - 0.32 - normalizedDistance * 0.11) / 0.48);
             const round = Math.sin(morph * Math.PI) ** 2;
             ctx.save();
@@ -48,7 +48,7 @@ export function drawEasing({ ctx, scene, width, height }: Frame<"easing">, t: nu
     const size = tall ? width * 0.49 : Math.min(width * 0.32, height * 0.51);
     const left = tall ? (width - size) / 2 : width * 0.12;
     const bottom = tall ? height * 0.49 : height * 0.75;
-    const reveal = easeOut(t / 0.27);
+    const reveal = smooth(t / 0.34);
     const progress = clamp((t - 0.26) / 0.59);
     const mono = '"VidsAI Space Mono", Consolas, monospace';
     drawMotionText(ctx, heading, font, foreground, {
@@ -77,6 +77,13 @@ export function drawEasing({ ctx, scene, width, height }: Frame<"easing">, t: nu
     ctx.strokeStyle = primary;
     ctx.stroke();
     ctx.restore();
+    const handles = smooth((t - 0.18) / 0.22);
+    if (handles > 0) {
+        line(ctx, left, bottom, left + x1 * size, bottom - y1 * size, alpha(foreground, 0.35 * handles));
+        line(ctx, left + size, bottom - size, left + x2 * size, bottom - y2 * size, alpha(foreground, 0.35 * handles));
+        for (const [x, y] of [[x1, y1], [x2, y2]]) circle(ctx, left + x * size, bottom - y * size,
+            unit * 0.011, scene.palette.background, alpha(accent, handles), Math.max(1, unit * 0.002));
+    }
     circle(ctx, left + progress * size, bottom - bezierEase(progress, curve) * size, unit * 0.012, foreground, primary, 1.5);
     drawMotionText(ctx, `cubic-bezier(${curve.join(", ")})`, mono, foreground, {
         x: tall ? width * 0.15 : left, y: bottom + unit * 0.016, width: tall ? width * 0.7 : size * 1.14,
@@ -94,7 +101,7 @@ export function drawEasing({ ctx, scene, width, height }: Frame<"easing">, t: nu
         const value = ease(progress);
         drawMotionText(ctx, label, mono, color, {
             x: x0, y: y - unit * 0.08, width: (xEnd - x0) * 0.72, height: unit * 0.05,
-            maxSize: unit * 0.027, maxLines: 1, align: "left",
+            maxSize: unit * 0.038, maxLines: 1, align: "left",
         });
         drawMotionText(ctx, `${Math.round(value * 100)}%`, mono, color, {
             x: x0, y: y - unit * 0.08, width: xEnd - x0, height: unit * 0.05,

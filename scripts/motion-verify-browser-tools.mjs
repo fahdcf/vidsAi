@@ -93,7 +93,8 @@ try {
     }).immediate();
     addMotionStep(run.id, { name: "preview:1", lane: "browser", input: { round: 1 }, dependencies: ["assemble"] });
     const preview = await runTool();
-    assert.equal(preview.payload.result.frames.length, 12);
+    assert.equal(preview.payload.result.frames.length, draft.tracks.motion_graphics.length * 3);
+    assert.equal(preview.payload.result.images.length, Math.ceil(preview.payload.result.frames.length / preview.payload.result.framesPerSheet));
     assert.ok(preview.payload.result.images[0].base64.length > 10_000);
     const renderedAgain = await page.evaluate(async (snapshot) =>
         (await import("/resources/js/editor/motion/browser-runner.ts")).runMotionBrowserInput(

@@ -114,8 +114,16 @@ try {
         changeMotionRunStatus(live, "waiting_for_browser");
     }).immediate();
     await page.getByRole("region", { name: "Draft preview" }).locator("canvas[data-motion-frame]").first().waitFor();
-    await page.getByText("The browser rendered 28 preview frames for review.").waitFor();
+    await page.getByText("The browser rendered 21 preview frames for review.").waitFor();
     assert.equal(motionSteps(runId).find(({ name }) => name === "preview:1").status, "done");
+    await page.getByRole("region", { name: "Draft preview" }).getByRole("button", { name: "Play preview" }).click();
+    await page.waitForFunction(() => {
+        const clock = document.querySelector("[data-audio-clock]");
+        const audio = clock?.querySelector("audio");
+        const seek = clock?.querySelector('input[type="range"]');
+        return audio?.currentTime > 0.4 && Math.abs(Number(seek?.value) - Math.floor(audio.currentTime * 30)) <= 2;
+    });
+    await page.getByRole("button", { name: "Pause preview" }).click();
     await page.getByLabel("Message").fill("Keep the geometry.");
     await page.getByLabel("Message").press("End");
     await page.getByLabel("Message").press("Enter");
@@ -156,12 +164,17 @@ try {
         const request = JSON.parse(init.body);
         const system = request.messages[0].content;
         const user = request.messages[1].content;
-        const context = JSON.parse(Array.isArray(user) ? user[0].text : user).context;
-        const value = system.includes("VidsAI repair specialist")
-            ? { decision: "Slowed the movement and updated the words.", approximation: null,
-                scene: { ...context.input.scene, motionRate: 0.72, params: { ...context.input.scene.params, headline: "KEEP IT MOVING." } } }
-            : { decision: "Reviewed the revised scene.", scores: { readability: 5, hierarchy: 5, palette: 5, motion: 5, pacing: 5, brief: 5 },
+        let value;
+        if (system.startsWith("Analyze visible image evidence")) {
+            const [time] = JSON.parse(user[0].text.match(/seconds: (\[.*?\])/)[1]);
+            value = { observations: [{ time, copy: null, layout: "Centered shapes", confidence: 0.8 }] };
+        } else if (system.includes("VidsAI repair specialist")) {
+            value = { decision: "Slowed the movement and updated the words.", approximation: null,
+                patch: { motionRate: 0.72, params: { headline: "KEEP IT MOVING." } } };
+        } else {
+            value = { decision: "Reviewed the revised scene.", scores: { readability: 5, hierarchy: 5, palette: 5, motion: 5, pacing: 5, brief: 5 },
                 issues: [], unresolved: [] };
+        }
         const event = (delta, finish_reason = null) => "data: " + JSON.stringify({ choices: [{ delta, finish_reason }] }) + "\n\n";
         return new Response(event({ reasoning_content: "Mock reasoning" }) + event({ content: JSON.stringify(value) }, "stop") + "data: [DONE]\n\n");
     };
@@ -309,7 +322,8 @@ try {
     let exportSceneId = before.tracks.motion_graphics[0].id;
     if (process.argv.includes("--journey")) {
         const fixture = motionBenchmark(true);
-        const { stages, restore } = mockMotionProviders(fixture.tracks.motion_graphics);
+        const { stages, restore } = mockMotionProviders(fixture.tracks.motion_graphics,
+            { analystRecognizesLiquid: !process.argv.includes("--auto-trace") });
         const jobs = startMotionJobs();
         try {
             await page.goto(base + "/create/motion-graphics");
@@ -330,6 +344,10 @@ try {
             const doc = document(project(exportProjectId));
             assert.equal(doc.tracks.motion_graphics.length, 7);
             assert.ok(doc.tracks.audio.length);
+            const liquid = doc.tracks.motion_graphics.find(({ type }) => type === "liquid");
+            assert.equal(liquid.params.mode, "vectors");
+            const trace = motionSteps(generatedRun).find(({ name }) => name === `trace:${liquid.id}`);
+            assert.deepEqual(JSON.parse(trace.input).interval, { start: liquid.start_frame / doc.fps, end: liquid.end_frame / doc.fps });
             for (const stage of ["observe", "reference-analyst", "director", "copywriter", "visual-designer", "motion-engineer", "visual-critic", "repair"]) {
                 assert.ok(stages.includes(stage), stage);
             }
@@ -356,6 +374,11 @@ try {
         }
     }
     if (process.argv.includes("--export")) {
+        const qualityFlag = process.argv.indexOf("--quality");
+        const quality = qualityFlag >= 0 ? process.argv[qualityFlag + 1] : "standard";
+        if (quality !== "standard") await page.getByLabel("Motion export quality").selectOption(quality);
+        const fps = quality === "motion1080smooth" ? 60 : 30;
+        const resolution = quality === "standard" ? "1280x720" : "1920x1080";
         const serverRenderRequests = [];
         page.on("request", (request) => {
             if (request.method() === "POST" && /\/(?:exports?|render)(?:\/|$)/.test(new URL(request.url()).pathname)) {
@@ -383,11 +406,13 @@ try {
             page.waitForEvent("download"),
             page.getByRole("link", { name: "Download MP4" }).click(),
         ]);
-        const video = path.join(evidence, "motion-product-720p.mp4");
+        const video = path.join(evidence, quality === "standard" ? "motion-product-720p.mp4" : `motion-product-1080p${fps}.mp4`);
         await file.saveAs(video);
         await page.reload();
         await page.getByRole("link", { name: "Download MP4" }).waitFor();
         await page.getByText("Older version").waitFor();
+        assert.equal(document(project(exportProjectId)).fps, 30);
+        if (quality !== "standard") assert.equal(await page.getByLabel("Motion export quality").inputValue(), quality);
         assert.equal(serverRenderRequests.length, 0);
         const { ffmpeg } = JSON.parse(await readFile(path.resolve(import.meta.dirname, "../motion-toolchain.json"), "utf8"));
         const decoded = spawnSync(path.join(directory, "..", ffmpeg.runtimePath), [
@@ -395,10 +420,10 @@ try {
         ], { encoding: "utf8", windowsHide: true, timeout: 90_000 });
         await writeFile(path.join(evidence, "motion-product-decode.log"), decoded.stderr ?? "");
         assert.equal(decoded.status, 0, decoded.stderr);
-        assert.match(decoded.stderr, /Video: h264.*1280x720/);
+        assert.match(decoded.stderr, new RegExp(`Video: h264.*${resolution}.*${fps} fps`));
         assert.match(decoded.stderr, /Audio: aac/);
-        assert.equal(Number([...decoded.stderr.matchAll(/frame=\s*(\d+)/g)].at(-1)?.[1]), 450);
-        console.log("Browser export reload recovery, cancel/retry, immutable revision, persisted MP4, 720p H.264/AAC and no render API requests passed.");
+        assert.equal(Number([...decoded.stderr.matchAll(/frame=\s*(\d+)/g)].at(-1)?.[1]), 15 * fps);
+        console.log(`Browser export recovery, cancel/retry, immutable revision and ${resolution}/${fps} H.264/AAC passed with zero render API requests.`);
     }
     console.log("Atomic browser creation, chat before uploads, attachments, persisted cues, idempotent replay and reload passed.");
     console.log("Multiline conversation, attachment chips, stop and persisted history passed.");

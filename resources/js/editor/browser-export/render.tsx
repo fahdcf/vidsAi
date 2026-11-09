@@ -6,7 +6,7 @@ import { CompositionMedia, VideoMerger } from "@vidsai/compositions";
 import { documentSchema, type Document } from "@vidsai/contracts";
 import type { ComponentProps, ContextType } from "react";
 import { prepareBrowserAudio } from "./audio";
-import { BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
+import { browserExportQualities, BrowserRenderProfileError, validateBrowserRenderProfile, type BrowserExportQuality } from "./profile";
 import { checkBrowserOutput, invalidateBrowserOutputProbe, mp4Encoding } from "./capabilities";
 import { openBrowserOutput } from "./output";
 import type { MotionAssetFiles } from "../../../../shared/motion/assets";
@@ -36,6 +36,7 @@ export async function renderBrowserMp4(
         id: string;
         canvas?: { width: number; height: number; scale: number };
         motionAssets?: MotionAssetFiles;
+        quality?: BrowserExportQuality;
         onRendering: () => Promise<void>;
         onFinalizing: () => Promise<void>;
     },
@@ -43,7 +44,8 @@ export async function renderBrowserMp4(
     signal.throwIfAborted();
     const editState = documentSchema.parse(structuredClone(snapshot)) as Document;
     const canvas = lifecycle?.canvas ?? { width: editState.width, height: editState.height, scale: 1 };
-    const issues = validateBrowserRenderProfile(editState, canvas);
+    const quality = lifecycle?.quality ?? "standard";
+    const issues = validateBrowserRenderProfile(editState, canvas, quality);
     if (issues.length) throw new BrowserRenderProfileError(issues);
     const sources = [
         ...editState.tracks.video.map((clip) => clip.clip_url),
@@ -61,14 +63,21 @@ export async function renderBrowserMp4(
         );
     const options = {
         ...mp4Encoding,
+        videoBitrate: browserExportQualities[quality].videoBitrate,
         audioCodec: muted ? null : "aac",
         muted,
     } as const;
-    await checkBrowserOutput({ ...options, width: canvas.width, height: canvas.height, fps, outputTarget: "web-fs" }, signal);
+    try {
+        await checkBrowserOutput({ ...options, width: canvas.width, height: canvas.height, fps, outputTarget: "web-fs" }, signal);
+    } catch (error) {
+        signal.throwIfAborted();
+        if (quality === "standard") throw error;
+        throw new Error(`This browser could not prepare ${browserExportQualities[quality].name}. Select 720p and start a new export.`, { cause: error });
+    }
     if (!muted) await prepareBrowserAudio(editState, signal);
     signal.throwIfAborted();
     const output = await openBrowserOutput(
-        total_frames / fps, muted, signal, lifecycle?.id, lifecycle?.onFinalizing,
+        total_frames / fps, muted, signal, lifecycle?.id, lifecycle?.onFinalizing, options.videoBitrate,
     );
     try {
         await lifecycle?.onRendering();

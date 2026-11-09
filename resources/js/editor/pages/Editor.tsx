@@ -31,7 +31,8 @@ import MusicLibrary from "../MusicLibrary";
 import MotionSceneControls from "../motion/MotionSceneControls";
 import "../styles/motion-workspace.css";
 import { useBrowserExport } from "../browser-export/useBrowserExport";
-import { browserExportCanvas, browserRenderProfile, validateBrowserRenderProfile } from "../browser-export/profile";
+import { browserExportCanvas, browserExportQualities, browserRenderProfile, supportsHighMotionQuality,
+    validateBrowserRenderProfile, type BrowserExportQuality } from "../browser-export/profile";
 
 type Project = { id: number; name: string; status: string };
 
@@ -132,7 +133,13 @@ export default function Editor({
     const [redo, setRedo] = useState<Document[]>([]);
 
     const localExport = useBrowserExport(accountId, String(project.id));
+    const [motionQuality, setMotionQuality] = useState<BrowserExportQuality>("standard");
+    const highQuality = supportsHighMotionQuality(doc);
+    const outputQuality = highQuality ? motionQuality : "standard";
     const savedLocalJob = localExport.job;
+    useEffect(() => {
+        if (savedLocalJob?.quality) setMotionQuality(savedLocalJob.quality);
+    }, [savedLocalJob?.id]);
     const localStatus = localExport.status?.state ?? savedLocalJob?.state;
     const legacyRetry = !savedLocalJob && latestExport?.status === "failed" && latestExport.snapshot;
     const canRetry = !localExport.active && (legacyRetry || ["failed", "cancelled", "interrupted"].includes(localStatus ?? ""));
@@ -145,7 +152,7 @@ export default function Editor({
         output_url: localExport.outputUrl,
         error: localExport.active ? localExport.status?.error : savedLocalJob?.error,
     } : latestExport?.status === "done" || legacyRetry ? latestExport : null;
-    const outputCanvas = browserExportCanvas(doc);
+    const outputCanvas = browserExportCanvas(doc, outputQuality);
     const downloadRevision = localExport.outputUrl ? savedLocalJob?.output?.revision : latestExport?.revision;
     const downloadUrl = job?.output_url || (latestExport?.status === "done" ? latestExport.output_url : "");
 
@@ -698,6 +705,10 @@ export default function Editor({
                     </section>
                 )}
 
+                {highQuality && <select className="motion-export-quality" aria-label="Motion export quality" value={outputQuality}
+                    disabled={localExport.active} onChange={(event) => setMotionQuality(event.currentTarget.value as BrowserExportQuality)}>
+                    {Object.entries(browserExportQualities).map(([id, option]) => <option key={id} value={id}>{option.name}</option>)}
+                </select>}
                 <button
                     className="primary"
                     aria-label="Export video"
@@ -712,7 +723,7 @@ export default function Editor({
                                 throw new Error("Save the project before exporting.");
                             }
                             return structuredClone(docRef.current);
-                        }, false);
+                        }, false, outputQuality);
                     }}
                 >
                     <Icon name="download" size={15} />

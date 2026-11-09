@@ -1,4 +1,5 @@
-import type { BrowserMotionInput, BrowserMotionTask } from "../../../../shared/motion/browser-tools";
+import type { BrowserMotionInput, BrowserMotionReference, BrowserMotionTask } from "../../../../shared/motion/browser-tools";
+import { motionEvidenceFramesPerSheet, motionPreviewFramesPerSheet } from "../../../../shared/motion/browser-tools";
 import type { Document } from "../../../../shared/contracts";
 import { prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
 import { drawMotionFrame } from "../../../../shared/motion/render";
@@ -12,10 +13,10 @@ async function sha256(bytes: ArrayBuffer) {
     return Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
-async function images(frames: readonly MotionReferenceFrame[], signal: AbortSignal) {
+async function images(frames: readonly MotionReferenceFrame[], signal: AbortSignal, size = motionEvidenceFramesPerSheet) {
     const results = [];
-    for (let index = 0; index < frames.length; index += 12) {
-        const sheet = await createReferenceSheet(frames.slice(index, index + 12), signal);
+    for (let index = 0; index < frames.length; index += size) {
+        const sheet = await createReferenceSheet(frames.slice(index, index + size), signal);
         const buffer = await sheet.arrayBuffer();
         if (buffer.byteLength > 600_000) throw new Error("A browser contact sheet exceeds its size limit.");
         const bytes = new Uint8Array(buffer);
@@ -29,7 +30,7 @@ async function images(frames: readonly MotionReferenceFrame[], signal: AbortSign
     return results;
 }
 
-async function captureReference(reference: Extract<BrowserMotionInput, { tool: "reference_capture" }>["reference"], signal: AbortSignal) {
+async function referenceFile(reference: BrowserMotionReference, signal: AbortSignal) {
     const response = await fetch(reference.url, { signal, credentials: "same-origin" });
     const max = 100 * 1024 * 1024;
     if (!response.ok || !response.body || Number(response.headers.get("content-length")) > max) {
@@ -46,7 +47,11 @@ async function captureReference(reference: Extract<BrowserMotionInput, { tool: "
     }));
     const bytes = await new Response(body).arrayBuffer();
     if (await sha256(bytes) !== reference.metadata.sha256) throw new Error("The selected reference file changed.");
-    const source = new Blob([bytes]);
+    return new Blob([bytes]);
+}
+
+async function captureReference(reference: BrowserMotionReference, signal: AbortSignal) {
+    const source = await referenceFile(reference, signal);
     const { interval } = reference.metadata;
     let frames: MotionReferenceFrame[];
     if (interval) {
@@ -74,9 +79,7 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
     const frames = [...new Set(scenes.flatMap(({ start_frame, end_frame }) => {
         const span = end_frame - start_frame - 1;
         const middle = start_frame + Math.floor(span / 2);
-        return [start_frame + Math.floor(span * 0.16), middle,
-            Math.min(end_frame - 1, middle + Math.max(1, Math.round(draft.fps / 12))),
-            start_frame + Math.floor(span * 0.86)];
+        return [start_frame + Math.floor(span * 0.16), middle, start_frame + Math.floor(span * 0.86)];
     }))]
         .sort((a, b) => a - b);
     if (!frames.length || frames.length > 32) throw new Error("The draft has no bounded motion preview.");
@@ -123,7 +126,8 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
             }
             samples.push({ requestedTime: time, sourceTime: time, image });
         }
-        return { frames, images: await images(samples, signal) };
+        return { frames, framesPerSheet: motionPreviewFramesPerSheet,
+            images: await images(samples, signal, motionPreviewFramesPerSheet) };
     } finally {
         for (const ready of assets.values()) ready.release();
         canvas.width = 0; canvas.height = 0;
@@ -131,7 +135,28 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
 }
 
 export async function runMotionBrowserInput(input: BrowserMotionInput, signal: AbortSignal) {
-    return input.tool === "reference_capture" ? captureReference(input.reference, signal) : renderPreview(input.document, signal);
+    if (input.tool === "reference_capture") return captureReference(input.reference, signal);
+    if (input.tool === "preview") return renderPreview(input.document, signal);
+    const { reference, interval, colors } = input;
+    const source = await referenceFile(reference, signal);
+    const { traceReferenceShapes } = await import("./reference-trace");
+    let vectors;
+    try {
+        vectors = await traceReferenceShapes(source, { interval, colors, highlights: true, frames: 60 }, signal);
+    } catch {
+        signal.throwIfAborted();
+        return { status: "approximation", bindingId: reference.bindingId };
+    }
+    const form = new FormData();
+    form.append("file", new Blob([JSON.stringify(vectors)], { type: "application/json" }), "liquid-vectors.json");
+    form.append("kind", "vectors");
+    form.append("provenance", JSON.stringify({ kind: "reference_derived", sourceId: reference.assetId,
+        startSeconds: interval.start, endSeconds: interval.end }));
+    const url = new URL(reference.url, location.origin);
+    const project = /^\/projects\/(\d+)\/assets\//.exec(url.pathname)?.[1];
+    if (!project || url.origin !== location.origin) throw new Error("The trace asset must belong to this project.");
+    const { id: assetId } = await api<{ id: string }>(`/projects/${project}/motion-assets`, form, "POST", signal);
+    return { status: "traced", bindingId: reference.bindingId, assetId };
 }
 
 export async function runNextMotionBrowserTask(runId: string, signal: AbortSignal) {

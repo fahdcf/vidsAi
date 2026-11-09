@@ -35,3 +35,14 @@ test("motion edits preserve untouched scenes and reject invalid plans", () => {
         { tool: "set_motion_timing", params: { id: "gravity", start_frame: 99, end_frame: 102 } },
     ]));
 });
+
+test("one graph layer cannot conceal an over-budget path", () => {
+    const commands = [{ op: "M", x: 0, y: 0 }, ...Array.from({ length: 1_000 }, () => ({ op: "L", x: 1, y: 1 }))];
+    const graph = { id: "graph", type: "graph", componentVersion: 1, start_frame: 0, end_frame: 90,
+        params: { layers: [{ id: "path", kind: "path", color: "primary", commands }] } };
+    assert.equal(motionSceneSchema.safeParse(graph).success, false);
+    graph.params.layers[0].commands = commands.slice(0, 96);
+    assert.equal(motionSceneSchema.safeParse(graph).success, true);
+    graph.params.layers = Array.from({ length: 5 }, (_, index) => ({ id: "path-" + index, kind: "path", color: "primary", commands: commands.slice(0, 96) }));
+    assert.equal(motionSceneSchema.safeParse(graph).success, false);
+});

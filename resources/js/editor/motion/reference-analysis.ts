@@ -4,7 +4,7 @@ type Bucket = { count: number; r: number; g: number; b: number };
 const bucketKey = (r: number, g: number, b: number) => (r >> 5) << 6 | (g >> 5) << 3 | b >> 5;
 const hex = (value: number) => Math.round(value).toString(16).padStart(2, "0");
 
-export async function analyzeReferenceFrames(frames: readonly MotionReferenceFrame[], signal: AbortSignal) {
+export async function analyzeReferenceFrames(frames: readonly MotionReferenceFrame[], signal: AbortSignal, colorful = false) {
     if (!frames.length || frames.length > 32) throw new Error("Reference analysis needs one to 32 frames.");
     const canvas = new OffscreenCanvas(32, 18);
     const context = canvas.getContext("2d", { willReadFrequently: true });
@@ -29,9 +29,12 @@ export async function analyzeReferenceFrames(frames: readonly MotionReferenceFra
             const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
             const index = bucketKey(r, g, b);
             bins[index]++;
-            const bucket = palette.get(index) ?? { count: 0, r: 0, g: 0, b: 0 };
-            bucket.count++; bucket.r += r; bucket.g += g; bucket.b += b;
-            palette.set(index, bucket);
+            const peak = Math.max(r, g, b);
+            if (!colorful || (peak >= 80 && peak - Math.min(r, g, b) >= 45)) {
+                const bucket = palette.get(index) ?? { count: 0, r: 0, g: 0, b: 0 };
+                bucket.count++; bucket.r += r; bucket.g += g; bucket.b += b;
+                palette.set(index, bucket);
+            }
             if (previous) spatial += Math.abs(r - previous.pixels[i]) + Math.abs(g - previous.pixels[i + 1]) + Math.abs(b - previous.pixels[i + 2]);
         }
         if (previous) {

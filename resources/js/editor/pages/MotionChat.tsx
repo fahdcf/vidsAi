@@ -4,10 +4,9 @@ import Icon from "../Icon";
 import { api } from "../api";
 import { isWorkingMotion, motionRunUrl, type MotionRunView } from "../motion/chat-api";
 import MotionProgress from "../motion/MotionProgress";
-import MotionPreview from "../motion/MotionPreview";
+import MotionPreview, { type MotionPreviewHandle } from "../motion/MotionPreview";
 import MotionStoryboard from "../motion/MotionStoryboard";
 import type { Document } from "@vidsai/contracts";
-import type { PlayerRef } from "@remotion/player";
 import { ReferencePicker, type MotionReferenceSelection } from "../motion/ReferencePicker";
 import { AudioPicker, type MotionAudioSelection } from "../motion/AudioPicker";
 import { uploadMotionReference } from "../motion/reference-storage";
@@ -42,7 +41,7 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
     const receipts = useRef<MotionUploadReceipts>({});
     const refresh = useRef<() => void>(() => {});
     const submitted = useRef<{ key: string; id: string } | null>(null);
-    const player = useRef<PlayerRef>(null);
+    const player = useRef<MotionPreviewHandle>(null);
     const composer = useRef<HTMLTextAreaElement>(null);
     const heading = useRef<HTMLHeadingElement>(null);
     const historyList = useRef<HTMLOListElement>(null);
@@ -380,7 +379,8 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
         <aside className="motion-chat-inspector">
             {run && !setup && <MotionProgress run={run} browserError={browserError} />}
             {draft && <MotionPreview draft={draft} playerRef={player} />}
-            <MotionStoryboard draft={draft} storyboard={run?.storyboard ?? null} canRevise={run?.status === "ready"}
+            <MotionStoryboard draft={draft} storyboard={run?.storyboard ?? null}
+                canRevise={run?.status === "ready" || Boolean(run?.draftApplied && run.editorAvailable)}
                 onPreview={(frame) => { player.current?.seekTo(frame); player.current?.play(); }}
                 onRevise={(id, index) => { setTarget({ id, index }); composer.current?.focus(); }} />
         </aside>

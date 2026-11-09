@@ -25,11 +25,12 @@ export async function openBrowserOutput(
     signal: AbortSignal,
     id: string = crypto.randomUUID(),
     onFinalizing?: () => Promise<void>,
+    videoBitrate: number = mp4Encoding.videoBitrate,
 ) {
     const storage = navigator.storage;
     if (!storage?.getDirectory) throw new Error("This browser cannot save a local export file.");
     const estimate = await storage.estimate().catch(() => ({} as StorageEstimate));
-    const bitsPerSecond = mp4Encoding.videoBitrate + (muted ? 0 : mp4Encoding.audioBitrate);
+    const bitsPerSecond = videoBitrate + (muted ? 0 : mp4Encoding.audioBitrate);
     const requiredBytes = Math.ceil(seconds * bitsPerSecond / 8) * 2 + 100 * 1024 * 1024;
     if (estimate.usage !== undefined && estimate.quota !== undefined &&
         estimate.quota - estimate.usage < requiredBytes) {

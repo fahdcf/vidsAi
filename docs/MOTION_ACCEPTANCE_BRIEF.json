@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "projectName": "VidsAI motion reel acceptance",
+  "format": "16:9",
+  "seconds": 15,
+  "fps": 30,
+  "reference": {
+    "file": "reference/original.mp4",
+    "sha256": "38855f33bc4a5599784b2883f90a445449b0507eb97e18d5ab562182a3f88ec8",
+    "interval": { "start": 0, "end": 15 },
+    "provenance": "User-supplied H.264 visual reference. Local browser samples and optional shape contours may be derived from it."
+  },
+  "comparison": {
+    "file": "output/rebuilt-pink-orange-cream.mp4",
+    "sha256": "1dc1dbb140c3e5d4f41ac14a70ad698be4343d5bdda09624d71239beb72dbbff",
+    "provenance": "Earlier reconstruction, used for visual comparison only."
+  },
+  "soundtrack": {
+    "file": "assets/soundtrack.m4a",
+    "sha256": "b5107c2d2181fcc9bb9165d600bba10df427b2dc66c22f08065bd65799f8973f",
+    "provenance": "Supplied source-derived soundtrack, explicitly selected as the project's audio attachment."
+  },
+  "palette": { "background": "#131014", "foreground": "#fff0d5", "primary": "#ff691f", "accent": "#ff2687", "muted": "#ffb68f" },
+  "scenes": [
+    { "type": "impact", "frames": [0, 60], "copy": ["I MAKE", "THINGS MOVE."], "landmark": "Orange dot lands, colored rings expand, the headline appears with MOVE. in cream." },
+    { "type": "kinetic_words", "frames": [60, 120], "copy": ["TIMING", "SPACING", "EASING", "FEEL."], "landmark": "Large masked word reveals against shifting warm colors and faint outlined patterns." },
+    { "type": "grid", "frames": [120, 180], "copy": [], "landmark": "One tile grows into a radial grid that morphs from squares to circles and back." },
+    { "type": "easing", "frames": [180, 240], "copy": ["EASING", "LINEAR", "EASE OUT", "CUSTOM"], "landmark": "A curve draws in and three dots compare easing speeds." },
+    { "type": "tunnel", "frames": [240, 311], "copy": [], "landmark": "Rotating hexagons recede into depth and reveal a particle sphere." },
+    { "type": "liquid", "frames": [311, 375], "copy": [], "landmark": "Pink-orange shapes merge and split, using editable reference-derived contours where the browser can isolate them." },
+    { "type": "identity", "frames": [375, 450], "copy": ["VIDSAI", "MOTION DESIGN / SHOWREEL", "MAKE THINGS MOVE"], "landmark": "The orange mark settles beside the VidsAI title and supporting copy." }
+  ],
+  "editableFields": ["scene copy", "typography", "palette", "timing", "pacing", "transition", "effect parameters"],
+  "brief": "Create an editable 15-second 16:9 VidsAI motion showreel matching the supplied reference and its pacing. At 30 FPS use exactly seven scenes with boundaries 0, 60, 120, 180, 240, 311, 375, and 450. Use these component types in order: impact, kinetic_words, grid, easing, tunnel, liquid, identity. The palette is dark ink #131014, cream #fff0d5, orange #ff691f, pink #ff2687, and peach #ffb68f. Use bold Archivo Black with restrained Space Mono details, safe margins, subtle grain and small framing marks. 1: Drop and squash an orange dot, then expand cream, peach and pink rings and show the exact headline I MAKE / THINGS MOVE. on two lines. Highlight the final word in cream. 2: Reveal the exact four words TIMING, SPACING, EASING, FEEL. one by one with big masked type and a subtle outlined background. 3: Grow a central tile into a radial grid that morphs from squares to circles and back. 4: Draw a Bezier curve and compare three moving dots labelled LINEAR, EASE OUT and CUSTOM under the heading EASING. 5: Enter a rotating hexagonal tunnel and reveal a particle sphere. 6: Match the source liquid movement near 10.35 to 12.50 seconds with editable vectors when the browser can trace them, and keep the shape deformation visible. 7: Finish with an orange mark and the exact copy VIDSAI, MOTION DESIGN / SHOWREEL, and MAKE THINGS MOVE. Keep the supplied soundtrack, avoid unexpected black frames, and keep the entire timeline editable."
+}

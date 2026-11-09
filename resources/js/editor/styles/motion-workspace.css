@@ -55,7 +55,9 @@ main:has(> .motion-chat) > .page-heading { width: min(100%, 1020px); margin-inli
 .motion-thinking { color: var(--accent); }
 .motion-progress details { color: var(--muted); font-size: 13px; }
 .motion-progress summary { cursor: pointer; }
-.motion-preview > :last-child { justify-self: center; background: #111113; border-radius: 9px; overflow: hidden; }
+.motion-preview > :nth-child(2) { justify-self: center; background: #111113; border-radius: 9px; overflow: hidden; }
+.motion-preview-transport { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.motion-preview-transport button { font-size: 12px; }
 .motion-storyboard { padding: 16px; display: grid; gap: 12px; }
 .motion-storyboard h2, .motion-storyboard p { margin: 0; }
 .motion-storyboard ol { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
@@ -78,6 +80,7 @@ main:has(> .motion-chat) > .page-heading { width: min(100%, 1020px); margin-inli
 .motion-review-panel nav button[aria-pressed=true] { color: var(--accent); background: var(--accent-soft); }
 .timeline-motion .media-thumb canvas, .project-cover .media-thumb canvas { width: 100%; height: 100%; object-fit: cover; }
 .motion-workflow-badge { color: var(--accent); }
+.motion-export-quality { width: auto; min-width: 104px; max-width: 148px; flex: 0 1 auto; font-size: 12px; }
 .motion-compare { padding: 16px; }
 .motion-compare summary { cursor: pointer; font-weight: 600; }
 .motion-compare-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }

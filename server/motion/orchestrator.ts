@@ -4,17 +4,18 @@ import { commit, document } from "../document";
 import { fail } from "../security";
 import { compileMotionPlan, motionPlanSchema } from "../../shared/motion/compile";
 import { motionRendererVersion } from "../../shared/motion/registry";
+import { motionSceneSchema } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
-import { captureSchema, previewSchema, evidenceImages, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
+import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import type { MotionAgentProgress } from "./agent-call";
 import { motionSkillManifest } from "./prompts";
 import { pendingMotionSetup } from "./setup";
 import { motionReference, saveMotionReferenceAnalysis } from "./references";
-import { observeReferenceSheet } from "./reference-observer";
+import { observeReferenceSheet, referenceObservationsSchema } from "./reference-observer";
 import {
     integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionDraftBlockers, motionStoryboardSchema,
     motionCritiqueSchema, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
@@ -53,6 +54,25 @@ function agentResult<T>(runId: string, name: string, schema: z.ZodType<T>): T {
     return schema.parse(result<{ value: unknown }>(runId, name).value);
 }
 
+async function cachedObservations(runId: string, step: MotionStep, kind: string, signal: AbortSignal,
+    read: () => Promise<ReferenceAnalysis["observations"]>) {
+    const cached = db.prepare("SELECT id FROM motion_artifacts WHERE run_id=? AND kind=? ORDER BY rowid DESC LIMIT 1")
+        .get(runId, kind) as { id: string } | undefined;
+    const previous = cached && motionArtifact(runId, cached.id);
+    if (previous) return referenceObservationsSchema.parse(JSON.parse(previous.body.toString("utf8"))).observations;
+    const observations = await read();
+    signal.throwIfAborted();
+    db.transaction(() => {
+        const current = motionRun(runId);
+        if (current && isActiveMotionRun(current) && db.prepare(
+            "SELECT 1 FROM motion_steps WHERE id=? AND status='running' AND lease_token=? AND lease_expires>?",
+        ).get(step.id, step.lease_token, Date.now())) {
+            writeMotionArtifact(runId, kind, Buffer.from(JSON.stringify({ observations })));
+        }
+    }).immediate();
+    return observations;
+}
+
 const stepNames = (round: number) => ({
     assemble: round === 1 ? "assemble" : `assemble:${round}`,
     preview: `preview:${round}`,
@@ -77,9 +97,29 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         add({ name: "design", lane: "provider", dependencies: ["director"] });
         if (!done("director")) return;
         const storyboard = agentResult(id, "director", motionStoryboardSchema);
+        const reference = run.reference_binding_id ? agentResult(id, "reference_analysis", referenceAnalysisSchema) : null;
+        const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
+        const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
+        let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
+        if (liquid && reference?.interval && storyboard.look === "reference") {
+            const { fps, total_frames } = motionSnapshot(run);
+            const source = reference.interval;
+            if (Math.abs(source.end - source.start - total_frames / fps) <= 1 / fps &&
+                (liquid.end_frame - liquid.start_frame) / fps <= 6) {
+                const interval = { start: source.start + liquid.start_frame / fps,
+                    end: Math.min(source.end, source.start + liquid.end_frame / fps) };
+                const overlap = trace ? Math.min(interval.end, trace.interval.end) - Math.max(interval.start, trace.interval.start) : 0;
+                if (interval.end > interval.start && (!trace || overlap >= (interval.end - interval.start) / 2)) {
+                    trace = { interval, colors: [] };
+                }
+            }
+        }
+        const traceName = liquid && trace ? `trace:${liquid.id}` : null;
+        if (traceName) add({ name: traceName, lane: "browser", dependencies: ["director"], input: trace });
         const engineers = storyboard.scenes.map((target) => {
             const name = `engineer:${target.id}`;
-            add({ name, lane: "provider", dependencies: ["copy", "design"], input: { sceneId: target.id } });
+            const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
+            add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency], input: { sceneId: target.id } });
             return name;
         });
         add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
@@ -98,7 +138,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             ({ issues, unresolved } = agentResult(id, critique, motionCritiqueSchema));
             dependency = critique;
         }
-        if (issues.length && round < maxRounds) {
+        if (issues.length && round < maxRounds && !run.target_scene_id) {
             const sceneIds = [...new Set(issues.map(({ sceneId }) => sceneId))];
             for (const sceneId of sceneIds) {
                 add({ name: repair(sceneId), lane: "provider", dependencies: [dependency], input: { round, sceneId } });
@@ -121,13 +161,14 @@ export function readyMotionSteps(runId: string) {
 }
 
 export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMotionInput {
-    if (step.name === "reference_capture") {
+    if (step.name === "reference_capture" || step.name.startsWith("trace:")) {
         const reference = motionReference(run.project_id);
         if (reference?.bindingId !== run.reference_binding_id) throw new Error("The reference was replaced.");
         if (!reference?.available) throw new Error("Relink the reference file.");
-        return { tool: "reference_capture", reference: {
-            bindingId: reference.bindingId, url: reference.url, metadata: referenceMetadata.parse(reference.metadata),
-        } };
+        const selected = { bindingId: reference.bindingId, assetId: reference.assetId, url: reference.url,
+            metadata: referenceMetadata.parse(reference.metadata) };
+        if (step.name === "reference_capture") return { tool: "reference_capture", reference: selected };
+        return { tool: "trace", reference: selected, ...traceRequestSchema.parse(json(step.input, null)) };
     }
     const { round = 1 } = json<{ round?: number }>(step.input, {});
     const { document } = result<BuildArtifact>(run.id, stepNames(round).assemble);
@@ -233,9 +274,9 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         if (selected?.bindingId !== capture.bindingId || !selected.available) throw new Error("Relink the reference file.");
         const metadata = z.object({ kind: referenceAnalysisSchema.shape.kind, interval: referenceAnalysisSchema.shape.interval })
             .parse(selected.metadata);
-        const images = imageBytes(capture.images);
-        const { observations } = await observeReferenceSheet(images, capture.measured.timestamps, budget, signal, onProgress);
-        const value = await runReferenceAnalyst(context, { ...metadata, measured: capture.measured, observations }, images);
+        const observations = await cachedObservations(id, step, "reference_observations", signal, async () =>
+            (await observeReferenceSheet(imageBytes(capture.images), capture.measured.timestamps, budget, signal, onProgress)).observations);
+        const value = await runReferenceAnalyst(context, { ...metadata, measured: capture.measured, observations });
         return { value, summary: `Analyzed ${capture.measured.timestamps.length} reference samples.` };
     }
     if (step.name === "director") {
@@ -252,8 +293,17 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
     }
     if (step.name.startsWith("engineer:")) {
         const target = storyboard().scenes.find(({ id }) => id === input.sceneId)!;
+        const traceName = `trace:${target.id}`;
+        const traced = motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
+            ? traceResultSchema.parse(result(id, traceName)) : null;
+        const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
-            agentResult(id, "design", motionDesignSchema));
+            agentResult(id, "design", motionDesignSchema), asset ? [asset] : []);
+        if (asset && value.value.scene.type === "liquid") {
+            const { scene } = value.value;
+            value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],
+                params: { mode: "vectors", assetId: asset.id, style: "liquid_gradient" } });
+        }
         return { value, summary: value.value.decision };
     }
     if (step.name === stepNames(round).assemble) {
@@ -282,7 +332,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const draft = build(round).document;
         if (!draft) throw new Error("The draft needs repairs before review.");
         const value = await runMotionCritic(context, draft,
-            { frames: preview.frames, images: imageBytes(preview.images) }, reference(), run.target_scene_id ?? undefined);
+            { ...preview, images: imageBytes(preview.images) }, reference(), run.target_scene_id ?? undefined,
+            (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read));
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("repair:")) {
@@ -452,7 +503,8 @@ export function retryMotionRun(runId: string, accountId: number) {
     return db.transaction(() => {
         const run = ownedMotionRun(runId, accountId);
         if (isActiveMotionRun(run)) return run;
-        if (run.status === "ready" || motionSteps(runId).some(({ name, status }) => name === "publish" && status === "done") ||
+        const steps = motionSteps(runId);
+        if (run.status === "ready" || steps.some(({ name, status }) => name === "publish" && status === "done") ||
             db.prepare("SELECT 1 FROM motion_feedback WHERE run_id=? AND replacement_run_id IS NOT NULL").get(runId)) {
             fail(409, "Start a new revision for this run.");
         }
@@ -463,6 +515,14 @@ export function retryMotionRun(runId: string, accountId: number) {
         if (!p || document(p).revision !== run.starting_revision ||
             (run.reference_binding_id && motionReference(run.project_id)?.bindingId !== run.reference_binding_id)) {
             fail(409, "Start a new revision with the current project and reference.");
+        }
+        const failedCritique = steps.find(({ name, status }) => name.startsWith("critique:") && status === "failed");
+        if (failedCritique) {
+            const preview = steps.find(({ name, status }) => name === failedCritique.name.replace("critique:", "preview:") && status === "done");
+            const artifact = preview?.result_id && motionArtifact(runId, preview.result_id);
+            if (preview && artifact && !previewSchema.parse(JSON.parse(artifact.body.toString("utf8"))).framesPerSheet) {
+                db.prepare("UPDATE motion_steps SET status='pending',result_id=NULL,started_at=NULL WHERE id=?").run(preview.id);
+            }
         }
         db.prepare("UPDATE motion_steps SET status='pending',error=NULL,lease_token=NULL,lease_expires=NULL WHERE run_id=? AND status<>'done'")
             .run(runId);

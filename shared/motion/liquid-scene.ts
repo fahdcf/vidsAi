@@ -73,9 +73,6 @@ function chooseShapes(vectors: MotionVectors, t: number) {
 export function drawLiquid({ ctx, scene, width, height }: Frame, t: number, assets: Readonly<Record<string, MotionVectors>> = {}) {
     const { params, palette } = scene;
     const unit = Math.min(width, height);
-    const step = unit * 0.08;
-    for (let x = width * 0.1; x < width * 0.9; x += step) line(ctx, x, height * 0.17, x, height * 0.83, alpha(palette.foreground, 0.05));
-    for (let y = height * 0.17; y < height * 0.83; y += step) line(ctx, width * 0.1, y, width * 0.9, y, alpha(palette.foreground, 0.05));
     if (params.mode === "vectors") {
         const vectors = assets[params.assetId];
         if (!vectors) throw new Error("The liquid vector asset is not ready.");
@@ -83,14 +80,32 @@ export function drawLiquid({ ctx, scene, width, height }: Frame, t: number, asse
         const h = w * 9 / 16;
         ctx.save();
         ctx.translate((width - w) / 2, (height - h) / 2);
-        for (const shape of chooseShapes(vectors, t)) {
+        const shapes = chooseShapes(vectors, t);
+        const gradient = params.style === "liquid_gradient" ? ctx.createLinearGradient(w * 0.28, h * 0.23, w * 0.73, h * 0.8) : null;
+        if (gradient) {
+            gradient.addColorStop(0, palette.primary);
+            gradient.addColorStop(0.55, palette.accent);
+            gradient.addColorStop(1, palette.muted);
+            ctx.save();
+            ctx.translate(unit * 0.012, unit * 0.017);
+            ctx.fillStyle = alpha(palette.accent, 0.48);
+            for (const shape of shapes.filter(({ fill }) => fill !== "foreground")) {
+                drawMotionPath(ctx, shape.path, w, h);
+                ctx.fill("evenodd");
+            }
+            ctx.restore();
+        }
+        for (const shape of shapes) {
             drawMotionPath(ctx, shape.path, w, h);
-            ctx.fillStyle = alpha(palette[shape.fill], shape.opacity);
+            ctx.fillStyle = gradient && shape.fill !== "foreground" ? gradient : alpha(palette[shape.fill], shape.opacity);
             ctx.fill("evenodd");
         }
         ctx.restore();
         return;
     }
+    const step = unit * 0.08;
+    for (let x = width * 0.1; x < width * 0.9; x += step) line(ctx, x, height * 0.17, x, height * 0.83, alpha(palette.foreground, 0.035));
+    for (let y = height * 0.17; y < height * 0.83; y += step) line(ctx, width * 0.1, y, width * 0.9, y, alpha(palette.foreground, 0.035));
     const data = field(t, params.blobs, scene.seed);
     const body = contourPath(traceContours(data.values, data.w, data.h, 0.59), unit * 1.5, unit * 1.12);
     const core = contourPath(traceContours(data.values, data.w, data.h, 1.12), unit * 1.5, unit * 1.12);

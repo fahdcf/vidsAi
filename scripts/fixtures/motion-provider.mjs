@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -17,18 +17,25 @@ export function mockMotionProviders(graphic) {
         let value;
         switch (role) {
             case "observe": {
-                const times = JSON.parse(prompt.match(/at (\[.*?\]) seconds/)[1]);
+                const times = JSON.parse(prompt.match(/seconds: (\[.*?\])/)[1]);
                 assert.ok(message.length > 1);
                 value = { observations: [{ time: times[0], copy: null, layout: "Centered shapes", confidence: 0.8 }] };
                 break;
             }
-            case "reference-analyst":
-                assert.ok(message.length > 1);
-                value = { scenes: [{ title: "Intro", timing: artifact.interval, timingSource: "estimated", copy: null,
-                    palette: ["#ee6633"], shapes: [], motionLandmarks: [], easing: null, transition: null,
-                    evidence: [{ time: artifact.measured.timestamps[0], confidence: 0.8 }], supportedType: "impact",
-                    approximation: null, confidence: 0.8 }], unresolved: [] };
+            case "reference-analyst": {
+                assert.ok(artifact.observations.length > 0);
+                const observed = { title: "Intro", type: "impact", end: null, sample: 0,
+                    palette: ["#ee6633"], motion: null, approximation: null };
+                const { start, end } = artifact.interval;
+                const liquid = analystRecognizesLiquid && graphic.some(({ type }) => type === "liquid") && start < 10.35 && end > 12.5;
+                value = { scenes: liquid ? [
+                    { ...observed, end: 10.35 },
+                    { ...observed, title: "Liquid shapes", end: 12.5, type: "liquid",
+                        palette: ["#ee426e", "#e35a9d", "#f487ad", "#2353ec"] },
+                    { ...observed, title: "Closing card", type: "identity" },
+                ] : [observed], unresolved: [] };
                 break;
+            }
             case "director":
                 assert.ok(artifact.reference.observations.length);
                 value = { title: "Motion study", summary: "A staged motion study.", look: "reference",
@@ -36,21 +43,27 @@ export function mockMotionProviders(graphic) {
                 if (stages.filter((stage) => stage === "director").length === 1) value = null;
                 break;
             case "copywriter":
-                value = { decision: "Kept the opening and closing copy.", scenes: graphic.map((scene) =>
-                    ({ id: scene.id, copy: scene.params.headline ?? scene.params.title ?? scene.params.heading ?? scene.params.words?.join(" ") ?? "" })) };
+                value = { decision: "Kept the opening and closing copy.", scenes: graphic.map(({ type, params }) => {
+                    const parts = type === "impact" ? params.headline.split("\n") : type === "kinetic_words" ? params.words
+                        : type === "easing" ? [params.heading, ...params.labels] : type === "identity" ? [params.title, params.detail, params.tag] : [];
+                    return { copy: parts.join(" "), parts };
+                }) };
                 break;
             case "visual-designer":
-                value = { decision: "Kept the warm palette.", scenes: graphic.map(({ id, palette, layout, font }) => ({ id, palette, layout, font })) };
+                value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }) => ({ palette, layout, font })) };
                 break;
-            case "motion-engineer":
-                value = { decision: "Built the planned scene.", approximation: null, scene: graphic.find(({ id }) => id === artifact.target.id) };
+            case "motion-engineer": {
+                const { params, finish, seed, motionRate, transitionIn } = graphic.find(({ id }) => id === artifact.target.id);
+                value = { decision: "Built the planned scene.", approximation: null, scene: { params, finish, seed, motionRate, transitionIn } };
                 assert.equal(typeof artifact.approvedCopy, "string");
                 break;
+            }
             case "visual-critic":
-                assert.ok(message.length > 1 && artifact.frames.length >= graphic.length * 2);
+                assert.equal(typeof message, "string");
+                assert.ok(artifact.scenes.some(({ samples }) => samples.length));
                 value = { decision: "Reviewed the browser frames.", scores: { readability: 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
                     issues: stages.filter((stage) => stage === "visual-critic").length === 1
-                        ? [{ sceneId: graphic[0].id, frame: artifact.frames[0], priority: "polish", issue: "Impact settles early", repair: "Move impact later" }]
+                        ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame, priority: "polish", issue: "Impact settles early", repair: "Move impact later" }]
                         : [], unresolved: [] };
                 break;
             case "repair":

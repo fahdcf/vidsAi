@@ -10,6 +10,14 @@ const models: Record<string, { images: boolean; thinking: boolean }> = {
     "deepseek-ai/deepseek-v4.1-flash": { images: false, thinking: false },
     "google/gemma-4-31b-it": { images: true, thinking: false },
 };
+const superVl = "nvidia/nemotron-3.5-super-vl-120b-a12b";
+const ultra = "nvidia/nemotron-3-ultra-550b-a55b";
+
+export function motionReasoningEffort(model: string, mode: "deep" | "off", concise = false): "none" | "low" | "medium" | "high" | undefined {
+    if (model === superVl) return mode === "off" ? "none" : concise ? "low" : "high";
+    if (model === ultra) return mode === "off" ? "none" : concise ? "medium" : "high";
+    return undefined;
+}
 
 export const motionRoleMode = {
     director: "deep",
@@ -25,6 +33,9 @@ type MotionChatRequest<T> = {
     prompt: string;
     images?: readonly { mime: "image/jpeg" | "image/png"; bytes: Uint8Array }[];
     mode: "deep" | "off";
+    conciseReasoning?: boolean;
+    constrainedOutput?: boolean;
+    temperature?: number;
     schema: z.ZodType<T>;
     stream?: boolean;
     maxTokens: number;
@@ -38,6 +49,7 @@ export class MotionProviderError extends Error {
     constructor(
         readonly code: "unsupported" | "http" | "invalid_output" | "transport" | "first_token_timeout" | "request_timeout",
         message: string, readonly status?: number, readonly retryAfterMs?: number,
+        readonly artifact?: { reason: "token_limit" | "incomplete" | "unfinished_reasoning" | "json" | "schema"; totalTokens?: number },
     ) {
         super(message);
     }
@@ -133,6 +145,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         ? setTimeout(() => firstToken.abort(new DOMException("Provider first token timed out.", "TimeoutError")), request.firstTokenTimeoutMs)
         : undefined;
     const stream = request.stream === true;
+    const reasoningEffort = motionReasoningEffort(provider.model, request.mode, request.conciseReasoning);
     let firstTokenMs: number | undefined;
     let reasoningObserved = false;
     let content = "";
@@ -148,8 +161,17 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
                 model: provider.model,
                 messages: [{ role: "system", content: request.instruction }, { role: "user", content: prompt }],
                 max_tokens: request.maxTokens,
+                temperature: request.temperature,
                 stream,
-                ...(options.thinking ? { chat_template_kwargs: { enable_thinking: request.mode === "deep" } } : {}),
+                ...(reasoningEffort ? { reasoning_effort: reasoningEffort }
+                    : options.thinking ? { chat_template_kwargs: { enable_thinking: request.mode === "deep" } } : {}),
+                ...(provider.model === ultra && request.mode === "deep" && request.conciseReasoning
+                    ? { chat_template_kwargs: { enable_thinking: true, medium_effort: true,
+                        reasoning_budget: Math.min(1400, request.maxTokens - 1) } } : {}),
+                ...(provider.model === superVl && stream ? { stream_options: { include_usage: true } } : {}),
+                ...(provider.model === superVl && request.constrainedOutput ? { response_format: { type: "json_schema",
+                    json_schema: { name: "motion_artifact", strict: true,
+                        schema: z.toJSONSchema(request.schema, { io: "input", unrepresentable: "any" }) } } } : {}),
             }),
         });
         if (!response.ok) {
@@ -185,21 +207,24 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     } finally {
         clearTimeout(firstTokenTimer);
     }
+    const invalidArtifact = (reason: NonNullable<MotionProviderError["artifact"]>["reason"]) =>
+        new MotionProviderError("invalid_output", "The model did not return a valid final JSON artifact.",
+            undefined, undefined, { reason, totalTokens: usage?.total_tokens });
     if (finishReason && finishReason !== "stop") {
-        throw new MotionProviderError("invalid_output", "The provider did not finish its final answer.");
+        throw invalidArtifact(finishReason === "length" ? "token_limit" : "incomplete");
     }
     content = content.trimStart();
     while (content.startsWith("<think>")) {
         const end = content.indexOf("</think>", "<think>".length);
-        if (end < 0) throw new MotionProviderError("invalid_output", "The provider returned unfinished reasoning.");
+        if (end < 0) throw invalidArtifact("unfinished_reasoning");
         reasoningObserved ||= content.slice("<think>".length, end).trim().length > 0;
         content = content.slice(end + "</think>".length).trimStart();
     }
     reasoningObserved ||= (usage?.completion_tokens_details?.reasoning_tokens ?? 0) > 0;
-    try {
-        const value = request.schema.parse(JSON.parse(content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g, "")));
-        return { value, requestedMode: request.mode, reasoningObserved, firstTokenMs, latencyMs: Math.round(performance.now() - started), usage };
-    } catch {
-        throw new MotionProviderError("invalid_output", "The model did not return a valid final JSON artifact.");
-    }
+    let parsed: unknown;
+    try { parsed = JSON.parse(content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g, "")); }
+    catch { throw invalidArtifact("json"); }
+    const checked = request.schema.safeParse(parsed);
+    if (!checked.success) throw invalidArtifact("schema");
+    return { value: checked.data, requestedMode: request.mode, reasoningObserved, firstTokenMs, latencyMs: Math.round(performance.now() - started), usage };
 }

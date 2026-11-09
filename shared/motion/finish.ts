@@ -57,8 +57,16 @@ export function finishMotionFrame({ ctx, scene, width, height, frame, fps }: Mot
     ctx.font = `${Math.max(9, unit * 0.014)}px "VidsAI Space Mono", Consolas, monospace`;
     ctx.fillStyle = color;
     ctx.textBaseline = "top";
-    ctx.fillText(scene.type.replaceAll("_", " ").toUpperCase(), margin + arm * 1.5, margin);
+    const name = scene.type.replaceAll("_", " ").toUpperCase();
+    ctx.fillText("MOTION REEL", margin + arm * 1.5, margin);
+    ctx.fillText(name, margin + arm * 1.5, height - margin - unit * 0.022);
     ctx.textAlign = "right";
     ctx.fillText(`${Math.floor((scene.start_frame + frame) / fps).toString().padStart(2, "0")}:${((scene.start_frame + frame) % fps).toString().padStart(2, "0")}`, width - margin - arm * 1.5, margin);
+    const progress = frame / Math.max(1, scene.end_frame - scene.start_frame - 1);
+    const y = height - margin - unit * 0.011;
+    const right = width - margin - arm * 1.5;
+    const length = unit * 0.22;
+    line(ctx, right - length, y, right, y, alpha(scene.palette.foreground, 0.25));
+    line(ctx, right - length, y, right - length + length * progress, y, color);
     ctx.restore();
 }

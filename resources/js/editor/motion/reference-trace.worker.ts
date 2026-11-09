@@ -38,6 +38,7 @@ async function trace({ options, frames }: TraceWorkerRequest) {
         try { ctx.drawImage(image, 0, 0, width, height); } finally { image.close(); }
         const pixels = ctx.getImageData(0, 0, width, height).data;
         const field = new Float32Array(width * height);
+        const light = options.highlights ? new Float32Array(field.length) : null;
         for (let y = 1; y < height - 1; y++) {
             for (let x = 1; x < width - 1; x++) {
                 const i = y * width + x;
@@ -46,14 +47,23 @@ async function trace({ options, frames }: TraceWorkerRequest) {
                     distance = Math.min(distance, Math.hypot(pixels[i * 4] - r, pixels[i * 4 + 1] - g, pixels[i * 4 + 2] - b));
                 }
                 field[i] = 1 - distance / (255 * Math.sqrt(3));
+                if (light && field[i] > 1 - options.tolerance) {
+                    light[i] = (pixels[i * 4] * 0.2126 + pixels[i * 4 + 1] * 0.7152 + pixels[i * 4 + 2] * 0.0722) / 255;
+                }
             }
         }
         const paths = traceContours(field, width, height, 1 - options.tolerance)
             .map((loop) => ({ loop, area: area(loop) })).filter(({ area }) => area >= 0.002 && area <= 0.65)
             .sort((a, b) => b.area - a.area).slice(0, 4);
-        if (paths.length) traced.push({ at, shapes: paths.map(({ loop }, index) => ({
-            path: smoothPath(loop), fill: index === 0 ? "primary" : "accent",
-        })) });
+        if (paths.length) {
+            const accents = light ? traceContours(light, width, height, 0.62)
+                .map((loop) => ({ loop, area: area(loop) })).filter(({ area }) => area >= 0.002 && area <= paths[0].area * 0.58)
+                .sort((a, b) => b.area - a.area).slice(0, 2) : [];
+            traced.push({ at, shapes: [
+                ...paths.map(({ loop }, index) => ({ path: smoothPath(loop), fill: index === 0 ? "primary" : "accent" })),
+                ...accents.map(({ loop }) => ({ path: smoothPath(loop), fill: "foreground", opacity: 0.32 })),
+            ] });
+        }
     }
     if (traced.length < Math.max(2, Math.ceil(frames.length / 4))) {
         throw new Error("The selected colors did not isolate enough shapes. Adjust the sample interval or colors.");

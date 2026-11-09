@@ -1,4 +1,4 @@
-import { getClipSequenceTiming, type Document } from "@vidsai/contracts";
+import { getClipSequenceTiming, normalizeDocument, type Document } from "@vidsai/contracts";
 import { motionSceneCost } from "../../../../shared/motion/registry";
 
 export const browserRenderProfile = {
@@ -33,7 +33,48 @@ export const motionRenderProfile = {
     maxGeometry: 1000,
     maxParticles: 1000,
     maxVectorAssets: 2,
+    maxAssets: 12,
+    maxAssetBytes: 20 * 1024 * 1024,
 } as const;
+
+export const browserExportQualities = {
+    standard: { name: "720p", longEdge: 1280, shortEdge: 720, maxFps: 30, videoBitrate: 4_000_000 },
+    motion1080: { name: "1080p · 30 FPS", longEdge: 1920, shortEdge: 1080, maxFps: 30, videoBitrate: 9_000_000 },
+    motion1080smooth: { name: "1080p · 60 FPS", longEdge: 1920, shortEdge: 1080, maxFps: 60, videoBitrate: 14_000_000 },
+} as const;
+export type BrowserExportQuality = keyof typeof browserExportQualities;
+
+export function supportsHighMotionQuality(draft: Document) {
+    const { width, height } = draft;
+    return draft.metadata.workflow === "motion_graphics" && draft.tracks.motion_graphics.length > 0 &&
+        draft.tracks.video.length === 0 && draft.fps === 30 && draft.total_frames <= 30 * motionRenderProfile.maxSeconds &&
+        Math.min(width, height) === 1080 && Math.max(width, height) <= 1920;
+}
+
+export function prepareBrowserExportTimeline(draft: Document, quality: BrowserExportQuality = "standard") {
+    if (quality === "standard") return draft;
+    if (!supportsHighMotionQuality(draft)) {
+        throw new Error("1080p motion export needs a 30 FPS motion-only project of 15 seconds or less. Select 720p for this project.");
+    }
+    if (quality !== "motion1080smooth") return draft;
+    const span = <T extends { start_frame: number; end_frame: number }>(item: T) =>
+        ({ ...item, start_frame: item.start_frame * 2, end_frame: item.end_frame * 2 });
+    return normalizeDocument({
+        ...draft,
+        fps: 60,
+        total_frames: draft.total_frames * 2,
+        tracks: {
+            ...draft.tracks,
+            audio: draft.tracks.audio.map((track) => ({ ...span(track),
+                fade_in_frames: track.fade_in_frames * 2, fade_out_frames: track.fade_out_frames * 2 })),
+            overlays: draft.tracks.overlays.map(span),
+            subtitles: draft.tracks.subtitles.map((caption) => ({ ...span(caption), words: caption.words?.map(span) })),
+            motion_graphics: draft.tracks.motion_graphics.map((scene) => ({ ...span(scene),
+                transitionIn: scene.transitionIn ? { ...scene.transitionIn, frames: scene.transitionIn.frames * 2 } : undefined })),
+        },
+        metadata: { ...draft.metadata, motion_cues: draft.metadata.motion_cues?.map((cue) => ({ ...cue, frame: cue.frame * 2 })) },
+    });
+}
 
 export type BrowserRenderIssue = {
     code:
@@ -72,8 +113,8 @@ function peakActive(spans: Span[]) {
     return peak;
 }
 
-export function browserExportCanvas({ width, height }: Pick<Document, "width" | "height">) {
-    const p = browserRenderProfile;
+export function browserExportCanvas({ width, height }: Pick<Document, "width" | "height">, quality: BrowserExportQuality = "standard") {
+    const p = browserExportQualities[quality];
     const maxWidth = width > height ? p.longEdge : p.shortEdge;
     const maxHeight = height > width ? p.longEdge : p.shortEdge;
     const maxScale = Math.min(1, maxWidth / width, maxHeight / height);
@@ -92,8 +133,10 @@ export function browserExportCanvas({ width, height }: Pick<Document, "width" | 
 export function validateBrowserRenderProfile(
     snapshot: Document,
     canvas: Pick<Document, "width" | "height"> = snapshot,
+    quality: BrowserExportQuality = "standard",
 ): BrowserRenderIssue[] {
     const p = browserRenderProfile;
+    const q = browserExportQualities[quality];
     const { fps, total_frames: frames, tracks } = snapshot;
     const { width, height } = canvas;
     const issues: BrowserRenderIssue[] = [];
@@ -109,12 +152,19 @@ export function validateBrowserRenderProfile(
     limit(!tracks.video.length && !motion.length, "empty_timeline", "Add a video clip, image, or motion scene before exporting.");
     limit(frames > p.maxFrames || frames > fps * p.maxSeconds, "duration",
         `Shorten the timeline to ${p.maxSeconds} seconds or less.`);
-    limit(fps > p.maxFps, "frame_rate", `Use a frame rate of ${p.maxFps} FPS or less.`);
+    limit(fps > q.maxFps, "frame_rate", `Use a frame rate of ${q.maxFps} FPS or less.`);
+    if (quality !== "standard") {
+        const valid = snapshot.metadata.workflow === "motion_graphics" && motion.length && tracks.video.length === 0 &&
+            fps === q.maxFps && Math.min(width, height) === 1080 && Math.max(width, height) <= 1920;
+        limit(!valid, "motion_complexity", "Choose 720p for mixed-media or unsupported motion timelines.");
+    }
     if (motion.length) {
         const m = motionRenderProfile;
         limit(frames > fps * m.maxSeconds, "duration", `Keep motion exports at ${m.maxSeconds} seconds or less.`);
         limit(motion.length > m.maxScenes || peakActive(motion) > m.maxActiveScenes, "motion_complexity",
             "Use up to eight motion scenes and no more than two overlapping scenes.");
+        limit(new Set(motion.flatMap(({ assets }) => assets.map(({ id }) => id))).size > m.maxAssets, "motion_complexity",
+            `Use no more than ${m.maxAssets} project assets inside motion scenes.`);
         const costs = motion.map((scene) => ({ scene, cost: motionSceneCost(scene) }));
         const overloaded = motion.some(({ start_frame: frame }) => {
             const totals = costs.filter(({ scene }) => scene.start_frame <= frame && frame < scene.end_frame)
@@ -127,8 +177,8 @@ export function validateBrowserRenderProfile(
         });
         limit(overloaded, "motion_complexity", "Reduce overlapping shapes or particles to fit the browser motion limit.");
     }
-    const maxWidth = width > height ? p.longEdge : p.shortEdge;
-    const maxHeight = height > width ? p.longEdge : p.shortEdge;
+    const maxWidth = width > height ? q.longEdge : q.shortEdge;
+    const maxHeight = height > width ? q.longEdge : q.shortEdge;
     limit(width > maxWidth || height > maxHeight, "canvas",
         `Choose an output of ${maxWidth}×${maxHeight} or smaller for this orientation.`);
     limit(tracks.video.length > p.maxClips, "clip_count",

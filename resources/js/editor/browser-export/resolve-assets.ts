@@ -1,6 +1,6 @@
 import { documentSchema, type Document } from "@vidsai/contracts";
 import { inspectBrowserMedia, type BrowserMediaKind } from "./inspect-media";
-import { browserRenderProfile, BrowserRenderProfileError, validateBrowserRenderProfile } from "./profile";
+import { browserRenderProfile, BrowserRenderProfileError, motionRenderProfile, validateBrowserRenderProfile, type BrowserExportQuality } from "./profile";
 import { exportDirectoryName, removeExportDirectory } from "./storage";
 import { motionAssetByteLimit, parseMotionVectors, type MotionVectors } from "../../../../shared/motion/assets";
 
@@ -42,10 +42,11 @@ export async function resolveBrowserAssets(
     signal: AbortSignal,
     id: string = crypto.randomUUID(),
     canvas: Pick<Document, "width" | "height"> = snapshot,
+    quality: BrowserExportQuality = "standard",
 ) {
     signal.throwIfAborted();
     const document = documentSchema.parse(structuredClone(snapshot)) as Document;
-    const issues = validateBrowserRenderProfile(document, canvas);
+    const issues = validateBrowserRenderProfile(document, canvas, quality);
     if (issues.length) throw new BrowserRenderProfileError(issues);
 
     const local = new Map<string, Blob | null>();
@@ -55,6 +56,7 @@ export async function resolveBrowserAssets(
     const counted = new Set<Blob>();
     const motionAssets: Record<string, { kind: "font" | "image"; file: Blob } | { kind: "vectors"; data: MotionVectors }> = {};
     let totalBytes = 0;
+    let motionBytes = 0;
     let root: FileSystemDirectoryHandle | undefined;
     let directory: FileSystemDirectoryHandle | undefined;
     const directoryName = exportDirectoryName("media", id);
@@ -189,6 +191,8 @@ export async function resolveBrowserAssets(
                 if (!file.size || file.size > motionAssetByteLimit[ref.kind]) {
                     throw new Error(`Motion asset for ${scene.id} is too large or empty.`);
                 }
+                motionBytes += file.size;
+                if (motionBytes > motionRenderProfile.maxAssetBytes) throw new Error("Motion scene assets must total 20 MiB or less.");
                 if (!counted.has(file)) {
                     checkBytes(file.size);
                     totalBytes += file.size;

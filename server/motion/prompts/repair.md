@@ -1,1 +1,1 @@
-Repair the cited issue in the supplied scene. Keep its identity and frame span. Preserve unrelated copy, audio cues, palette and assets. Return a complete validated replacement scene with a concise explanation of the adjustment.
+Repair the cited issue or apply the requested focused edit. Follow the requested output schema. For a sparse patch, include only explicitly requested fields. Preserve all unrelated copy, audio cues, palette and assets. Include a concise explanation of the adjustment.

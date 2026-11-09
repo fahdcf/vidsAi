@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Document } from "@vidsai/contracts";
 import type { BrowserExportJob } from "./job-store";
 import type { BrowserExportProgress } from "./jobs";
+import type { BrowserExportQuality } from "./profile";
 
 export function useBrowserExport(accountId: string, projectId: string) {
     const [job, setJob] = useState<BrowserExportJob>();
@@ -47,7 +48,7 @@ export function useBrowserExport(accountId: string, projectId: string) {
         };
     }, [accountId, projectId]);
 
-    async function start(getSnapshot: () => Promise<Document>, retry: boolean) {
+    async function start(getSnapshot: () => Promise<Document>, retry: boolean, quality: BrowserExportQuality = "standard") {
         if (controller.current) return;
         const abort = new AbortController();
         controller.current = abort;
@@ -60,7 +61,7 @@ export function useBrowserExport(accountId: string, projectId: string) {
             const jobs = await import("./jobs");
             const result = await jobs.runBrowserExport(scope, snapshot, {}, abort.signal, (update) => {
                 if (mounted.current) setStatus(update);
-            });
+            }, retry ? job?.quality ?? "standard" : quality);
             if (mounted.current) {
                 setJob(result.job);
                 showFile(result.file);

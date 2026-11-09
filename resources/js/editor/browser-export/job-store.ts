@@ -1,4 +1,5 @@
 import type { Document } from "@vidsai/contracts";
+import type { BrowserExportQuality } from "./profile";
 
 export type BrowserExportScope = { accountId: string; projectId: string };
 export type BrowserExportState =
@@ -8,6 +9,7 @@ export type BrowserExportState =
 export type BrowserExportJob = BrowserExportScope & {
     id: string;
     snapshot: Document;
+    quality?: BrowserExportQuality;
     state: BrowserExportState;
     error?: string;
     output?: { id: string; revision: number; size: number };

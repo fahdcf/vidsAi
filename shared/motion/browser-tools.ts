@@ -1,12 +1,16 @@
 import { z } from "zod";
 import type { Document } from "../contracts";
 import { referenceAnalysisSchema, referenceIntervalSchema } from "./reference";
+import { motionColor } from "./schema";
 
-export const evidenceImages = z.array(z.object({
+export const motionEvidenceFramesPerSheet = 12;
+export const motionPreviewFramesPerSheet = 6;
+const evidenceImage = z.object({
     mime: z.literal("image/jpeg"),
     base64: z.base64().min(4).max(800_000),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
-}).strict()).min(1).max(3);
+}).strict();
+export const evidenceImages = z.array(evidenceImage).min(1).max(3);
 export const captureSchema = z.object({
     bindingId: z.uuid(),
     measured: referenceAnalysisSchema.shape.measured,
@@ -14,7 +18,16 @@ export const captureSchema = z.object({
 }).strict();
 export const previewSchema = z.object({
     frames: z.array(z.number().int().nonnegative().max(7199)).min(1).max(32),
-    images: evidenceImages,
+    framesPerSheet: z.literal(motionPreviewFramesPerSheet).optional(),
+    images: z.array(evidenceImage).min(1).max(4),
+}).strict();
+export const traceResultSchema = z.discriminatedUnion("status", [
+    z.object({ status: z.literal("traced"), bindingId: z.uuid(), assetId: z.uuid() }).strict(),
+    z.object({ status: z.literal("approximation"), bindingId: z.uuid() }).strict(),
+]);
+export const traceRequestSchema = z.object({
+    interval: referenceIntervalSchema,
+    colors: z.array(motionColor).max(6),
 }).strict();
 export const referenceMetadata = z.object({
     kind: referenceAnalysisSchema.shape.kind,
@@ -23,10 +36,14 @@ export const referenceMetadata = z.object({
     height: z.number().int().positive().max(4096),
     sha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).strict();
+export type BrowserMotionReference = { bindingId: string; assetId: string; url: string; metadata: z.infer<typeof referenceMetadata> };
 export type BrowserMotionInput = {
     tool: "reference_capture";
-    reference: { bindingId: string; url: string; metadata: z.infer<typeof referenceMetadata> };
-} | {
+    reference: BrowserMotionReference;
+} | ({
+    tool: "trace";
+    reference: BrowserMotionReference;
+} & z.infer<typeof traceRequestSchema>) | {
     tool: "preview";
     document: Document;
 };

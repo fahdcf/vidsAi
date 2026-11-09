@@ -6,6 +6,7 @@ export function motionStageName(name: string) {
     switch (name.split(":")[0]) {
         case "reference_capture": return "Browser reference sampling";
         case "reference_analysis": return "Reference analyst";
+        case "trace": return "Browser shape tracing";
         case "director": return "Motion director";
         case "copy": return "Copywriter";
         case "design": return "Visual designer";

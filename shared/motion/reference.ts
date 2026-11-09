@@ -86,7 +86,3 @@ export const referenceAnalysisSchema = z.object({
 });
 
 export type ReferenceAnalysis = z.infer<typeof referenceAnalysisSchema>;
-export const referenceSceneEstimateSchema = z.object({
-    scenes: z.array(scene).min(1).max(8),
-    unresolved: z.array(text).max(8),
-}).strict();
