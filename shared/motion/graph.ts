@@ -54,12 +54,10 @@ export type MotionGraphNode = z.infer<typeof leafSchema> | {
     mask?: z.infer<typeof vectorPath>;
 };
 
+const groupFields = z.object({ ...common, kind: z.literal("group"), mask: vectorPath.optional() }).strict();
 const nodeSchema: z.ZodType<MotionGraphNode> = z.lazy(() => z.union([
     leafSchema,
-    z.object({
-        ...common, kind: z.literal("group"), children: z.array(nodeSchema).min(1).max(16),
-        mask: vectorPath.optional(),
-    }).strict(),
+    groupFields.extend({ children: z.array(nodeSchema).min(1).max(16) }),
 ]));
 
 const MAX_GRAPH_NODES = 24;
@@ -98,6 +96,50 @@ export const graphLayers = z.unknown().superRefine((value, ctx) => {
         }
     }
 }).pipe(z.array(nodeSchema).min(1).max(MAX_GRAPH_NODES));
+
+export const motionGraphVersion = 1;
+export const graphComposition = z.object({ version: z.literal(motionGraphVersion).optional(), layers: graphLayers }).strict();
+const versionedGraph = graphComposition.required({ version: true });
+const flatRecord = z.object({
+    parentId: common.id.nullable(),
+    order: z.number().int().min(0).max(MAX_GRAPH_NODES - 1),
+    node: z.union([leafSchema, groupFields]),
+}).strict();
+
+export const graphAuthoring = z.object({
+    version: z.literal(motionGraphVersion),
+    nodes: z.array(flatRecord).min(1).max(MAX_GRAPH_NODES),
+}).strict().transform<z.input<typeof versionedGraph>>(({ version, nodes }, ctx) => {
+    const byId = new Map(nodes.map((record) => [record.node.id, record]));
+    if (byId.size !== nodes.length) {
+        ctx.addIssue({ code: "custom", path: ["nodes"], message: "Graph node IDs must be unique." });
+        return z.NEVER;
+    }
+    const byParent = new Map<string | null, typeof nodes>();
+    for (const [index, record] of nodes.entries()) {
+        const { node, parentId, order } = record;
+        const ancestors = new Set([node.id]);
+        for (let ancestorId = parentId; ancestorId !== null;) {
+            const ancestor = byId.get(ancestorId);
+            if (!ancestor || ancestor.node.kind !== "group" || ancestors.has(ancestorId) || ancestors.size >= MAX_GRAPH_DEPTH) {
+                ctx.addIssue({ code: "custom", path: ["nodes", index, "parentId"], message: "Use a valid group parent without a cycle or excessive nesting." });
+                return z.NEVER;
+            }
+            ancestors.add(ancestorId);
+            ancestorId = ancestor.parentId;
+        }
+        const siblings = byParent.get(parentId) ?? [];
+        if (siblings.some((sibling) => sibling.order === order)) {
+            ctx.addIssue({ code: "custom", path: ["nodes", index, "order"], message: "Sibling layer order must be unique." });
+            return z.NEVER;
+        }
+        siblings.push(record);
+        byParent.set(parentId, siblings);
+    }
+    const layersFor = (parent: string | null): MotionGraphNode[] => (byParent.get(parent) ?? []).sort((a, b) => a.order - b.order)
+        .map(({ node }) => node.kind === "group" ? { ...node, children: layersFor(node.id) } : node);
+    return { version, layers: layersFor(null) };
+}).pipe(versionedGraph);
 
 export function graphGeometryCost(nodes: readonly MotionGraphNode[]): number {
     return nodes.reduce((count, node) => count + 1 +

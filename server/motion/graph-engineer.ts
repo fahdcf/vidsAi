@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { motionComponentParams } from "../../shared/motion/schema";
+import { graphAuthoring, motionGraphVersion } from "../../shared/motion/graph";
 
 const color = z.enum(["background", "foreground", "primary", "accent", "muted"]);
 const placement = {
@@ -23,7 +23,7 @@ export const graphEngineerSchema = z.object({
 }).strict();
 
 export function compileEngineerGraph(layers: readonly Layer[], timing?: { start: number; end: number; cueFrames: ReadonlySet<number> }) {
-    return motionComponentParams.graph.parse({ layers: layers.map(({ x, y, reveal, audioCueFrame, ...shape }, index) => {
+    return graphAuthoring.parse({ version: motionGraphVersion, nodes: layers.map(({ x, y, reveal, audioCueFrame, ...shape }, index) => {
         if (audioCueFrame !== undefined) {
             if (!timing || reveal !== undefined || !timing.cueFrames.has(audioCueFrame) ||
                 audioCueFrame < timing.start || audioCueFrame >= timing.end - 1) {
@@ -32,9 +32,9 @@ export function compileEngineerGraph(layers: readonly Layer[], timing?: { start:
             reveal = (audioCueFrame - timing.start) / (timing.end - timing.start - 1);
         }
         const animated = reveal !== undefined;
-        return { ...shape, id: `layer-${index + 1}`, transform: { x, y: animated ? y + 0.035 : y, opacity: animated ? 0 : 1 },
+        return { parentId: null, order: index, node: { ...shape, id: `layer-${index + 1}`, transform: { x, y: animated ? y + 0.035 : y, opacity: animated ? 0 : 1 },
             keyframes: reveal === undefined ? [] : [...(reveal > 0 ? [{ at: reveal, opacity: 0 }] : []),
-                { at: Math.min(1, reveal + 0.12), y, opacity: 1, ease: "ease_out" }] };
+                { at: Math.min(1, reveal + 0.12), y, opacity: 1, ease: "ease_out" }] } };
     }) });
 }
 

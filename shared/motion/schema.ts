@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { graphLayers } from "./graph";
+import { graphComposition } from "./graph";
 
 export const motionSceneId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 export const motionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -132,7 +132,7 @@ const effectParams = {
         tag: z.string().trim().max(80).default(""),
         showMark: z.boolean().default(true),
     }).strict(),
-    graph: z.object({ layers: graphLayers }).strict(),
+    graph: graphComposition,
 };
 
 export const motionComponentParams = effectParams;

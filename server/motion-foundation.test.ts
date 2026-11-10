@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compileMotionPlan } from "../shared/motion/compile";
+import { graphAuthoring, graphComposition, motionGraphVersion } from "../shared/motion/graph";
 import { motionComponentTypes, describeMotionComponent, motionSceneCost } from "../shared/motion/registry";
 import { motionSceneSchema } from "../shared/motion/schema";
 import { applyOperations } from "../shared/editing-core";
@@ -45,4 +46,29 @@ test("one graph layer cannot conceal an over-budget path", () => {
     assert.equal(motionSceneSchema.safeParse(graph).success, true);
     graph.params.layers = Array.from({ length: 5 }, (_, index) => ({ id: "path-" + index, kind: "path", color: "primary", commands: commands.slice(0, 96) }));
     assert.equal(motionSceneSchema.safeParse(graph).success, false);
+});
+
+test("flat graph records compile in paint order with local transforms and group clipping", () => {
+    const mask = [{ op: "M", x: -0.2, y: -0.2 }, { op: "L", x: 0.2, y: -0.2 }, { op: "L", x: 0, y: 0.2 }, { op: "Z" }];
+    const text = { id: "label", kind: "text", text: "START FREE", size: 0.08, transform: { x: 0.1, y: 0 } };
+    const panel = { id: "panel", kind: "rect", width: 0.3, height: 0.15, color: "primary" };
+    const group = { id: "button", kind: "group", transform: { x: 0.75, y: 0.7, rotation: 5 }, mask };
+    const nodes = [{ parentId: "button", order: 1, node: text }, { parentId: null, order: 0, node: group },
+        { parentId: "button", order: 0, node: panel }];
+    const authored = graphAuthoring.parse({ version: motionGraphVersion, nodes });
+    const saved = graphComposition.parse({ layers: [{ ...group, children: [panel, text] }] });
+    assert.deepEqual(authored.layers, saved.layers);
+    assert.equal(saved.version, undefined);
+    assert.deepEqual(graphComposition.parse(JSON.parse(JSON.stringify(authored))), authored);
+    assert.equal(graphComposition.safeParse({ ...authored, version: 2 }).success, false);
+    assert.equal(graphAuthoring.safeParse({ version: 2, nodes }).success, false);
+    for (const invalid of [
+        [...nodes, nodes[0]],
+        [{ ...nodes[0], parentId: "missing" }, ...nodes.slice(1)],
+        [{ ...nodes[0], parentId: "panel" }, ...nodes.slice(1)],
+        [{ ...nodes[0], order: 0 }, ...nodes.slice(1)],
+        [nodes[0], { ...nodes[1], parentId: "another" }, nodes[2],
+            { parentId: "button", order: 3, node: { id: "another", kind: "group" } }],
+        [{ parentId: null, order: 0, node: group }],
+    ]) assert.equal(graphAuthoring.safeParse({ version: motionGraphVersion, nodes: invalid }).success, false);
 });
