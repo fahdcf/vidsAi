@@ -66,7 +66,7 @@ try {
     if (process.argv.includes("--reference-audio")) {
         await context.addCookies([{ name: "vidsai_session", value: a.token, url: target }]);
         const setupPage = await context.newPage();
-        async function createWithReference(file, muted = false, replacement = null) {
+        async function createWithReference(file, muted = false, replacement = null, speech = false) {
             await setupPage.goto(target + "/create/motion-graphics");
             await setupPage.getByLabel("Project name").fill("Reference audio verification");
             await setupPage.getByLabel("Video brief").fill("Animate the reference with its original timing.");
@@ -76,11 +76,12 @@ try {
             await setupPage.getByRole("spinbutton", { name: "Start (seconds)" }).fill("1.25");
             await setupPage.getByRole("spinbutton", { name: "End (seconds)" }).fill("6.25");
             if (muted) await setupPage.getByRole("checkbox", { name: /Mute reference audio/ }).check();
+            if (replacement || speech) await setupPage.getByText("Logo and soundtrack").click();
             if (replacement) {
-                await setupPage.getByText("Logo and soundtrack").click();
                 await setupPage.getByLabel("Soundtrack (optional)").setInputFiles(replacement);
                 await setupPage.getByLabel("Soundtrack preview").waitFor();
             }
+            if (speech) await setupPage.getByRole("checkbox", { name: /Analyze speech timing/ }).check();
             await setupPage.getByRole("button", { name: "Start creating" }).click();
             await setupPage.waitForURL("**/projects/*/motion?run=*");
             return new URL(setupPage.url()).searchParams.get("run");
@@ -135,6 +136,37 @@ try {
             const replaced = document(project(motionRun(replacedRun).project_id));
             assert.equal(replaced.metadata.motion_audio_source, "uploaded");
             assert.equal(replaced.tracks.audio.length, 1);
+        }
+        if (process.argv.includes("--speech-timing")) {
+            const speechRun = await createWithReference(source, false, null, true);
+            await setupPage.getByText("Audio from reference", { exact: true }).waitFor();
+            const originalFetch = globalThis.fetch;
+            const endpoint = process.env.DEEPGRAM_BASE_URL;
+            const key = process.env.DEEPGRAM_API_KEY;
+            process.env.DEEPGRAM_BASE_URL = "https://speech.fixture.invalid/v1/listen";
+            process.env.DEEPGRAM_API_KEY = "fixture-only";
+            let requested = false;
+            globalThis.fetch = async (url, init) => {
+                if (!String(url).startsWith("https://speech.fixture.invalid/")) return originalFetch(url, init);
+                assert.equal(init.headers["Content-Type"], "audio/wav");
+                assert.ok(init.signal && init.body.length > 44);
+                requested = true;
+                const words = [{ start: 0.5, end: 0.75, confidence: 0.98 }, { start: 0.8, end: 1, confidence: 0.93 },
+                    { start: 1.6, end: 2, confidence: 0.95 }];
+                return Response.json({ results: { channels: [{ alternatives: [{ transcript: "fixture", words }] }] } });
+            };
+            try { await new MotionOrchestrator().tick(speechRun); }
+            finally {
+                globalThis.fetch = originalFetch;
+                if (endpoint === undefined) delete process.env.DEEPGRAM_BASE_URL; else process.env.DEEPGRAM_BASE_URL = endpoint;
+                if (key === undefined) delete process.env.DEEPGRAM_API_KEY; else process.env.DEEPGRAM_API_KEY = key;
+            }
+            assert.ok(requested);
+            const step = motionSteps(speechRun).find(({ name }) => name === "audio_speech");
+            const artifact = JSON.parse(motionArtifact(speechRun, step.result_id).body.toString());
+            assert.deepEqual(artifact.spans, [{ startFrame: 15, endFrame: 30, confidence: 0.93 },
+                { startFrame: 48, endFrame: 60, confidence: 0.95 }]);
+            console.log("Opt-in speech timing accepted the owned WAV and saved two phrase spans.");
         }
         if (process.argv.includes("--audio-export")) {
             const projectId = motionRun(audioRun).project_id;

@@ -13,6 +13,7 @@ import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budge
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
 import { sceneReferenceEvidence } from "./reference-segments";
+import { motionSpeechTiming, type SpeechSpan } from "./speech";
 import { motionSkillManifest } from "./prompts";
 import { pendingMotionSetup } from "./setup";
 import { motionReference, saveMotionReferenceAnalysis } from "./references";
@@ -90,11 +91,15 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         add({ name: "revise", lane: "provider" });
         add({ name: "assemble", lane: "local", dependencies: ["revise"], input: { round: 1 } });
     } else {
+        const speech = motionSnapshot(run).metadata.motion_speech_requested;
+        if (speech) add({ name: "audio_speech", lane: "provider" });
         if (run.reference_binding_id) {
             add({ name: "reference_capture", lane: "browser" });
             add({ name: "reference_analysis", lane: "provider", dependencies: ["reference_capture"] });
         }
-        add({ name: "director", lane: "provider", dependencies: run.reference_binding_id ? ["reference_analysis"] : [] });
+        add({ name: "director", lane: "provider", dependencies: [
+            ...(run.reference_binding_id ? ["reference_analysis"] : []), ...(speech ? ["audio_speech"] : []),
+        ] });
         add({ name: "copy", lane: "provider", dependencies: ["director"] });
         if (!done("director")) return;
         const storyboard = agentResult(id, "director", motionStoryboardSchema);
@@ -280,7 +285,14 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         ).get(step.id, step.lease_token, Date.now())) return;
         appendMotionEvent(id, "provider_progress", { step: step.name, ...data });
     };
-    const context = { brief: run.brief, document: motionSnapshot(run), budget, signal, onProgress };
+    const snapshot = motionSnapshot(run);
+    const speechTiming = snapshot.metadata.motion_speech_requested && motionSteps(id).some(({ name, status }) => name === "audio_speech" && status === "done")
+        ? result<{ spans: SpeechSpan[] }>(id, "audio_speech").spans : undefined;
+    const context = { brief: run.brief, document: snapshot, budget, signal, onProgress, speechTiming };
+    if (step.name === "audio_speech") {
+        const { spans, summary } = await motionSpeechTiming(snapshot, budget, signal);
+        return { value: { spans }, summary };
+    }
     const input = json<{ round?: number; sceneId?: string; issues?: string[]; reviewUnavailable?: boolean }>(step.input, {});
     const round = input.round ?? 1;
     const reference = (): ReferenceAnalysis | null => {

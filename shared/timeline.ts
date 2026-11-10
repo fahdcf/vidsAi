@@ -134,6 +134,7 @@ export interface EditStateMetadata {
   workflow?: ProjectWorkflow;
   motion_cues?: MotionCue[];
   motion_audio_analysis?: MotionAudioAnalysis;
+  motion_speech_requested?: boolean;
   motion_audio_source?: "reference" | "uploaded" | "silent" | "muted";
   motion_generation?: MotionGeneration;
   platform: Platform;

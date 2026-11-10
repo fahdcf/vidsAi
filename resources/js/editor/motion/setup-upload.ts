@@ -6,7 +6,8 @@ import { referenceAudioConversionVersion, type motionAssetProvenance } from "../
 import type { z } from "zod";
 import { analyzeMotionAudio, extractReferenceAudio } from "./audio-analysis";
 
-export type MotionSetupRequirements = { reference: boolean; audio: boolean; logo: boolean; referenceAudio?: "auto" | "muted" };
+export type MotionSetupRequirements = { reference: boolean; audio: boolean; logo: boolean;
+    referenceAudio?: "auto" | "muted"; speechTiming?: boolean };
 export type MotionSetupFiles = { reference: MotionReferenceSelection | null; audio: MotionAudioSelection | null; logo: File | null; muteReferenceAudio?: boolean };
 export type MotionUploadProgress = { name: string; fraction: number | null };
 export type MotionUploadReceipts = {

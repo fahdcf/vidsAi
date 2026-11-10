@@ -17,6 +17,7 @@ export type MotionCreateInput = {
     audio: MotionAudioSelection | null;
     logo: File | null;
     muteReferenceAudio?: boolean;
+    speechTiming?: boolean;
 };
 
 export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput) => Promise<void> }) {
@@ -28,6 +29,7 @@ export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput
     const [reference, setReference] = useState<MotionReferenceSelection | null>(null);
     const [audio, setAudio] = useState<MotionAudioSelection | null>(null);
     const [muteReferenceAudio, setMuteReferenceAudio] = useState(false);
+    const [speechTiming, setSpeechTiming] = useState(false);
     const [logo, setLogo] = useState<File | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
@@ -42,7 +44,8 @@ export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput
         }
         setBusy(true);
         try {
-            await submit({ name: name.trim(), prompt: prompt.trim(), format, seconds, reference: mode === "reference" ? reference : null, audio, logo, muteReferenceAudio });
+            await submit({ name: name.trim(), prompt: prompt.trim(), format, seconds, reference: mode === "reference" ? reference : null,
+                audio, logo, muteReferenceAudio, speechTiming });
         } catch (error) {
             setError(error instanceof Error ? error.message : "The motion project could not be started.");
         } finally {
@@ -94,6 +97,9 @@ export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput
                         <label>Logo<input type="file" accept=".png,.jpg,.jpeg"
                             onChange={(event) => setLogo(event.currentTarget.files?.[0] ?? null)} /></label>
                         <AudioPicker key={seconds} seconds={seconds} onChange={setAudio} disabled={busy} />
+                        {(audio || (mode === "reference" && reference?.kind === "video" && !muteReferenceAudio)) &&
+                            <label><input type="checkbox" checked={speechTiming} onChange={(event) => setSpeechTiming(event.currentTarget.checked)} />
+                                Analyze speech timing with the configured transcription service</label>}
                     </details>
                     {error && <p className="notice warning" role="alert">{error}</p>}
                     <footer className="motion-create-foot">
@@ -123,6 +129,7 @@ export default function MotionCreate() {
         const { name, prompt, format, seconds, reference, audio, logo } = input;
         const attachments: MotionSetupRequirements = { reference: Boolean(reference), audio: Boolean(audio), logo: Boolean(logo) };
         if (reference?.kind === "video" && !audio) attachments.referenceAudio = input.muteReferenceAudio ? "muted" : "auto";
+        if (input.speechTiming && (audio || attachments.referenceAudio === "auto")) attachments.speechTiming = true;
         const key = JSON.stringify({ name, prompt, format, seconds, attachments });
         if (request.current?.key !== key) request.current = { key, id: crypto.randomUUID() };
         const result = await api<{ projectId: number; id: string; name: string; pendingSetup: MotionSetupRequirements | null; redirect: string }>(

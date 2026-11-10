@@ -12,7 +12,9 @@ import { appendMotionEvent, createMotionRun, motionRun, ownedMotionRun } from ".
 
 const requirements = z.object({ reference: z.boolean(), audio: z.boolean(), logo: z.boolean(),
     referenceAudio: z.enum(["auto", "muted"]).optional(),
-}).strict().refine((value) => !value.referenceAudio || (value.reference && !value.audio));
+    speechTiming: z.boolean().optional(),
+}).strict().refine((value) => (!value.referenceAudio || (value.reference && !value.audio)) &&
+    (!value.speechTiming || value.audio || value.referenceAudio === "auto"));
 const createInput = motionProjectInput.extend({ attachments: requirements });
 const finishInput = z.object({
     referenceBindingId: z.uuid().nullable(),
@@ -114,6 +116,7 @@ export function finalizeMotionSetup(runId: string, accountId: number, raw: unkno
                 snapshot.metadata.motion_audio_analysis = input.audio.analysis;
             }
             snapshot.metadata.motion_audio_source = fromReference ? "reference" : "uploaded";
+            if (required.speechTiming) snapshot.metadata.motion_speech_requested = true;
         }
         if (input.referenceAudio) snapshot.metadata.motion_audio_source = input.referenceAudio;
         const ready = normalizeDocument(snapshot);

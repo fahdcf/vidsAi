@@ -9,9 +9,10 @@ export async function request(
     init: RequestInit = {},
     timeout = 35000,
 ) {
+    const deadline = AbortSignal.timeout(timeout);
     const response = await fetch(url, {
         ...init,
-        signal: AbortSignal.timeout(timeout),
+        signal: init.signal ? AbortSignal.any([init.signal, deadline]) : deadline,
     });
     if (!response.ok)
         throw new Error(`Provider request failed (HTTP ${response.status})`);
@@ -76,11 +77,12 @@ export async function modelJson(
     }
     throw new Error("All configured language models failed. Please retry.");
 }
-export async function transcribe(filename: string) {
+export async function transcribe(filename: string, options: { mime?: string; signal?: AbortSignal; timeoutMs?: number; maxAttempts?: number } = {}) {
     for (const key of [
         process.env.DEEPGRAM_API_KEY,
         process.env.DEEPGRAM_FALLBACK_API_KEY,
-    ].filter(Boolean)) {
+    ].filter(Boolean).slice(0, options.maxAttempts ?? 2)) {
+        options.signal?.throwIfAborted();
         try {
             const response = await request(
                 (process.env.DEEPGRAM_BASE_URL ||
@@ -90,13 +92,14 @@ export async function transcribe(filename: string) {
                     method: "POST",
                     headers: {
                         Authorization: `Token ${key}`,
-                        "Content-Type": filename.endsWith(".wav")
+                        "Content-Type": options.mime ?? (filename.endsWith(".wav")
                             ? "audio/wav"
-                            : "audio/mpeg",
+                            : "audio/mpeg"),
                     },
                     body: fs.readFileSync(filename),
+                    signal: options.signal,
                 },
-                120000,
+                options.timeoutMs ?? 120000,
             );
             const data = (await response.json()) as any;
             const alternative = data.results?.channels?.[0]?.alternatives?.[0];
@@ -106,6 +109,7 @@ export async function transcribe(filename: string) {
                     words: alternative.words,
                 };
         } catch {
+            options.signal?.throwIfAborted();
             /* Try the separately configured backup key. */
         }
     }

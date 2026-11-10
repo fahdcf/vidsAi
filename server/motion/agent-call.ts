@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { SpeechSpan } from "./speech";
 import type { Document } from "../../shared/contracts";
 import { MotionBudgetError, type ModelReservation, type MotionModelBudget } from "./budget";
 import { buildMotionPrompt, type MotionPromptRole } from "./prompts";
@@ -12,6 +13,7 @@ export type MotionAgentContext = {
     budget: MotionModelBudget;
     signal: AbortSignal;
     onProgress?: MotionAgentProgress;
+    speechTiming?: readonly SpeechSpan[];
 };
 export type MotionVisionImage = { mime: "image/jpeg" | "image/png"; bytes: Uint8Array };
 export class MotionAgentUnavailable extends Error {}

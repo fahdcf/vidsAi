@@ -7,6 +7,7 @@ export function motionStageName(name: string) {
         case "reference_capture": return "Browser reference sampling";
         case "reference_detail": return "Detailed reference frames";
         case "reference_analysis": return "Reference analyst";
+        case "audio_speech": return "Soundtrack speech timing";
         case "trace": return "Browser shape tracing";
         case "director": return "Motion director";
         case "copy": return "Copywriter";

@@ -188,6 +188,7 @@ export function runMotionDirector(context: MotionAgentContext, reference: Refere
             return { type, name, description };
         }),
         audioCues: context.document.metadata.motion_cues ?? [],
+        speechTiming: context.speechTiming,
     }, motionStoryboardSchema, {
         validate: ({ scenes }) => {
             if (scenes.at(-1)?.end_frame !== context.document.total_frames) throw new Error("Storyboard duration is incorrect.");
@@ -311,6 +312,7 @@ export async function runMotionEngineer(
         try {
             const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
+                speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
                 referenceFrames: describeReferenceFrames(details),
                 layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Use only the palette role names for colors.",
             }, graphEngineerSchema, {
@@ -345,6 +347,7 @@ export async function runMotionEngineer(
         target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
         referenceFrames: describeReferenceFrames(details),
         audioCues: context.document.metadata.motion_cues ?? [],
+        speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
     }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
         validate: ({ scene }) => { buildScene(scene); },
         images: details.map(({ image }) => image),
