@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "recordedOn": "2026-11-10",
+  "references": [
+    {
+      "id": "abstract-reel",
+      "sha256": "38855f33bc4a5599784b2883f90a445449b0507eb97e18d5ab562182a3f88ec8",
+      "source": { "width": 1920, "height": 1080, "fps": 60, "interval": [0, 15] },
+      "output": { "width": 1920, "height": 1080, "fps": 60, "seconds": 15, "soundtrack": "source" },
+      "palette": { "background": "#131014", "foreground": "#fff0d5", "primary": "#ff691f", "accent": "#ff2687", "secondary": "#ffb68f" },
+      "scenes": [
+        { "interval": [0, 2], "copy": ["I MAKE", "THINGS MOVE."], "objects": ["dot", "rings", "headline"], "hierarchy": "Centered headline after impact", "motion": "Dot drops and rings expand" },
+        { "interval": [2, 4], "copy": ["TIMING", "SPACING", "EASING", "FEEL."], "objects": ["display words", "text mask"], "hierarchy": "One foreground word at a time", "motion": "Sequential masked word reveals" },
+        { "interval": [4, 6], "copy": [], "objects": ["radial grid"], "hierarchy": "Grid centered in frame", "motion": "Squares morph into circles and back" },
+        { "interval": [6, 8], "copy": ["LINEAR", "EASE OUT", "CUSTOM"], "objects": ["Bézier curve", "three labeled dots"], "hierarchy": "Curve and labels are readable together", "motion": "Curve draws and dots move with distinct easing" },
+        { "interval": [8, 10.35], "copy": [], "objects": ["hexagonal tunnel", "particle sphere"], "hierarchy": "Centered depth cue", "motion": "Rotate through tunnel into the sphere" },
+        { "interval": [10.35, 12.5], "copy": [], "objects": ["liquid contours", "colored highlights"], "hierarchy": "Large organic silhouette", "motion": "Continuous colored contour deformation" },
+        { "interval": [12.5, 15], "copy": ["VIDSAI", "MOTION DESIGN / SHOWREEL", "MAKE THINGS MOVE"], "objects": ["brand mark", "wordmark", "supporting text"], "hierarchy": "Wordmark dominates supporting copy", "motion": "Reveal and hold the identity" }
+      ]
+    },
+    {
+      "id": "dark-product-promo",
+      "sha256": "94758d8ec21d81d216db6ba33602fc935669c8d322d5f0b1adca12b50f6b4939",
+      "source": { "width": 1280, "height": 720, "fps": 30, "interval": [0, 14.966666666666667] },
+      "output": { "width": 1280, "height": 720, "fps": 30, "seconds": 15, "soundtrack": "source" },
+      "palette": { "background": "near black", "foreground": "white", "primary": "red", "status": "green" },
+      "sceneTimes": "Estimated from saved reference observations. Inspect transition frames before timing acceptance.",
+      "scenes": [
+        { "interval": [0, 2.48], "copy": ["Paste a YouTube video.", "Get every word."], "objects": ["play icon", "headline", "soft red glow"], "hierarchy": "Centered headline and small play icon", "motion": "Icon reveal followed by headline reveal" },
+        { "interval": [2.48, 5.6], "copy": ["Get transcript"], "objects": ["URL input", "CTA", "timestamped transcript rows"], "hierarchy": "Horizontal controls above transcript panel", "motion": "URL and button enter, then rows appear in sequence" },
+        { "interval": [5.6, 8.08], "copy": ["Videos, channels and playlists.", "Videos", "Channels", "Playlists"], "objects": ["headline", "three labeled icon cards"], "hierarchy": "Headline above three equal cards", "motion": "Staggered card entrances" },
+        { "interval": [8.08, 9.95], "copy": ["No captions? No problem."], "objects": ["headline", "waveform panel"], "hierarchy": "Left text and right waveform", "motion": "Waveform animates within its panel" },
+        { "interval": [9.95, 12.45], "copy": ["Clean transcripts, ready for any AI workflow."], "objects": ["headline", "code panel", "green completion indicator"], "hierarchy": "Left headline and right panel", "motion": "Progressive text and completed state" },
+        { "interval": [12.45, 14.966666666666667], "copy": ["youtubetranscript.dev", "Join 10,000+ users.", "Start free"], "objects": ["brand mark", "wordmark", "supporting text", "CTA"], "hierarchy": "Centered brand above supporting copy and red CTA", "motion": "Reveal and hold all call-to-action elements" }
+      ]
+    }
+  ]
+}

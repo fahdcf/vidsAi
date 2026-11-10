@@ -27,6 +27,9 @@ const statusText = {
     ready: "Draft ready", failed: "Needs attention", cancelled: "Stopped",
 };
 
+const reviewText = { pending: "Awaiting visual review", passed: "Visual review passed",
+    issues: "Visual review found issues", unavailable: "Automated visual review unavailable" };
+
 export default function MotionProgress({ run, browserError }: { run: MotionRunView; browserError: string }) {
     const [now, setNow] = useState(Date.now());
     const current = run.stages.filter(({ status }) => status === "running");
@@ -54,6 +57,17 @@ export default function MotionProgress({ run, browserError }: { run: MotionRunVi
         </ul>}
         {run.status === "waiting_for_browser" && <p className="muted">Keep this project open while your browser samples or renders frames.</p>}
         {browserError && <p className="notice warning" role="alert">{browserError}</p>}
+        {run.quality && <div className="motion-review-findings">
+            <p>{run.quality.generation === "incomplete" && run.quality.review === "pending" ? "Draft incomplete"
+                : run.quality.review === "passed" && run.targetSceneId ? "Scene review passed" : reviewText[run.quality.review]}</p>
+            {run.quality.findings.length > 0 && <ul aria-label="Visual review findings">
+                {run.quality.findings.map((finding, index) => <li key={index}>{finding}</li>)}
+            </ul>}
+            {run.quality.approximations.length > 0 && <details>
+                <summary>Scene approximations</summary>
+                <ul>{run.quality.approximations.map(({ sceneId, description }) => <li key={sceneId}>{description}</li>)}</ul>
+            </details>}
+        </div>}
         {run.stages.length > 0 && <details>
             <summary>All planned steps</summary>
             <ol>{run.stages.map(({ name, status, error }) => <li key={name}>

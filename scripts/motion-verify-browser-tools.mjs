@@ -147,6 +147,34 @@ try {
     await page.route(base + "/__motion_tool", (r) => r.fulfill({ contentType: "text/html",
         body: '<!doctype html><meta name="csrf-token" content="' + a.csrf + '"><title>Motion tools</title>' }));
     await page.goto(base + "/__motion_tool");
+    if (process.argv.includes("--quality-fixtures")) {
+        const checks = await page.evaluate(async () => {
+            const { motionQualityCases } = await import("/scripts/fixtures/motion-quality-cases.ts");
+            const { drawMotionFrame } = await import("/shared/motion/render.ts");
+            const canvas = new OffscreenCanvas(640, 360);
+            const ctx = canvas.getContext("2d");
+            function inspect(scene) {
+                drawMotionFrame({ ctx, scene, frame: 59, fps: 30, width: 640, height: 360 }, { fontFamily: "Arial" });
+                const pixels = ctx.getImageData(0, 0, 640, 360).data;
+                let white = 0, lowerWhite = 0;
+                for (let index = 0; index < pixels.length; index += 4) {
+                    if (pixels[index] < 225 || pixels[index + 1] < 225 || pixels[index + 2] < 225) continue;
+                    white++;
+                    if (index >= 640 * 4 * 220) lowerWhite++;
+                }
+                return { white, lowerWhite, corner: Array.from(pixels.slice(0, 3)) };
+            }
+            return Object.fromEntries(Object.entries(motionQualityCases).map(([key, fixture]) =>
+                [key, [inspect(fixture.scene), inspect(fixture.corrected)]]));
+        });
+        assert.equal(checks.occludedLabel[0].white, 0);
+        assert.ok(checks.occludedLabel[1].white > 0);
+        assert.ok(checks.clippedHeadline[0].white > 0 && checks.clippedHeadline[0].white < checks.clippedHeadline[1].white);
+        assert.equal(checks.missingCta[0].lowerWhite, 0);
+        assert.ok(checks.missingCta[1].lowerWhite > 0);
+        assert.deepEqual(checks.wrongComponent.map(({ corner }) => corner), [[255, 34, 0], [16, 16, 16]]);
+        console.log("Browser fixtures reproduce covered labels, clipped copy, missing CTA and the wrong impact background.");
+    }
     const runTool = async () => {
         const [submitted, result] = await Promise.all([
             page.waitForRequest((req) => req.method() === "PUT" && req.url().includes(url), { timeout: 45_000 }),
@@ -321,9 +349,10 @@ try {
     const rejectGraphEngineer = process.argv.includes("--engineer-fallback");
     const useGraphEngineer = rejectGraphEngineer || process.argv.includes("--graph-engineer");
     const rejectCritic = process.argv.includes("--review-fallback");
+    const rejectCriticAfterRepair = process.argv.includes("--review-after-repair-fallback");
     if (useGraphEngineer) graphic[1] = { ...graphic[1], type: "graph" };
     const rejectDetailVision = process.argv.includes("--detail-vision-fallback");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectDetailVision });
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -350,17 +379,23 @@ try {
             try { return Math.max(bitmap.width, bitmap.height); } finally { bitmap.close(); }
         }, base64), 960);
     }
-    if (rejectCritic) {
+    if (rejectCritic || rejectCriticAfterRepair) {
         assert.equal(document(project(graphProject)).tracks.motion_graphics.length, 0);
         await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);
         await graphPage.getByText("Ready for manual review", { exact: true }).waitFor();
+        if (rejectCriticAfterRepair) await graphPage.getByRole("list", { name: "Visual review findings" }).getByText("Impact settles early").waitFor();
         await graphPage.getByRole("button", { name: "Open draft in editor", exact: true }).click();
         await graphPage.waitForURL("**/projects/*/editor");
         await graphPage.getByRole("button", { name: "Select motion scene 2", exact: true }).waitFor();
-        const step = motionSteps(graphRun.id).find(({ name }) => name === "critique:1");
+        const step = motionSteps(graphRun.id).find(({ name }) => name === (rejectCriticAfterRepair ? "critique:2" : "critique:1"));
         const review = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));
         assert.deepEqual(review, { source: "review_unavailable" });
-        assert.ok(!stages.includes("repair"));
+        assert.equal(stages.includes("repair"), rejectCriticAfterRepair);
+        const quality = document(project(graphProject)).metadata.motion_generation.quality;
+        assert.equal(quality.review, "unavailable");
+        assert.deepEqual(quality.findings, rejectCriticAfterRepair ? ["Impact settles early"] : []);
+        assert.equal(quality.generation, rejectGraphEngineer ? "approximated" : "rendered");
+        assert.deepEqual(quality.approximations.map(({ sceneId }) => sceneId), rejectGraphEngineer ? [graphic[1].id] : []);
         console.log("Unavailable visual review preserved the draft and required approval before opening it in the editor.");
     } else {
         assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);

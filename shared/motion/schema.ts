@@ -18,11 +18,20 @@ export const motionStyleRecipes = {
     reference: defaultMotionPalette,
     studio: { background: "#151417", foreground: "#fff1e9", primary: "#ff8d64", accent: "#d8512b", muted: "#ffc09e" },
 } as const;
+export const motionQualitySchema = z.object({
+    generation: z.enum(["assembled", "rendered", "approximated", "incomplete"]),
+    review: z.enum(["pending", "passed", "issues", "unavailable"]),
+    findings: z.array(z.string().max(280)).max(16),
+    approximations: z.array(z.object({ sceneId: motionSceneId, description: z.string().max(240) }).strict()).max(8),
+}).strict();
+export type MotionQuality = z.infer<typeof motionQualitySchema>;
+
 export const motionGenerationSchema = z.object({
     runId: z.uuid(),
     rendererVersion: z.number().int().positive(),
     skills: z.array(z.object({ id: z.string().regex(/^[a-z-]+$/), version: z.number().int().positive() }).strict()).max(20),
     reference: z.object({ bindingId: z.uuid(), assetId: z.uuid().nullable(), sha256: z.string().regex(/^[a-f0-9]{64}$/).nullable() }).strict().nullable(),
+    quality: motionQualitySchema.optional(),
 }).strict();
 export type MotionGeneration = z.infer<typeof motionGenerationSchema>;
 const frame = z.number().int().min(0).max(7200);

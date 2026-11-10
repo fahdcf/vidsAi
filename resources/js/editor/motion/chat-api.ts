@@ -1,4 +1,5 @@
 import type { MotionSetupRequirements } from "./setup-upload";
+import type { MotionQuality } from "../../../../shared/motion/schema";
 
 export type MotionStatus = "queued" | "working" | "waiting_for_browser" | "ready" | "failed" | "cancelled";
 export type MotionEvent = { id: number; type: string; data: Record<string, unknown>; created_at: number };
@@ -16,6 +17,7 @@ export type MotionRunView = {
     draftApplied: boolean;
     needsApproval: boolean;
     reviewUnavailable: boolean;
+    quality?: MotionQuality | null;
     editorAvailable: boolean;
     canRetry: boolean;
     counts: { complete: number; total: number };

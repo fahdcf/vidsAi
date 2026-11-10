@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { db, project } from "../database";
 import { document } from "../document";
-import { MotionOrchestrator, isActiveMotionRun, motionNeedsApproval, motionReviewUnavailable, motionRunStoryboard } from "./orchestrator";
+import { MotionOrchestrator, isActiveMotionRun, motionNeedsApproval, motionReviewUnavailable, motionRunQuality, motionRunStoryboard } from "./orchestrator";
 import { motionConversation, motionEvents, motionSnapshot, motionSteps, ownedMotionRun, type MotionRun } from "./store";
 import { pendingMotionSetup } from "./setup";
 import { motionReference } from "./references";
@@ -38,6 +38,7 @@ export function motionRunView(run: MotionRun, after = 0) {
         draftApplied: Boolean(applied),
         needsApproval: motionNeedsApproval(run, reviewUnavailable),
         reviewUnavailable,
+        quality: motionRunQuality(run, steps),
         editorAvailable: document(project(run.project_id)).tracks.motion_graphics.length > 0,
         canRetry: ["failed", "cancelled"].includes(run.status) && !replaced && !applied &&
             !steps.some(({ name, status }) => name === "publish" && status === "done"),

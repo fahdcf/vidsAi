@@ -56,9 +56,11 @@ Browser extraction can reuse the installed Mediabunny primitives for track selec
 ## A. Establish the benchmark and quality state
 
 - [x] A1. Inspect both provided videos, compare contact sheets, and read the actual model artifacts and review history. Record the failures above.
-- [ ] A2. Create a versioned acceptance manifest for the original reel and this product promo. Record reference intervals, mandatory text, visual objects, intended hierarchy, motion landmarks, palette roles, output dimensions and soundtrack choice. Store hashes and timestamps alongside private media locations.
-- [ ] A3. Persist separate generation and review outcomes. Distinguish a draft that rendered, an approximated draft, a draft awaiting review and a draft that passed review. Keep prior unresolved issues when a later critic is unavailable. Manual approval must preserve that review history.
-- [ ] A4. Add regression fixtures for text hidden behind cards, clipped long text, omitted CTA, incorrect scene family, and reference analysis recovering with no pixel cuts. Keep current user projects as historical evidence and use separate verification projects.
+- [x] A2. Create a versioned acceptance manifest for the original reel and this product promo. Record reference intervals, mandatory text, visual objects, intended hierarchy, motion landmarks, palette roles, output dimensions and soundtrack choice. Store hashes and timestamps alongside private media locations.
+- [x] A3. Persist separate generation and review outcomes. Distinguish a draft that rendered, an approximated draft, a draft awaiting review and a draft that passed review. Keep prior unresolved issues when a later critic is unavailable. Manual approval must preserve that review history.
+- [x] A4. Add regression fixtures for text hidden behind cards, clipped long text, omitted CTA, incorrect scene family, and reference analysis recovering with no pixel cuts. Keep current user projects as historical evidence and use separate verification projects.
+
+The acceptance manifest is `scripts/fixtures/motion-reference-acceptance.json`. Both source hashes and scene intervals were verified, with local media locations and timestamps in the private runtime. The product promo's scene boundaries remain estimates. Browser checks `--quality-fixtures` and `--review-after-repair-fallback --engineer-fallback` exercised the visual defects and showed that earlier findings and approximation details survive manual approval. The prompt suite covers recovery with zero measured cuts.
 
 ## B. Build a reference specification that reaches every agent
 

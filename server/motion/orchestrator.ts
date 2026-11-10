@@ -4,7 +4,7 @@ import { commit, document } from "../document";
 import { fail } from "../security";
 import { compileMotionPlan, motionPlanSchema } from "../../shared/motion/compile";
 import { motionRendererVersion } from "../../shared/motion/registry";
-import { motionSceneSchema } from "../../shared/motion/schema";
+import { motionQualitySchema, motionSceneSchema, type MotionQuality } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
@@ -27,7 +27,8 @@ import {
     motionSteps, ownedMotionRun, writeMotionArtifact, type MotionRun, type MotionStep, type MotionStepInput, type RunStatus,
 } from "./store";
 
-type BuildArtifact = { plan: z.infer<typeof motionPlanSchema>; document: Document | null; blockers?: MotionCritique["issues"] };
+type BuildArtifact = { plan: z.infer<typeof motionPlanSchema>; document: Document | null; blockers?: MotionCritique["issues"];
+    approximations?: MotionQuality["approximations"] };
 type StepOutput = { value: unknown; summary?: string };
 type StepHandler = (run: MotionRun, step: MotionStep, budget: MotionModelBudget, signal: AbortSignal) => Promise<StepOutput>;
 const activeStatuses = new Set<RunStatus>(["queued", "working", "waiting_for_browser"]);
@@ -145,6 +146,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         });
         add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
     }
+    let previousFindings: string[] = [];
     for (let round = 1; round <= maxRounds; round++) {
         const { assemble, preview, critique, repair } = stepNames(round);
         if (!done(assemble)) return;
@@ -163,6 +165,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             dependency = critique;
         }
         if (issues.length && round < maxRounds && !run.target_scene_id) {
+            previousFindings = [...unresolved, ...issues.map(({ issue }) => issue)];
             const sceneIds = [...new Set(issues.map(({ sceneId }) => sceneId))];
             for (const sceneId of sceneIds) {
                 add({ name: repair(sceneId), lane: "provider", dependencies: [dependency], input: { round, sceneId } });
@@ -172,7 +175,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             continue;
         }
         add({ name: "publish", lane: "local", dependencies: [dependency],
-            input: { round, issues: [...unresolved, ...issues.map(({ issue }) => issue)], reviewUnavailable } });
+            input: { round, issues: reviewUnavailable ? previousFindings : [...unresolved, ...issues.map(({ issue }) => issue)], reviewUnavailable } });
         return;
     }
 }
@@ -341,28 +344,36 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],
                 params: { mode: "vectors", assetId: asset.id, style: "liquid_gradient" } });
         }
+        if (traced?.status === "approximation") {
+            value.value.approximation ??= "Procedural liquid shapes approximate the reference because its contours could not be traced.";
+        }
         return { value, summary: value.value.decision };
     }
     if (step.name === stepNames(round).assemble) {
         if (run.target_scene_id) {
             const target = run.target_scene_id;
             const source = round === 1 ? "revise" : stepNames(round - 1).repair(target);
-            const { scene } = agentResult(id, source, motionBuildSchema);
+            const { scene, approximation } = agentResult(id, source, motionBuildSchema);
             const plan = { title: "Focused scene revision", scenes: context.document.tracks.motion_graphics.map((item) => item.id === target ? scene : item) };
             const blockers = motionDraftBlockers([scene]);
-            return { value: { plan, blockers, document: blockers.length ? null : compileMotionPlan(plan, context.document) } };
+            const previous = context.document.metadata.motion_generation?.quality?.approximations ?? [];
+            const approximations = previous.filter(({ sceneId }) => sceneId !== target);
+            if (approximation) approximations.push({ sceneId: target, description: approximation });
+            return { value: { plan, blockers, approximations, document: blockers.length ? null : compileMotionPlan(plan, context.document) } };
         }
         const plan = storyboard();
-        const builds: MotionBuild[] = round === 1
-            ? plan.scenes.map(({ id: sceneId }) => agentResult(id, `engineer:${sceneId}`, motionBuildSchema))
-            : build(round - 1).plan.scenes.map((scene) => {
+        const previous = round === 1 ? null : build(round - 1);
+        const builds: MotionBuild[] = previous
+            ? previous.plan.scenes.map((scene) => {
                 const repair = stepNames(round - 1).repair(scene.id);
                 return motionSteps(id).some(({ name, status }) => name === repair && status === "done")
                     ? agentResult(id, repair, motionBuildSchema)
-                    : { scene, decision: "Kept the approved scene.", approximation: null };
-            });
+                    : { scene, decision: "Kept the approved scene.", approximation: previous.approximations
+                        ?.find(({ sceneId }) => sceneId === scene.id)?.description ?? null };
+            }) : plan.scenes.map(({ id: sceneId }) => agentResult(id, `engineer:${sceneId}`, motionBuildSchema));
         const value = integrateMotionScenes(context.document, plan, builds);
-        return { value, summary: value.blockers.length ? "The draft needs a repair before browser review." : undefined };
+        const approximations = builds.flatMap(({ scene, approximation }) => approximation ? [{ sceneId: scene.id, description: approximation }] : []);
+        return { value: { ...value, approximations }, summary: value.blockers.length ? "The draft needs a repair before browser review." : undefined };
     }
     if (step.name === stepNames(round).critique) {
         const preview = previewSchema.parse(result(id, stepNames(round).preview));
@@ -387,8 +398,17 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const value = await runMotionRepair(context, scene, issues);
         return { value, summary: value.value.decision };
     }
-    if (step.name === "publish") return { value: { plan: build(round).plan, issues: input.issues ?? [],
-        reviewUnavailable: input.reviewUnavailable === true } };
+    if (step.name === "publish") {
+        const { plan, document, approximations = [] } = build(round);
+        const issues = input.issues ?? [];
+        const reviewUnavailable = input.reviewUnavailable === true;
+        const quality = motionQualitySchema.parse({
+            generation: !document ? "incomplete" : approximations.length ? "approximated" : "rendered",
+            review: reviewUnavailable ? "unavailable" : issues.length ? "issues" : "passed",
+            findings: issues, approximations,
+        });
+        return { value: { plan, issues, reviewUnavailable, quality } };
+    }
     throw new Error("Unknown motion workflow stage.");
 };
 
@@ -400,7 +420,7 @@ function applyStepOutput(run: MotionRun, step: MotionStep, output: StepOutput) {
     if (step.name !== "publish") return;
     const { plan, issues, reviewUnavailable } = z.object({ plan: motionPlanSchema, issues: z.array(z.string()),
         reviewUnavailable: z.boolean().optional() }).parse(output.value);
-    if (issues.length) {
+    if (issues.length && !reviewUnavailable) {
         appendMotionMessage(run.id, "assistant", "The draft is saved with unresolved visual review notes.");
         changeMotionRunStatus(run, "failed", "Visual review left unresolved issues. The draft is available.");
         return;
@@ -451,6 +471,33 @@ export function motionNeedsApproval(run: MotionRun, reviewUnavailable = motionRe
     return reviewUnavailable || motionSnapshot(run).tracks.motion_graphics.length > 0;
 }
 
+export function motionRunQuality(run: MotionRun, steps = motionSteps(run.id)): MotionQuality | null {
+    const priorFindings = () => {
+        for (const { name, status } of [...steps].reverse()) {
+            if (!name.startsWith("critique:") || status !== "done") continue;
+            const artifact = result<{ value?: unknown }>(run.id, name);
+            const review = motionCritiqueSchema.safeParse(artifact.value);
+            if (review.success) return [...review.data.unresolved, ...review.data.issues.map(({ issue }) => issue)];
+        }
+        return [];
+    };
+    const publish = steps.find(({ name, status }) => name === "publish" && status === "done");
+    if (publish) {
+        const output = result<{ quality?: MotionQuality; issues?: string[]; reviewUnavailable?: boolean }>(run.id, "publish");
+        if (output.quality) return output.quality;
+        return { generation: "rendered", review: output.reviewUnavailable ? "unavailable" : output.issues?.length ? "issues" : "passed",
+            findings: output.issues?.length ? output.issues : output.reviewUnavailable ? priorFindings() : [], approximations: [] };
+    }
+    const assembly = steps.filter(({ name, status }) => (name === "assemble" || name.startsWith("assemble:")) && status === "done").at(-1);
+    if (!assembly) return null;
+    const build = result<BuildArtifact>(run.id, assembly.name);
+    const preview = assembly.name.replace("assemble", "preview") + (assembly.name === "assemble" ? ":1" : "");
+    const rendered = steps.some(({ name, status }) => name === preview && status === "done");
+    const approximations = build.approximations ?? [];
+    return { generation: !build.document ? "incomplete" : approximations.length ? "approximated" : rendered ? "rendered" : "assembled",
+        review: "pending", findings: priorFindings(), approximations };
+}
+
 function motionPlanProvenance(run: MotionRun, plan: z.infer<typeof motionPlanSchema>) {
     const bindingId = run.reference_binding_id;
     const selected = bindingId ? motionReference(run.project_id) : null;
@@ -460,6 +507,7 @@ function motionPlanProvenance(run: MotionRun, plan: z.infer<typeof motionPlanSch
         runId: run.id,
         rendererVersion: motionRendererVersion,
         skills: motionSkillManifest.map(({ id, version }) => ({ id, version })),
+        quality: motionRunQuality(run) ?? undefined,
         reference: bindingId ? { bindingId, assetId: matching?.assetId ?? null,
             sha256: metadata && metadata.success ? metadata.data.sha256 : null } : null,
     } };
