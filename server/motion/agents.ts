@@ -166,6 +166,7 @@ export async function runReferenceAnalyst(
             "referenceAnalyst", "AGENT_COMPLEX", {
             kind: evidence.kind, interval: evidence.interval,
             candidateCuts: evidence.measured.candidateCuts.map(({ time }) => Number(time.toFixed(3))),
+            candidateChanges: evidence.measured.candidateChanges?.map(({ time }) => Number(time.toFixed(3))),
             observedBoundaries: observedSceneBoundaries(evidence.observations).map((time) => Number(time.toFixed(3))),
             observations: evidence.observations.map(({ time, copy, layout }, sample) => ({ sample, time: Number(time.toFixed(3)), copy, layout })),
             supportedTypes: motionComponentTypes,

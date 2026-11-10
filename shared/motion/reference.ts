@@ -16,6 +16,7 @@ export const referenceFrameObservation = z.object({
     layout: z.string().trim().min(1).max(240), confidence,
 }).strict();
 const evidence = z.object({ time, confidence }).strict();
+const measuredChange = z.object({ time, score: confidence, before: time, after: time }).strict();
 const scene = z.object({
     title: z.string().trim().min(1).max(100),
     timing: referenceIntervalSchema.nullable(),
@@ -49,7 +50,8 @@ export const referenceAnalysisSchema = z.object({
     measured: z.object({
         timestamps: z.array(time).min(1).max(32),
         palette: z.array(z.object({ color: motionColor, weight: confidence }).strict()).max(6),
-        candidateCuts: z.array(z.object({ time, score: confidence, before: time, after: time }).strict()).max(8),
+        candidateCuts: z.array(measuredChange).max(8),
+        candidateChanges: z.array(measuredChange).max(8).optional(),
     }).strict(),
     observations: z.array(referenceFrameObservation).max(32),
     scenes: z.array(scene).min(1).max(8),

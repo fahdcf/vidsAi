@@ -10,7 +10,7 @@ export async function analyzeReferenceFrames(frames: readonly MotionReferenceFra
     const context = canvas.getContext("2d", { willReadFrequently: true });
     if (!context) throw new Error("Reference pixel analysis is unavailable.");
     const palette = new Map<number, Bucket>();
-    const differences: { time: number; score: number; before: number; after: number }[] = [];
+    const differences: { time: number; score: number; localScore: number; before: number; after: number }[] = [];
     let previous: { pixels: Uint8ClampedArray; bins: Uint16Array; time: number } | undefined;
     for (const frame of frames) {
         signal.throwIfAborted();
@@ -24,6 +24,7 @@ export async function analyzeReferenceFrames(frames: readonly MotionReferenceFra
         }
         const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
         const bins = new Uint16Array(512);
+        const tiles = new Uint32Array(12);
         let spatial = 0;
         for (let i = 0; i < pixels.length; i += 4) {
             const r = pixels[i], g = pixels[i + 1], b = pixels[i + 2];
@@ -35,21 +36,36 @@ export async function analyzeReferenceFrames(frames: readonly MotionReferenceFra
                 bucket.count++; bucket.r += r; bucket.g += g; bucket.b += b;
                 palette.set(index, bucket);
             }
-            if (previous) spatial += Math.abs(r - previous.pixels[i]) + Math.abs(g - previous.pixels[i + 1]) + Math.abs(b - previous.pixels[i + 2]);
+            if (previous) {
+                const delta = Math.abs(r - previous.pixels[i]) + Math.abs(g - previous.pixels[i + 1]) + Math.abs(b - previous.pixels[i + 2]);
+                const pixel = i / 4;
+                const tileX = Math.floor((pixel % 32) / 8);
+                const tileY = Math.floor(pixel / (32 * 6));
+                tiles[tileY * 4 + tileX] += delta;
+                spatial += delta;
+            }
         }
         if (previous) {
             const count = canvas.width * canvas.height;
             let histogram = 0;
             for (let i = 0; i < bins.length; i++) histogram += Math.abs(bins[i] - previous.bins[i]);
             const score = 0.7 * spatial / (count * 3 * 255) + 0.3 * histogram / (count * 2);
-            differences.push({ time: (frame.sourceTime + previous.time) / 2, score, before: previous.time, after: frame.sourceTime });
+            const localScore = Math.max(...tiles) / (48 * 3 * 255);
+            differences.push({ time: (frame.sourceTime + previous.time) / 2, score, localScore, before: previous.time, after: frame.sourceTime });
         }
         previous = { pixels, bins, time: frame.sourceTime };
     }
     const cuts = differences.filter(({ score }, index) => score >= 0.17 &&
         score >= (differences[index - 1]?.score ?? 0) &&
         score >= (differences[index + 1]?.score ?? 0))
-        .sort((a, b) => b.score - a.score).slice(0, 8).sort((a, b) => a.time - b.time);
+        .sort((a, b) => b.score - a.score).slice(0, 8).sort((a, b) => a.time - b.time)
+        .map(({ time, score, before, after }) => ({ time, score, before, after }));
+    const changeScores = differences.map(({ localScore, score }) => Math.max(score, localScore * 0.45));
+    const changes = differences.flatMap(({ time, before, after }, index) => {
+        const score = changeScores[index];
+        return score >= 0.025 && score >= (changeScores[index - 1] ?? 0) && score >= (changeScores[index + 1] ?? 0)
+            ? [{ time, score, before, after }] : [];
+    }).sort((a, b) => b.score - a.score).slice(0, 8);
     const swatches: { color: string; weight: number }[] = [];
     const chosen: number[][] = [];
     for (const bucket of [...palette.values()].sort((a, b) => b.count - a.count)) {
@@ -59,5 +75,5 @@ export async function analyzeReferenceFrames(frames: readonly MotionReferenceFra
         swatches.push({ color: "#" + color.map(hex).join(""), weight: bucket.count / (frames.length * canvas.width * canvas.height) });
         if (swatches.length >= 6) break;
     }
-    return { cuts, palette: swatches };
+    return { cuts, changes, palette: swatches };
 }

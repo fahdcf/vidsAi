@@ -92,10 +92,16 @@ async function captureReference(reference: BrowserMotionReference, signal: Abort
     const source = await referenceFile(reference, signal);
     const { interval } = reference.metadata;
     let frames: MotionReferenceFrame[];
+    let candidateChanges: Awaited<ReturnType<typeof analyzeReferenceFrames>>["changes"] = [];
     if (interval) {
         const sparse = await sampleMotionReference(source, sparseReferenceTimes(interval), signal);
-        const { cuts } = await analyzeReferenceFrames(sparse, signal);
-        const refinedTimes = refineReferenceTimes(interval, cuts.map(({ time }) => time)).slice(0, 8);
+        const { cuts, changes } = await analyzeReferenceFrames(sparse, signal);
+        candidateChanges = changes;
+        const ranked = [...cuts].sort((a, b) => b.score - a.score);
+        for (const change of changes) {
+            if (ranked.every(({ time }) => Math.abs(time - change.time) >= 0.3)) ranked.push(change);
+        }
+        const refinedTimes = refineReferenceTimes(interval, ranked.map(({ time }) => time));
         const refined = refinedTimes.length ? await sampleMotionReference(source, refinedTimes, signal) : [];
         frames = [...new Map([...sparse, ...refined].map((item) => [Math.max(0, item.sourceTime), item])).values()]
             .sort((a, b) => a.sourceTime - b.sourceTime);
@@ -105,7 +111,7 @@ async function captureReference(reference: BrowserMotionReference, signal: Abort
     const { palette, cuts } = await analyzeReferenceFrames(frames, signal);
     return {
         bindingId: reference.bindingId,
-        measured: { timestamps: frames.map(({ sourceTime }) => Math.max(0, sourceTime)), palette, candidateCuts: cuts },
+        measured: { timestamps: frames.map(({ sourceTime }) => Math.max(0, sourceTime)), palette, candidateCuts: cuts, candidateChanges },
         images: await images(frames, signal),
     };
 }

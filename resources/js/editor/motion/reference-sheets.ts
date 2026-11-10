@@ -17,8 +17,8 @@ export function sparseReferenceTimes(interval: Interval) {
 
 export function refineReferenceTimes(interval: Interval, candidates: readonly number[]) {
     validateInterval(interval);
-    return [...new Set(candidates.slice(0, 8)
-        .flatMap((candidate) => [candidate - 0.15, candidate, candidate + 0.15])
+    return [...new Set(candidates.slice(0, 4)
+        .flatMap((candidate) => [candidate - 0.12, candidate + 0.12])
         .filter((time) => Number.isFinite(time) && time >= interval.start && time < interval.end))].sort((a, b) => a - b);
 }
 

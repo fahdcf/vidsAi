@@ -276,6 +276,13 @@ try {
     const captured = await runTool();
     assert.ok(captured.payload.result.measured.timestamps.length >= 24);
     assert.ok(captured.payload.result.images.length >= 2);
+    if (process.argv.includes("--subtle-reference")) {
+        const { candidateChanges, timestamps } = captured.payload.result.measured;
+        assert.ok(candidateChanges.length > 0);
+        assert.ok(timestamps.length > 24 && timestamps.length <= 32);
+        assert.ok(candidateChanges.some(({ score }) => score < 0.17));
+        console.log(`Localized changes triggered ${timestamps.length - 24} additional browser samples.`);
+    }
     const send = (data, route) => fetch(target + route, { method: "PUT", headers: a.headers, body: JSON.stringify(data) });
     assert.deepEqual(await (await send(captured.payload, captured.route)).json(), { duplicate: true });
     const different = structuredClone(captured.payload);
