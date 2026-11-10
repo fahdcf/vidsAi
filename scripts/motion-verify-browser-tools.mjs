@@ -808,6 +808,34 @@ try {
         assert.ok(exported.size > 1_000);
         console.log("Editor layer changes, sibling reorder and undo passed. The exported MP4 used its immutable layer snapshot.");
     }
+    if (process.argv.includes("--scene-program")) {
+        assert.ok(componentCompatibility, "Use --component-compatibility with --scene-program.");
+        const snapshot = document(project(graphProject));
+        const source = `import type { MotionFrameInput, MotionSceneSdk } from "@vidsai/motion-sdk";
+export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
+    return [sdk.rect("title-bar", input.frame / 100, 0.5, 0.2, 0.1, "#ffaa11")];
+}`;
+        const input = { version: 1, source, assets: [], properties: [{ id: "accent", label: "Accent", kind: "color", default: "#ffaa11" }] };
+        const request = { commandId: randomUUID(), expectedRevision: snapshot.revision, sceneId: scenes[0].id, input };
+        const url = `${target}/projects/${graphProject}/motion-program`;
+        const submit = (body, headers = a.headers) => fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
+        assert.equal((await submit(request, b.headers)).status, 404);
+        assert.equal((await submit({ ...request, expectedRevision: snapshot.revision - 1 })).status, 409);
+        const invalid = await submit({ ...request, input: { ...input, source: source.replace("0.2, 0.1", '"bad", 0.1') } });
+        assert.equal(invalid.status, 422);
+        assert.ok((await invalid.json()).diagnostics.some(({ file, line, code }) => file === "scene.ts" && line === 3 && code === "TS2345"));
+        const response = await submit(request);
+        assert.equal(response.status, 200, await response.clone().text());
+        const { program, revision } = await response.json();
+        assert.match(program.buildHash, /^[a-f0-9]{64}$/);
+        assert.deepEqual(program.dependencies, ["@vidsai/motion-sdk@1"]);
+        assert.deepEqual(document(project(graphProject)).tracks.motion_graphics[0].params.program, program);
+        assert.equal(revision, snapshot.revision + 1);
+        const replay = await submit(request);
+        assert.equal(replay.status, 200);
+        assert.equal((await replay.json()).revision, revision);
+        console.log("Scene compilation reported a TypeScript line diagnostic and persisted a deterministic build through a revision-checked command.");
+    }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {
         const step = motionSteps(graphRun.id).find(({ name }) => name === `engineer:${graphic[1].id}`);

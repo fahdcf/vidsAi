@@ -1,4 +1,12 @@
 import { probeLimits, probeRequest, type ProbeRequest, type ProbeResult } from "./probe-contract";
+import { sceneProgram, type SceneProgram } from "../../../../../shared/motion/scene-program";
+
+export function runCompiledMotionProbe(raw: SceneProgram, frames: readonly number[], fps: number, signal?: AbortSignal) {
+    const program = sceneProgram.parse(raw);
+    return runMotionRuntimeProbe({ version: 1, fps, frames: [...frames], source: program.code,
+        assetHandles: program.assets.map(({ handle }) => handle), program: { sourceMap: program.sourceMap,
+            properties: Object.fromEntries(program.properties.map(({ id, default: value }) => [id, value])) } }, signal);
+}
 
 export async function runMotionRuntimeProbe(input: ProbeRequest, signal?: AbortSignal): Promise<ProbeResult> {
     if (!probeRequest.safeParse(input).success) return { ok: false, reason: "input" };

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { graphColor, graphPaintFields, graphTextFields } from "./graph-style";
 import { graphAnimation } from "./graph-animation";
+import { sceneProgram } from "./scene-program";
 
 const coordinate = z.number().min(-2).max(3);
 const opacity = z.number().min(0).max(1);
@@ -120,7 +121,7 @@ export const motionGraphVersion = 1;
 const continuity = z.object({ nextSceneId: common.id, frames: z.number().int().min(2).max(7200),
     nodeIds: z.array(common.id).min(1).max(4).refine((ids) => new Set(ids).size === ids.length) }).strict();
 export const graphComposition = z.object({ version: z.literal(motionGraphVersion).optional(), layers: graphLayers,
-    continuity: continuity.optional() }).strict();
+    continuity: continuity.optional(), program: sceneProgram.optional() }).strict();
 const versionedGraph = graphComposition.required({ version: true });
 const flatRecord = z.object({
     parentId: common.id.nullable(),

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { chromium } from "playwright";
 import { build, preview } from "vite";
+import { tsImport } from "tsx/esm/api";
 
 const outDir = await mkdtemp(path.join(tmpdir(), "vidsai-runtime-"));
 const config = { configFile: false, publicDir: false, worker: { format: "es" }, build: {
@@ -61,6 +62,29 @@ try {
     await page.unroute("**/*.wasm");
     assert.equal((await run(source)).ok, true);
     console.log("Bundled worker passed isolation, VM limits, output validation, deadline termination and recovery checks.");
+    const { compileSceneProgram } = await tsImport("../server/motion/program-compiler.ts", import.meta.url);
+    const input = { version: 1, assets: [], properties: [{ id: "Accent", kind: "color", label: "Accent", default: "#ff9900" }] };
+    const authored = `import type { MotionFrameInput, MotionSceneSdk } from "@vidsai/motion-sdk";
+export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
+    return [sdk.rect("mark", input.frame / 100, 0.5, 0.1, 0.1, String(input.properties.Accent))];
+}`;
+    const authoredResult = compileSceneProgram({ ...input, source: authored });
+    const errorResult = compileSceneProgram({ ...input, source: authored.replace("sdk: MotionSceneSdk) {", "sdk: MotionSceneSdk): never {")
+        .replace(/^    return .*;$/m, '    throw new Error("Verification fixture");') });
+    assert.ok(authoredResult.program, JSON.stringify(authoredResult.diagnostics));
+    assert.ok(errorResult.program, JSON.stringify(errorResult.diagnostics));
+    const program = (compiled) => page.evaluate(async (compiled) => {
+        const { runCompiledMotionProbe } = await import("/probe.js");
+        return runCompiledMotionProbe(compiled, [12], 30);
+    }, compiled);
+    const drawn = await program(authoredResult.program);
+    assert.equal(drawn.ok, true, JSON.stringify(drawn));
+    assert.deepEqual(drawn.frames[0][0], { id: "mark", kind: "rect", x: 0.12, y: 0.5, width: 0.1, height: 0.1, color: "#ff9900" });
+    const failure = await program(errorResult.program);
+    assert.equal(failure.ok, false);
+    assert.equal(failure.diagnostic?.file, "scene.ts");
+    assert.equal(failure.diagnostic?.line, 3, JSON.stringify(failure));
+    console.log("The bundled worker evaluated a compiled TypeScript module and mapped a runtime exception back to its authored line.");
 } finally {
     await browser?.close();
     await new Promise((resolve) => server.httpServer.close(resolve));

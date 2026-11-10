@@ -168,6 +168,10 @@ export const motionSceneSchema = z.discriminatedUnion("type", [
         !scene.assets.some(({ id, kind }) => id === ref.id && kind === ref.kind))) {
         ctx.addIssue({ code: "custom", path: ["assets"], message: "Graph layers must reference matching project assets." });
     }
+    if (scene.type === "graph" && scene.params.program?.assets.some((ref) =>
+        !scene.assets.some(({ id, kind }) => id === ref.id && kind === ref.kind))) {
+        ctx.addIssue({ code: "custom", path: ["params", "program", "assets"], message: "Program handles must reference matching scene assets." });
+    }
 });
 
 export type MotionScene = z.infer<typeof motionSceneSchema>;
