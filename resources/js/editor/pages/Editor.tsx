@@ -30,6 +30,7 @@ import { api } from "../api";
 import MusicLibrary from "../MusicLibrary";
 import MotionSceneControls from "../motion/MotionSceneControls";
 import GraphLayerControls from "../motion/GraphLayerControls";
+import MotionAssetControls from "../motion/MotionAssetControls";
 import "../styles/motion-workspace.css";
 import { useBrowserExport } from "../browser-export/useBrowserExport";
 import { browserExportCanvas, browserExportQualities, browserRenderProfile, supportsHighMotionQuality,
@@ -938,6 +939,8 @@ export default function Editor({
                             {tab === "Scene" && motionScene?.type === "graph" && <GraphLayerControls key={`layers-${doc.revision}`}
                                 scene={motionScene} selected={graphSelection?.scene === motionScene.id ? graphSelection.layer : undefined}
                                 select={(layer) => setGraphSelection({ scene: motionScene.id, layer })} busy={busy} save={(operations) => void edit(operations)} />}
+                            {tab === "Scene" && motionScene?.type === "graph" && <MotionAssetControls scene={motionScene}
+                                projectId={doc.project_id} busy={busy} save={(operations) => void edit(operations)} />}
                             {tab === "Scene" && clip && !motionScene && (
                                 <form
                                     onSubmit={(e) => {

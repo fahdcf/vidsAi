@@ -8,7 +8,7 @@ import { soundtrackLevelAt } from "../../../../shared/motion/time-map";
 import { api } from "../api";
 import { analyzeReferenceFrames } from "./reference-analysis";
 import { findReferenceCrop, referenceCropCanvas } from "./reference-crop";
-import { sampleMotionReference, type MotionReferenceFrame } from "./reference-media";
+import { loadMotionReference, sampleMotionReference, type MotionReferenceFrame } from "./reference-media";
 import { createReferenceSheet, refineReferenceTimes, sparseReferenceTimes } from "./reference-sheets";
 
 async function sha256(bytes: ArrayBuffer) {
@@ -40,7 +40,7 @@ async function images(frames: readonly MotionReferenceFrame[], signal: AbortSign
 
 async function captureDetails(input: Extract<BrowserMotionInput, { tool: "reference_detail" }>, signal: AbortSignal) {
     const { reference, samples } = input;
-    const source = await referenceFile(reference, signal);
+    const source = await loadMotionReference(reference, signal);
     try {
         let frames: Pick<MotionReferenceFrame, "image" | "detail">[];
         if (reference.metadata.kind === "video") {
@@ -84,29 +84,9 @@ async function captureDetails(input: Extract<BrowserMotionInput, { tool: "refere
     }
 }
 
-async function referenceFile(reference: BrowserMotionReference, signal: AbortSignal) {
-    const response = await fetch(reference.url, { signal, credentials: "same-origin" });
-    const max = 100 * 1024 * 1024;
-    if (!response.ok || !response.body || Number(response.headers.get("content-length")) > max) {
-        await response.body?.cancel();
-        throw new Error("The selected reference needs to be relinked.");
-    }
-    let size = 0;
-    const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-        transform(chunk, controller) {
-            size += chunk.byteLength;
-            if (size > max) throw new Error("The selected reference exceeds its size limit.");
-            controller.enqueue(chunk);
-        },
-    }));
-    const bytes = await new Response(body).arrayBuffer();
-    if (await sha256(bytes) !== reference.metadata.sha256) throw new Error("The selected reference file changed.");
-    return new Blob([bytes]);
-}
-
 async function captureFollowups(input: Extract<BrowserMotionInput, { tool: "reference_followup" }>, signal: AbortSignal) {
     const { reference, requests } = input;
-    const source = await referenceFile(reference, signal);
+    const source = await loadMotionReference(reference, signal);
     const followups = [];
     const images = [];
     for (const { sceneId, time, bounds, interval } of requests) {
@@ -139,7 +119,7 @@ async function captureFollowups(input: Extract<BrowserMotionInput, { tool: "refe
 }
 
 async function captureReference(reference: BrowserMotionReference, signal: AbortSignal) {
-    const source = await referenceFile(reference, signal);
+    const source = await loadMotionReference(reference, signal);
     const { interval } = reference.metadata;
     let frames: MotionReferenceFrame[];
     let candidateChanges: Awaited<ReturnType<typeof analyzeReferenceFrames>>["changes"] = [];
@@ -241,7 +221,7 @@ export async function runMotionBrowserInput(input: BrowserMotionInput, signal: A
     if (input.tool === "reference_followup") return captureFollowups(input, signal);
     if (input.tool === "preview") return renderPreview(input.document, signal);
     const { reference, interval, colors } = input;
-    const source = await referenceFile(reference, signal);
+    const source = await loadMotionReference(reference, signal);
     const { traceReferenceShapes } = await import("./reference-trace");
     let vectors;
     try {

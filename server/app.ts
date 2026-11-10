@@ -23,7 +23,7 @@ import { requestReset, resetPassword } from "./recovery";
 import { wanModels, wanPayload } from "./wan";
 import { mediaDuration } from "./media";
 import { reserveProviderRequest } from "./provider-budget";
-import { saveMotionAsset } from "./motion/assets";
+import { motionGraphAssets, saveMotionAsset } from "./motion/assets";
 import { saveMotionProgram } from "./motion/programs";
 import { motionProgramAuthoringGuide } from "./motion/program-examples";
 import { bindMotionReference, motionReference, saveMotionReferenceAnalysis } from "./motion/references";
@@ -787,6 +787,10 @@ function ownMotionProject(req: express.Request) {
     if (project.workflow !== "motion_graphics") fail(404, "Motion project not found.");
     return project;
 }
+
+app.get("/projects/:id/motion-assets", (req, res) => {
+    res.json({ assets: motionGraphAssets(String(ownMotionProject(req).id)) });
+});
 
 app.post("/projects/:id/motion-program", async (req, res) => {
     const result = await saveMotionProgram(ownMotionProject(req), req.body);

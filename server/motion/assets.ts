@@ -8,6 +8,7 @@ import { fail } from "../security";
 import type { Document } from "../../shared/contracts";
 import { motionAssetByteLimit, motionAssetKind, motionAssetProvenance, parseMotionVectors, type MotionAssetKind } from "../../shared/motion/assets";
 import { importMotionSvg } from "./svg";
+import { referenceMetadata } from "../../shared/motion/browser-tools";
 
 function mimeType(kind: MotionAssetKind, bytes: Buffer, name: string) {
     switch (kind) {
@@ -38,6 +39,11 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
     const kind = motionAssetKind.parse(rawKind);
     const provenance = motionAssetProvenance.parse(rawProvenance);
     if (!upload.buffer.length || upload.buffer.length > motionAssetByteLimit[kind]) fail(422, "Motion asset size is invalid.");
+    const boundMeta = (sourceId: string) => {
+        const binding = db.prepare("SELECT metadata FROM motion_references WHERE project_id=? AND asset_id=?")
+            .get(projectId, sourceId) as { metadata: string } | undefined;
+        return referenceMetadata.safeParse(binding ? json(binding.metadata, null) : null);
+    };
     if (provenance.kind === "reference_derived") {
         const source = db.prepare("SELECT mime FROM project_assets WHERE id=? AND project_id=?")
             .get(provenance.sourceId, projectId) as { mime: string } | undefined;
@@ -68,6 +74,20 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
     try {
         const duration = kind === "audio" ? await mediaDuration(filename, mime) : null;
         savedId = db.transaction(() => {
+            if (provenance.kind === "reference_crop") {
+                const meta = boundMeta(provenance.sourceId);
+                if (kind !== "image" || !meta.success || meta.data.sha256 !== provenance.sourceSha256 ||
+                    (meta.data.kind === "image" ? provenance.time !== 0 : !meta.data.interval ||
+                        provenance.time < meta.data.interval.start || provenance.time >= meta.data.interval.end)) {
+                    fail(422, "The crop must use the current owned reference and selected interval.");
+                }
+            }
+            if (provenance.kind === "reference_derived" && provenance.sourceSha256) {
+                const meta = boundMeta(provenance.sourceId);
+                if (kind !== "vectors" || !meta.success || meta.data.sha256 !== provenance.sourceSha256 || !meta.data.interval ||
+                    provenance.startSeconds < meta.data.interval.start || provenance.endSeconds > meta.data.interval.end ||
+                    provenance.endSeconds - provenance.startSeconds > 6) fail(422, "The trace must use the current owned reference and selected interval.");
+            }
             if (kind === "audio" && provenance.kind === "reference_derived") {
                 const existing = db.prepare(`SELECT a.id FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
                     WHERE a.project_id=? AND m.kind=? AND m.sha256=? AND m.provenance=? LIMIT 1`)
@@ -90,9 +110,10 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
 }
 
 export function motionGraphAssets(projectId: string) {
-    return db.prepare(`SELECT a.id, a.name, m.kind FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
+    const rows = db.prepare(`SELECT a.id, a.name, m.kind, m.provenance, m.sha256 FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
         WHERE a.project_id=? AND m.kind IN ('image', 'vectors') ORDER BY a.created_at DESC, a.id LIMIT 12`).all(projectId) as
-        { id: string; name: string; kind: "image" | "vectors" }[];
+        { id: string; name: string; kind: "image" | "vectors"; provenance: string; sha256: string }[];
+    return rows.map(({ provenance, ...asset }) => ({ ...asset, provenance: motionAssetProvenance.parse(json(provenance, null)) }));
 }
 
 export function validateMotionAssetOwnership(projectId: number, document: Document) {

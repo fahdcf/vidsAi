@@ -893,6 +893,52 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
             console.log("The procedural property changed the production preview and the same color was present in the exported MP4.");
         }
     }
+    if (process.argv.includes("--asset-reconstruction")) {
+        assert.ok(componentCompatibility, "Use --component-compatibility with --asset-reconstruction.");
+        await graphPage.goto(`${target}/projects/${graphProject}/editor`);
+        const tools = graphPage.getByRole("button", { name: "Tools", exact: true });
+        if (await tools.getAttribute("aria-pressed") === "false") await tools.click();
+        const open = graphPage.getByText("Linked motion assets", { exact: true });
+        await open.click();
+        const waitForLink = async (name) => {
+            const [response] = await Promise.all([
+                graphPage.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/commands"), { timeout: 50_000 }),
+                graphPage.getByRole("button", { name, exact: true }).click(),
+            ]);
+            assert.ok(response.ok(), await response.text());
+        };
+        await graphPage.getByLabel("Crop time (seconds)", { exact: true }).fill("1.5");
+        await graphPage.getByRole("button", { name: "Preview reference crop", exact: true }).click();
+        await graphPage.getByRole("img", { name: "Proposed reference crop", exact: true }).waitFor();
+        const count = () => db.prepare("SELECT COUNT(*) AS count FROM motion_asset_metadata m JOIN project_assets a ON a.id=m.asset_id WHERE a.project_id=?")
+            .get(graphProject).count;
+        assert.equal(count(), 0);
+        await waitForLink("Approve crop and add layer");
+        const crop = document(project(graphProject)).tracks.motion_graphics[0].params.layers.at(-1);
+        assert.equal(crop.kind, "image");
+        assert.equal(count(), 1);
+        await graphPage.getByLabel("Trace start", { exact: true }).fill("10.4");
+        await graphPage.getByLabel("Trace end", { exact: true }).fill("12.3");
+        await waitForLink("Trace and add vector layer");
+        const trace = document(project(graphProject)).tracks.motion_graphics[0].params.layers.at(-1);
+        assert.equal(trace.kind, "vector");
+        await graphPage.getByRole("button", { name: "Select motion scene 2", exact: true }).click();
+        await open.click();
+        await graphPage.getByLabel("Import image or SVG", { exact: true }).setInputFiles({ name: "label.svg", mimeType: "image/svg+xml",
+            buffer: Buffer.from('<svg viewBox="0 0 10 10"><path fill="#ffaa55" d="M 0 0 L 10 0 L 10 10 Z"/></svg>') });
+        await waitForLink("Import and add layer");
+        const imported = document(project(graphProject)).tracks.motion_graphics[1].params.layers.at(-1);
+        assert.equal(imported.kind, "vector");
+        const { assets } = await (await fetch(`${target}/projects/${graphProject}/motion-assets`, { headers: a.headers })).json();
+        const provenance = (id) => assets.find((asset) => asset.id === id).provenance;
+        assert.deepEqual(provenance(crop.assetId).bounds, { left: 0.25, top: 0.25, width: 0.5, height: 0.5 });
+        assert.equal(provenance(crop.assetId).sourceId, graphRef.assetId);
+        assert.equal(provenance(crop.assetId).sourceSha256, graphRef.metadata.sha256);
+        assert.deepEqual(provenance(trace.assetId), { kind: "reference_derived", sourceId: graphRef.assetId,
+            sourceSha256: graphRef.metadata.sha256, startSeconds: 10.4, endSeconds: 12.3 });
+        assert.deepEqual(provenance(imported.assetId), { kind: "imported" });
+        console.log("The editor approved a real reference crop, traced source shapes and imported SVG with separate linked layers and provenance.");
+    }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {
         const step = motionSteps(graphRun.id).find(({ name }) => name === `engineer:${graphic[1].id}`);

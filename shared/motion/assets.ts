@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { vectorPath } from "./graph";
 import { graphColor } from "./graph-style";
+import { referenceCropBounds } from "./browser-tools";
 
 export const motionAssetKind = z.enum(["font", "image", "vectors", "audio"]);
 export type MotionAssetKind = z.infer<typeof motionAssetKind>;
@@ -14,9 +15,12 @@ export const referenceAudioConversionVersion = 1;
 export const motionAssetProvenance = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("imported") }).strict(),
     z.object({ kind: z.literal("generated") }).strict(),
+    z.object({ kind: z.literal("reference_crop"), sourceId: z.uuid(), sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+        time: z.number().min(0).max(30.001), bounds: referenceCropBounds }).strict(),
     z.object({
         kind: z.literal("reference_derived"),
         sourceId: z.uuid(),
+        sourceSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
         startSeconds: z.number().min(0).max(30),
         endSeconds: z.number().min(0).max(30),
         audioExtraction: z.object({ sourceSha256: z.string().regex(/^[a-f0-9]{64}$/), trackId: z.number().int().nonnegative(),

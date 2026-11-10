@@ -1,7 +1,31 @@
 import { BlobSource, Input, MP4, VideoSampleSink } from "mediabunny";
 import { inspectBrowserMedia } from "../browser-export/inspect-media";
-import type { ReferenceCropBounds } from "../../../../shared/motion/browser-tools";
+import type { BrowserMotionReference, ReferenceCropBounds } from "../../../../shared/motion/browser-tools";
 import { findReferenceCrop, referenceCropCanvas } from "./reference-crop";
+
+export async function loadMotionReference(reference: BrowserMotionReference, signal: AbortSignal) {
+    const response = await fetch(reference.url, { signal, credentials: "same-origin" });
+    const max = 100 * 1024 * 1024;
+    if (!response.ok || !response.body || Number(response.headers.get("content-length")) > max) {
+        await response.body?.cancel();
+        throw new Error("The selected reference needs to be relinked.");
+    }
+    let size = 0;
+    const body = response.body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+        transform(chunk, controller) {
+            size += chunk.byteLength;
+            if (size > max) throw new Error("The selected reference exceeds its size limit.");
+            controller.enqueue(chunk);
+        },
+    }));
+    const bytes = await new Response(body).arrayBuffer();
+    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+    signal.throwIfAborted();
+    if (Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join("") !== reference.metadata.sha256) {
+        throw new Error("The selected reference file changed.");
+    }
+    return new Blob([bytes]);
+}
 
 export async function inspectMotionReference(source: Blob, kind: "image" | "video", signal: AbortSignal) {
     const metadata = await inspectBrowserMedia(source, kind, signal, { videoOnly: true });

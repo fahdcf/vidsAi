@@ -338,7 +338,7 @@ export async function runMotionEngineer(
     if (target.type === "graph") {
         const timing = { start: target.start_frame, end: target.end_frame, cueFrames: new Set(audioCues.map(({ frame }) => frame)) };
         const notes = graphSceneNotes(context.brief, wording);
-        const availableAssets = motionGraphAssets(context.document.project_id);
+        const availableAssets = motionGraphAssets(context.document.project_id).map(({ id, name, kind }) => ({ id, name, kind }));
         const makeScene = (params: ReturnType<typeof compileEngineerGraph>) => {
             const used = new Map(assets.map((ref) => [ref.id, ref]));
             for (const ref of graphAssetRefs(params.layers)) {

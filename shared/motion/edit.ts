@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Document, Operation } from "../contracts";
-import { compileMotionPlan, motionPlanSchema } from "./compile";
-import type { MotionGraphNode } from "./graph";
+import { compileMotionPlan, motionPlanSchema, motionSceneExceedsBudget } from "./compile";
+import { graphLayers, type MotionGraphNode } from "./graph";
 import { motionCuesSchema, motionLayout, motionPalette, motionSceneId, motionSceneSchema } from "./schema";
 
 export const motionEditParameters = {
@@ -18,6 +18,7 @@ export const motionEditParameters = {
             transitionIn: z.object({ kind: z.enum(["fade", "wipe", "scale"]), frames: z.number().int().min(1).max(60) }).strict().nullable().optional(),
         }).strict(),
     }).strict(),
+    link_motion_asset: z.object({ id: motionSceneId, layerId: motionSceneId, assetId: z.uuid(), kind: z.enum(["image", "vectors"]) }).strict(),
     remove_motion_scene: z.object({ id: motionSceneId }).strict(),
     reorder_motion_scenes: z.object({ order: z.array(motionSceneId).min(1).max(8) }).strict(),
     set_motion_palette: z.object({ id: motionSceneId.optional(), palette: motionPalette.partial() }).strict(),
@@ -72,6 +73,16 @@ export function applyMotionEdit(document: Document, op: Operation) {
         case "remove_motion_scene": {
             const { id } = motionEditParameters.remove_motion_scene.parse(op.params);
             scenes.splice(scenes.indexOf(find(id)), 1);
+            break;
+        }
+        case "link_motion_asset": {
+            const { id, layerId, assetId, kind } = motionEditParameters.link_motion_asset.parse(op.params);
+            const scene = find(id);
+            if (scene.type !== "graph") throw new Error("Choose a custom composition to link a motion asset.");
+            if (!scene.assets.some((asset) => asset.id === assetId)) scene.assets.push({ id: assetId, kind });
+            scene.params.layers = graphLayers.parse([...scene.params.layers,
+                { id: layerId, kind: kind === "image" ? "image" : "vector", assetId, width: 0.5, height: 0.5 }]);
+            if (motionSceneExceedsBudget(scene)) throw new Error("This asset would exceed the scene's render budget.");
             break;
         }
         case "reorder_motion_scenes": {
