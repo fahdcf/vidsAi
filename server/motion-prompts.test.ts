@@ -6,6 +6,18 @@ import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
 import { validateMotionResources } from "./motion/resource-check";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
+import { referenceClock, referenceTimeAt } from "../shared/motion/time-map";
+
+test("reference clocks preserve matching-duration offsets and scale changed durations", () => {
+    const reference = { start: 1.25, end: 6.25 };
+    const matching = referenceClock(reference, { fps: 30, total_frames: 150 });
+    assert.equal(matching.sourcePacing, true);
+    assert.equal(referenceTimeAt(75, matching), 3.75);
+    const shorter = referenceClock(reference, { fps: 30, total_frames: 90 });
+    assert.equal(shorter.sourcePacing, false);
+    assert.equal(referenceTimeAt(45, shorter), 3.75);
+    assert.equal(referenceTimeAt(90, shorter), reference.end);
+});
 
 test("the packaged prompts, skills, schemas and tools are available", () => {
     assert.deepEqual(validateMotionResources(), { skills: 9, prompts: 7, examples: 18 });

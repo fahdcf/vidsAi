@@ -116,6 +116,7 @@ export function finalizeMotionSetup(runId: string, accountId: number, raw: unkno
                 snapshot.metadata.motion_audio_analysis = input.audio.analysis;
             }
             snapshot.metadata.motion_audio_source = fromReference ? "reference" : "uploaded";
+            snapshot.metadata.motion_audio_start = fromReference ? provenance.startSeconds : 0;
             if (required.speechTiming) snapshot.metadata.motion_speech_requested = true;
         }
         if (input.referenceAudio) snapshot.metadata.motion_audio_source = input.referenceAudio;

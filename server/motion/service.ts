@@ -6,6 +6,8 @@ import { MotionOrchestrator, isActiveMotionRun, motionNeedsApproval, motionRevie
 import { motionConversation, motionEvents, motionSnapshot, motionSteps, ownedMotionRun, type MotionRun } from "./store";
 import { pendingMotionSetup } from "./setup";
 import { motionReference } from "./references";
+import { referenceMetadata } from "../../shared/motion/browser-tools";
+import { motionTimeMap } from "../../shared/motion/time-map";
 
 export const motionOrchestrator = new MotionOrchestrator();
 export const motionCursor = z.coerce.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
@@ -20,6 +22,7 @@ export function motionRunView(run: MotionRun, after = 0) {
     const selected = motionReference(run.project_id);
     const reference = selected?.bindingId === run.reference_binding_id ? selected : null;
     const snapshot = motionSnapshot(run);
+    const metadata = reference && referenceMetadata.safeParse(reference.metadata);
     const replaced = db.prepare("SELECT replacement_run_id FROM motion_feedback WHERE run_id=? AND replacement_run_id IS NOT NULL LIMIT 1")
         .get(run.id) as { replacement_run_id: string } | undefined;
     const applied = db.prepare("SELECT 1 FROM edit_commands WHERE id=? AND project_id=?").get(run.id, run.project_id);
@@ -39,6 +42,7 @@ export function motionRunView(run: MotionRun, after = 0) {
         needsApproval: motionNeedsApproval(run, reviewUnavailable),
         reviewUnavailable,
         quality: motionRunQuality(run, steps),
+        timeMap: motionTimeMap(snapshot, metadata?.success ? metadata.data.interval : null),
         editorAvailable: document(project(run.project_id)).tracks.motion_graphics.length > 0,
         canRetry: ["failed", "cancelled"].includes(run.status) && !replaced && !applied &&
             !steps.some(({ name, status }) => name === "publish" && status === "done"),

@@ -1,4 +1,5 @@
 import type { ReferenceAnalysis } from "../../shared/motion/reference";
+import { referenceClock, referenceTimeAt } from "../../shared/motion/time-map";
 
 type Observation = ReferenceAnalysis["observations"][number];
 const normalizedCopy = (copy: string | null) => (copy ?? "").normalize("NFKC").toLowerCase()
@@ -29,12 +30,12 @@ export function observedSceneBoundaries(observations: readonly Observation[]) {
     });
 }
 
-export function sceneReferenceEvidence(reference: ReferenceAnalysis, target: { copy: string; start_frame: number; end_frame: number }, totalFrames: number) {
+export function sceneReferenceEvidence(reference: ReferenceAnalysis, target: { copy: string; start_frame: number; end_frame: number },
+    output: Parameters<typeof referenceClock>[1]) {
     const { interval, scenes, observations } = reference;
     const copy = normalizedCopy(target.copy);
     const byCopy = copy ? scenes.filter((scene) => normalizedCopy(scene.copy) && sameCopy(normalizedCopy(scene.copy), copy)) : [];
-    const midpoint = interval ? interval.start + (interval.end - interval.start) *
-        ((target.start_frame + target.end_frame) / 2 / totalFrames) : 0;
+    const midpoint = interval ? referenceTimeAt((target.start_frame + target.end_frame) / 2, referenceClock(interval, output)) : 0;
     const scene = byCopy.length === 1 ? byCopy[0] : scenes.find(({ timing }) => !timing ||
         (midpoint >= timing.start && midpoint < timing.end));
     if (!scene) return null;

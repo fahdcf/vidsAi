@@ -66,11 +66,11 @@ try {
     if (process.argv.includes("--reference-audio")) {
         await context.addCookies([{ name: "vidsai_session", value: a.token, url: target }]);
         const setupPage = await context.newPage();
-        async function createWithReference(file, muted = false, replacement = null, speech = false) {
+        async function createWithReference(file, muted = false, replacement = null, speech = false, seconds = "5") {
             await setupPage.goto(target + "/create/motion-graphics");
             await setupPage.getByLabel("Project name").fill("Reference audio verification");
             await setupPage.getByLabel("Video brief").fill("Animate the reference with its original timing.");
-            await setupPage.getByLabel("Duration").selectOption("5");
+            await setupPage.getByLabel("Duration").selectOption(seconds);
             await setupPage.getByRole("radio", { name: "Match a reference" }).check();
             await setupPage.getByLabel("Reference video or image").setInputFiles(file);
             await setupPage.getByRole("spinbutton", { name: "Start (seconds)" }).fill("1.25");
@@ -100,6 +100,8 @@ try {
         await setupPage.getByText("Audio from reference", { exact: true }).waitFor();
         const saved = document(project(motionRun(audioRun).project_id));
         assert.equal(saved.metadata.motion_audio_source, "reference");
+        assert.equal(saved.metadata.motion_audio_start, 1.25);
+        await setupPage.getByText("The reference keeps its source pacing. The soundtrack keeps its original speed.", { exact: true }).waitFor();
         assert.ok(saved.metadata.motion_cues.length > 0);
         assert.equal(saved.metadata.motion_audio_analysis.energy.length, 50);
         const [track] = saved.tracks.audio;
@@ -131,11 +133,13 @@ try {
         }
         const replacementArg = process.argv.indexOf("--replacement-audio");
         if (replacementArg >= 0) {
-            const replacedRun = await createWithReference(source, false, process.argv[replacementArg + 1]);
+            const replacedRun = await createWithReference(source, false, process.argv[replacementArg + 1], false, "8");
             await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
+            await setupPage.getByText("Reference pacing is scaled to the project duration. The soundtrack keeps its original speed.", { exact: true }).waitFor();
             const replaced = document(project(motionRun(replacedRun).project_id));
             assert.equal(replaced.metadata.motion_audio_source, "uploaded");
             assert.equal(replaced.tracks.audio.length, 1);
+            assert.equal(replaced.tracks.audio[0].end_frame, 240);
         }
         if (process.argv.includes("--speech-timing")) {
             const speechRun = await createWithReference(source, false, null, true);

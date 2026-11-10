@@ -128,6 +128,7 @@ export const documentSchema = z
         motion_audio_analysis: motionAudioAnalysisSchema.optional(),
         motion_speech_requested: z.boolean().optional(),
         motion_audio_source: z.enum(["reference", "uploaded", "silent", "muted"]).optional(),
+        motion_audio_start: z.number().min(0).max(30).optional(),
         motion_generation: motionGenerationSchema.optional(),
         language: z.string(),
         platform: z.string().nullable(),

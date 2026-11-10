@@ -5,6 +5,7 @@ import { motionComponentTypes, describeMotionComponent } from "../../shared/moti
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
+import { motionTimeMap } from "../../shared/motion/time-map";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
@@ -188,6 +189,7 @@ export function runMotionDirector(context: MotionAgentContext, reference: Refere
             return { type, name, description };
         }),
         audioCues: context.document.metadata.motion_cues ?? [],
+        timeMap: motionTimeMap(context.document, reference?.interval ?? null),
         speechTiming: context.speechTiming,
     }, motionStoryboardSchema, {
         validate: ({ scenes }) => {
@@ -257,7 +259,7 @@ export async function runMotionDesigner(context: MotionAgentContext, storyboard:
     frames: readonly ReferenceFrame[] = []) {
     const schema = motionDesignSchema.extend({ scenes: z.array(designScene.omit({ id: true })).length(storyboard.scenes.length) });
     const referenceScenes = reference && storyboard.look === "reference" ? storyboard.scenes.map((scene) => ({
-        id: scene.id, evidence: sceneReferenceEvidence(reference, scene, context.document.total_frames),
+        id: scene.id, evidence: sceneReferenceEvidence(reference, scene, context.document),
     })) : undefined;
     const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX",
         { storyboard, referenceScenes, referenceFrames: describeReferenceFrames(details) }, schema,

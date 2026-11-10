@@ -6,6 +6,7 @@ import { compileMotionPlan, motionPlanSchema } from "../../shared/motion/compile
 import { motionRendererVersion } from "../../shared/motion/registry";
 import { motionQualitySchema, motionSceneSchema, type MotionQuality } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
+import { referenceClock, referenceTimeAt } from "../../shared/motion/time-map";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
 import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceDetailRequest, referenceDetailResult, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
@@ -106,13 +107,12 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         const reference = run.reference_binding_id ? agentResult(id, "reference_analysis", referenceAnalysisSchema) : null;
         const useDetails = reference && storyboard.look === "reference";
         if (useDetails) {
-            const { total_frames } = motionSnapshot(run);
+            const snapshot = motionSnapshot(run);
             const samples = storyboard.scenes.map((scene) => {
-                const evidence = sceneReferenceEvidence(reference, scene, total_frames);
+                const evidence = sceneReferenceEvidence(reference, scene, snapshot);
                 const interval = evidence?.timing ?? reference.interval;
                 const source = reference.interval;
-                const projected = source ? source.start + (source.end - source.start) *
-                    ((scene.start_frame + scene.end_frame) / (2 * total_frames)) : 0;
+                const projected = source ? referenceTimeAt((scene.start_frame + scene.end_frame) / 2, referenceClock(source, snapshot)) : 0;
                 const middle = interval && (projected < interval.start || projected >= interval.end)
                     ? (interval.start + interval.end) / 2 : projected;
                 const observations = evidence?.observations.filter(({ time }) => !interval || (time >= interval.start && time < interval.end)) ?? [];
@@ -343,7 +343,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const plan = storyboard();
         const target = plan.scenes.find(({ id }) => id === input.sceneId)!;
         const analysis = plan.look === "reference" ? reference() : null;
-        const evidence = analysis ? sceneReferenceEvidence(analysis, target, context.document.total_frames) : null;
+        const evidence = analysis ? sceneReferenceEvidence(analysis, target, context.document) : null;
         const traceName = `trace:${target.id}`;
         const traced = motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
             ? traceResultSchema.parse(result(id, traceName)) : null;

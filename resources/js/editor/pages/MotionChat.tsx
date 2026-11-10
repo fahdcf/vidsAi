@@ -323,6 +323,12 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
                 {(run?.attachments.audio || audio) && <span><Icon name="music" size={14} />
                     {run?.attachments.audioSource === "reference" ? "Audio from reference" : "Soundtrack"}</span>}
             </div>
+            {run?.timeMap?.reference && <p className="muted">
+                {run.timeMap.reference.sourcePacing ? "The reference keeps its source pacing." : "Reference pacing is scaled to the project duration."}
+                {run.timeMap.soundtrack && " The soundtrack keeps its original speed."}
+                {run.timeMap.soundtrack && run.timeMap.soundtrack.endFrame < run.timeMap.outputFrames &&
+                    ` Audio ends at ${(run.timeMap.soundtrack.endFrame / run.timeMap.fps).toFixed(2)} seconds.`}
+            </p>}
             {runError && <p role="alert" className="notice warning">{runError}</p>}
             {sessionExpired && <a href="/login" className="button ghost">Sign in to resume</a>}
             {run?.attachments.reference && !run.attachments.reference.available && !sessionExpired &&
