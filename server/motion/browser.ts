@@ -141,7 +141,12 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
                 JSON.stringify(value.samples) !== JSON.stringify(input.samples)))) {
             fail(422, "The detailed frames do not match the assigned reference scenes.");
         }
-        for (const image of value.images) {
+        const crops = "crops" in value ? value.crops ?? [] : [];
+        if ("samples" in value && (new Set(crops.map(({ sceneId }) => sceneId)).size !== crops.length ||
+            crops.some((crop) => !value.samples.some(({ sceneId, time }) => sceneId === crop.sceneId && time === crop.time)))) {
+            fail(422, "The reference crops must match sampled scenes and timestamps.");
+        }
+        for (const image of [...value.images, ...crops.map(({ image }) => image)]) {
             const bytes = Buffer.from(image.base64, "base64");
             if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff ||
                 bytes.at(-2) !== 0xff || bytes.at(-1) !== 0xd9 ||

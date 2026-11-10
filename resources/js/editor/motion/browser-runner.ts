@@ -6,6 +6,7 @@ import { drawMotionFrame } from "../../../../shared/motion/render";
 import { soundtrackLevelAt } from "../../../../shared/motion/time-map";
 import { api } from "../api";
 import { analyzeReferenceFrames } from "./reference-analysis";
+import { findReferenceCrop, referenceCropCanvas } from "./reference-crop";
 import { sampleMotionReference, type MotionReferenceFrame } from "./reference-media";
 import { createReferenceSheet, refineReferenceTimes, sparseReferenceTimes } from "./reference-sheets";
 
@@ -40,14 +41,14 @@ async function captureDetails(input: Extract<BrowserMotionInput, { tool: "refere
     const { reference, samples } = input;
     const source = await referenceFile(reference, signal);
     try {
-        let frames: Blob[];
+        let frames: Pick<MotionReferenceFrame, "image" | "detail">[];
         if (reference.metadata.kind === "video") {
             const times = [...new Set(samples.map(({ time }) => time))].sort((a, b) => a - b);
-            const captured = await sampleMotionReference(source, times.map((time) => time + 0.00001), signal, { maxEdge: 960 });
+            const captured = await sampleMotionReference(source, times.map((time) => time + 0.00001), signal, { maxEdge: 960, detailCrop: true });
             if (captured.some(({ sourceTime }, index) => Math.abs(sourceTime - times[index]) > 0.002)) {
                 throw new Error("The detailed frame timestamp changed.");
             }
-            frames = samples.map(({ time }) => captured[times.indexOf(time)].image);
+            frames = samples.map(({ time }) => captured[times.indexOf(time)]);
         } else {
             const bitmap = await createImageBitmap(source);
             try {
@@ -57,11 +58,25 @@ async function captureDetails(input: Extract<BrowserMotionInput, { tool: "refere
                 if (!context) throw new Error("Reference image drawing is unavailable.");
                 context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
                 const image = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.82 });
-                frames = samples.map(() => image);
+                const bounds = findReferenceCrop(canvas);
+                let detail: MotionReferenceFrame["detail"];
+                if (bounds) {
+                    const width = bitmap.width * bounds.width, height = bitmap.height * bounds.height;
+                    const crop = referenceCropCanvas(width, height);
+                    const ctx = crop.getContext("2d");
+                    if (ctx) {
+                        ctx.drawImage(bitmap, bitmap.width * bounds.left, bitmap.height * bounds.top, width, height, 0, 0, crop.width, crop.height);
+                        detail = { bounds, image: await crop.convertToBlob({ type: "image/jpeg", quality: 0.7 }) };
+                    }
+                }
+                frames = samples.map(() => ({ image, detail }));
             } finally { bitmap.close(); }
         }
-        const images = await Promise.all(frames.map((image) => encodeEvidence(image, 300_000, signal)));
-        return { bindingId: reference.bindingId, samples, images };
+        const images = await Promise.all(frames.map(({ image }) => encodeEvidence(image, 300_000, signal)));
+        const crops = await Promise.all(frames.flatMap(({ detail }, index) => detail && detail.image.size <= 75_000 ? [
+            encodeEvidence(detail.image, 75_000, signal).then((image) => ({ ...samples[index], bounds: detail.bounds, image })),
+        ] : []));
+        return { bindingId: reference.bindingId, samples, images, crops };
     } catch {
         signal.throwIfAborted();
         return { bindingId: reference.bindingId, samples: [], images: [] };

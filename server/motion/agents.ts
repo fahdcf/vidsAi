@@ -4,7 +4,7 @@ import { compileMotionPlan, motionSceneExceedsBudget } from "../../shared/motion
 import { motionComponentTypes, describeMotionComponent } from "../../shared/motion/registry";
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
-import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
+import { motionEvidenceFramesPerSheet, type ReferenceCropBounds } from "../../shared/motion/browser-tools";
 import { motionTimeMap, soundtrackLevelAt } from "../../shared/motion/time-map";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
@@ -243,7 +243,7 @@ function applyCopyParts(scene: MotionScene, parts: string[]) {
     }
 }
 
-type ReferenceFrame = { sceneId: string; time: number; image: MotionVisionImage };
+type ReferenceFrame = { sceneId: string; time: number; image: MotionVisionImage; crop?: ReferenceCropBounds };
 
 async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request: (frames: readonly ReferenceFrame[]) => Promise<T>) {
     try {
@@ -255,8 +255,8 @@ async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request
     }
 }
 
-const describeReferenceFrames = (frames: readonly ReferenceFrame[]) => frames.map(({ sceneId, time }, index) =>
-    ({ sceneId, time, imageNumber: index + 1 }));
+const describeReferenceFrames = (frames: readonly ReferenceFrame[]) => frames.map(({ sceneId, time, crop }, index) =>
+    ({ sceneId, time, crop, imageNumber: index + 1 }));
 
 export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard, reference: ReferenceAnalysis | null = null,
     frames: readonly ReferenceFrame[] = []) {
@@ -302,7 +302,7 @@ export async function runMotionEngineer(
     design: MotionDesign,
     assets: readonly MotionScene["assets"][number][] = [],
     reference: ReturnType<typeof sceneReferenceEvidence> = null,
-    frame?: ReferenceFrame,
+    frames: readonly ReferenceFrame[] = [],
 ) {
     const approved = copy.scenes.find(({ id }) => id === target.id);
     const styling = design.scenes.find(({ id }) => id === target.id);
@@ -317,7 +317,7 @@ export async function runMotionEngineer(
             componentVersion: 1, assets, params,
         });
         try {
-            const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
+            const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
@@ -351,7 +351,7 @@ export async function runMotionEngineer(
         }
         return parts?.length ? motionSceneSchema.parse(applyCopyParts(scene, parts)) : scene;
     };
-    const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
+    const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
         target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
         referenceFrames: describeReferenceFrames(details),
         audioCues,

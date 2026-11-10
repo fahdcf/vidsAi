@@ -69,8 +69,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.equal(typeof artifact.approvedCopy, "string");
                 assert.ok(artifact.reference?.observations.length);
                 if (artifact.referenceFrames.length) {
-                    assert.equal(artifact.referenceFrames[0].sceneId, artifact.target.id);
-                    assert.equal(message.length, 2);
+                    assert.ok(artifact.referenceFrames.every(({ sceneId }) => sceneId === artifact.target.id));
+                    assert.equal(message.length, artifact.referenceFrames.length + 1);
+                    assert.ok(!artifact.referenceFrames[0].crop);
+                    if (artifact.referenceFrames.length === 2) assert.equal(artifact.referenceFrames[1].crop.width, 0.5);
                     if (rejectDetailVision) { value = null; break; }
                 } else assert.ok(rejectDetailVision || (rejectGraphEngineer && artifact.target.type === "graph"));
                 if (artifact.target.type === "graph") {

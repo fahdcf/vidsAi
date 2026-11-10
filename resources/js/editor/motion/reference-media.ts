@@ -1,5 +1,7 @@
 import { BlobSource, Input, MP4, VideoSampleSink } from "mediabunny";
 import { inspectBrowserMedia } from "../browser-export/inspect-media";
+import type { ReferenceCropBounds } from "../../../../shared/motion/browser-tools";
+import { findReferenceCrop, referenceCropCanvas } from "./reference-crop";
 
 export async function inspectMotionReference(source: Blob, kind: "image" | "video", signal: AbortSignal) {
     const metadata = await inspectBrowserMedia(source, kind, signal, { videoOnly: true });
@@ -13,9 +15,8 @@ export async function inspectMotionReference(source: Blob, kind: "image" | "vide
     return metadata;
 }
 
-export type MotionReferenceFrame = { requestedTime: number; sourceTime: number; image: Blob };
-type ReferenceCrop = { left: number; top: number; width: number; height: number };
-type SampleOptions = { crop?: ReferenceCrop; maxEdge?: number };
+export type MotionReferenceFrame = { requestedTime: number; sourceTime: number; image: Blob; detail?: { bounds: ReferenceCropBounds; image: Blob } };
+type SampleOptions = { crop?: ReferenceCropBounds; maxEdge?: number; detailCrop?: boolean };
 
 export async function sampleMotionReference(
     source: Blob, times: readonly number[], signal: AbortSignal, options: SampleOptions = {},
@@ -27,7 +28,7 @@ export async function sampleMotionReference(
         crop.width <= 0 || crop.height <= 0 || crop.left + crop.width > 1 || crop.top + crop.height > 1)) {
         throw new Error("The reference crop must stay inside the frame.");
     }
-    const maxSamples = maxEdge > 480 || crop ? 8 : 32;
+    const maxSamples = maxEdge > 480 || crop || options.detailCrop ? 8 : 32;
     if (times.length < 1 || times.length > maxSamples || times.some((time, index) =>
         !Number.isFinite(time) || time < 0 || (index > 0 && time <= times[index - 1])
     )) {
@@ -56,17 +57,31 @@ export async function sampleMotionReference(
         for await (const sample of new VideoSampleSink(track).samplesAtTimestamps(times.map((time) => first + time))) {
             if (!sample) throw new Error("A reference sample could not be decoded.");
             let sourceTime: number;
+            let detail: { bounds: ReferenceCropBounds; canvas: OffscreenCanvas } | undefined;
             try {
                 signal.throwIfAborted();
                 sourceTime = sample.timestamp - first;
                 if (crop) sample.draw(context, displayWidth * crop.left, displayHeight * crop.top, sw, sh, 0, 0, canvas.width, canvas.height);
                 else sample.draw(context, 0, 0, canvas.width, canvas.height);
+                if (options.detailCrop && !crop) {
+                    const bounds = findReferenceCrop(canvas);
+                    if (bounds) {
+                        const cropWidth = displayWidth * bounds.width, cropHeight = displayHeight * bounds.height;
+                        const canvas = referenceCropCanvas(cropWidth, cropHeight);
+                        const ctx = canvas.getContext("2d");
+                        if (ctx) {
+                            sample.draw(ctx, displayWidth * bounds.left, displayHeight * bounds.top, cropWidth, cropHeight, 0, 0, canvas.width, canvas.height);
+                            detail = { bounds, canvas };
+                        }
+                    }
+                }
             } finally {
                 sample.close();
             }
             const image = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.82 });
             signal.throwIfAborted();
-            frames.push({ requestedTime: times[frames.length], sourceTime, image });
+            const closeup = detail && { bounds: detail.bounds, image: await detail.canvas.convertToBlob({ type: "image/jpeg", quality: 0.7 }) };
+            frames.push({ requestedTime: times[frames.length], sourceTime, image, detail: closeup });
         }
         if (frames.length !== times.length) throw new Error("The browser returned incomplete reference samples.");
         return frames;

@@ -475,6 +475,19 @@ try {
             try { return Math.max(bitmap.width, bitmap.height); } finally { bitmap.close(); }
         }, base64), 960);
     }
+    if (process.argv.includes("--reference-crops")) {
+        assert.ok(detail.crops.length > 0);
+        for (const crop of detail.crops) {
+            assert.ok(detail.samples.some(({ sceneId, time }) => sceneId === crop.sceneId && time === crop.time));
+            assert.equal(crop.bounds.width, 0.5);
+            assert.equal(crop.bounds.height, 0.5);
+            assert.deepEqual(await graphPage.evaluate(async (data) => {
+                const bitmap = await createImageBitmap(await (await fetch(`data:image/jpeg;base64,${data}`)).blob());
+                try { return [bitmap.width, bitmap.height]; } finally { bitmap.close(); }
+            }, crop.image.base64), [640, 360]);
+        }
+        console.log(`${detail.crops.length} source-resolution crops were saved with matching scene IDs and timestamps.`);
+    }
     if (rejectCritic || rejectCriticAfterRepair) {
         assert.equal(document(project(graphProject)).tracks.motion_graphics.length, 0);
         await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);

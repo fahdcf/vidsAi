@@ -306,7 +306,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
     const details = () => {
         if (!motionSteps(id).some(({ name, status }) => name === "reference_detail" && status === "done")) return [];
         const detail = referenceDetailResult.parse(result(id, "reference_detail"));
-        return detail.samples.map((sample, index) => ({ ...sample, image: imageBytes([detail.images[index]])[0] }));
+        return [...detail.samples.map((sample, index) => ({ ...sample, image: imageBytes([detail.images[index]])[0], crop: undefined })),
+            ...(detail.crops ?? []).map(({ sceneId, time, bounds, image }) => ({ sceneId, time, crop: bounds, image: imageBytes([image])[0] }))];
     };
     const build = (n: number) => result<BuildArtifact>(id, stepNames(n).assemble);
     if (step.name === "revise") {
@@ -336,7 +337,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return { value, summary: value.value.decision };
     }
     if (step.name === "design") {
-        const value = await runMotionDesigner(context, storyboard(), reference(), details());
+        const value = await runMotionDesigner(context, storyboard(), reference(), details().filter(({ crop }) => !crop));
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("engineer:")) {
@@ -350,7 +351,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
             agentResult(id, "design", motionDesignSchema), asset ? [asset] : [], evidence,
-            details().find(({ sceneId }) => sceneId === target.id));
+            details().filter(({ sceneId }) => sceneId === target.id));
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],

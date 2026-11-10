@@ -17,11 +17,18 @@ export const captureSchema = z.object({
     images: evidenceImages,
 }).strict();
 const detailSample = z.object({ sceneId: motionSceneId, time: referenceIntervalSchema.shape.start }).strict();
+const unit = z.number().min(0).max(1);
+export const referenceCropBounds = z.object({ left: unit, top: unit, width: unit.positive(), height: unit.positive() }).strict()
+    .refine(({ left, top, width, height }) => left + width <= 1 && top + height <= 1);
+export type ReferenceCropBounds = z.infer<typeof referenceCropBounds>;
 export const referenceDetailRequest = z.array(detailSample).min(1).max(8);
 export const referenceDetailResult = z.object({
     bindingId: z.uuid(),
     samples: z.array(detailSample).max(8),
     images: z.array(evidenceImage.extend({ base64: z.base64().min(4).max(400_000) })).max(8),
+    crops: z.array(detailSample.extend({ bounds: referenceCropBounds,
+        image: evidenceImage.extend({ base64: z.base64().min(4).max(100_000) }),
+    })).max(8).optional(),
 }).strict().refine(({ samples, images }) => samples.length === images.length);
 export const previewSchema = z.object({
     frames: z.array(z.number().int().nonnegative().max(7199)).min(1).max(32),
