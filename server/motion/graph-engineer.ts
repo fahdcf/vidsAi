@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { graphAuthoring, motionGraphVersion } from "../../shared/motion/graph";
+import { graphColor, graphPaintFields, graphTextFields } from "../../shared/motion/graph-style";
 
-const color = z.enum(["background", "foreground", "primary", "accent", "muted"]);
 const placement = {
-    x: z.number().min(0).max(1), y: z.number().min(0).max(1), color,
+    ...graphPaintFields,
+    x: z.number().min(0).max(1), y: z.number().min(0).max(1), color: graphColor,
     reveal: z.number().min(0).max(0.8).optional(),
     audioCueFrame: z.number().int().min(0).max(7200).optional(),
 };
 const box = { width: z.number().min(0.001).max(1.8), height: z.number().min(0.001).max(1) };
-const text = z.object({ ...placement, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
+const text = z.object({ ...placement, ...graphTextFields, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
     size: z.number().min(0.015).max(0.28), maxWidth: z.number().min(0.08).max(0.92) }).strict();
 const rect = z.object({ ...placement, ...box, kind: z.literal("rect"), radius: z.number().min(0).max(0.15).optional(),
     audioReactive: z.boolean().optional() }).strict();

@@ -6,21 +6,27 @@ const bundled = {
     archivo_black: { name: "VidsAI Archivo Black", url: "/motion-fonts/ArchivoBlack-Regular.ttf" },
     space_mono: { name: "VidsAI Space Mono", url: "/motion-fonts/SpaceMono-Regular.ttf" },
 };
-const loading = new Map<keyof typeof bundled, Promise<void>>();
+const styledMono = [
+    { name: bundled.space_mono.name, url: "/motion-fonts/SpaceMono-Bold.ttf", weight: "700", style: "normal" },
+    { name: bundled.space_mono.name, url: "/motion-fonts/SpaceMono-Italic.ttf", weight: "400", style: "italic" },
+    { name: bundled.space_mono.name, url: "/motion-fonts/SpaceMono-BoldItalic.ttf", weight: "700", style: "italic" },
+];
+const loading = new Map<string, Promise<void>>();
 
 export async function prepareMotionFont(scene: MotionScene, signal: AbortSignal): Promise<ReadyMotionAssets> {
     signal.throwIfAborted();
-    await Promise.all((Object.keys(bundled) as (keyof typeof bundled)[]).map((key) => {
-        let pending = loading.get(key);
+    const faces: { name: string; url: string; weight?: string; style?: string }[] = Object.values(bundled);
+    if (scene.type === "graph") faces.push(...styledMono);
+    await Promise.all(faces.map(({ name, url, weight, style }) => {
+        let pending = loading.get(url);
         if (!pending) {
-            const { name, url } = bundled[key];
-            pending = new FontFace(name, `url("${url}")`).load().then((font) => {
+            pending = new FontFace(name, `url("${url}")`, { weight, style }).load().then((font) => {
                 document.fonts.add(font);
             }).catch((error) => {
-                loading.delete(key);
+                loading.delete(url);
                 throw error;
             });
-            loading.set(key, pending);
+            loading.set(url, pending);
         }
         return pending;
     }));

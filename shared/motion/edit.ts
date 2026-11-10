@@ -105,6 +105,7 @@ export function applyMotionEdit(document: Document, op: Operation) {
                 case "graph": {
                     const layer = layerId && findText(scene.params.layers, layerId);
                     if (!layer) throw new Error("Unknown motion text layer.");
+                    if (text !== layer.text) delete layer.spans;
                     layer.text = text;
                     break;
                 }

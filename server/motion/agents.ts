@@ -347,7 +347,7 @@ export async function runMotionEngineer(
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
                 referenceFrames: describeReferenceFrames(details),
-                layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Use only the palette role names for colors.",
+                layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Prefer palette roles for brand colors. Use success, warning and danger for semantic states, or #RRGGBB for an exact source color. Use spans only when their text concatenates to the complete layer text.",
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
                 images: details.map(({ image }) => image),

@@ -264,6 +264,42 @@ try {
         assert.ok(checks.audioReactive[1].white > checks.audioReactive[0].white * 2);
         console.log("Browser fixtures reproduce covered labels, clipped copy, missing CTA and the wrong impact background.");
     }
+    if (process.argv.includes("--graph-style")) {
+        const painted = await page.evaluate(async () => {
+            const { drawMotionFrame } = await import("/shared/motion/render.ts");
+            const { motionSceneSchema } = await import("/shared/motion/schema.ts");
+            const { prepareMotionFont } = await import("/shared/motion/browser-assets.ts");
+            const scene = motionSceneSchema.parse({ id: "paint", type: "graph", componentVersion: 1, start_frame: 0, end_frame: 60,
+                palette: { background: "#101010", foreground: "#ffffff", primary: "#ff2200", muted: "#333333", accent: "#ffffff" },
+                params: { version: 1, layers: [
+                    { kind: "rect", id: "panel", transform: { x: 0.5, y: 0.25 }, width: 0.9, height: 0.2, color: "primary",
+                        gradient: { x0: -0.45, y0: 0, x1: 0.45, y1: 0, stops: [{ at: 0, color: "#ff0000" }, { at: 1, color: "#0000ff" }] },
+                        outline: { color: "#ffffff", width: 0.01 }, shadow: { color: "#ffffff", opacity: 1, x: 0, y: 0.05, blur: 0.03 } },
+                    { kind: "text", id: "status", transform: { x: 0.5, y: 0.65 }, size: 0.14, maxWidth: 0.9, text: "READY NOW",
+                        typography: { family: "space_mono", boxHeight: 0.35, lineHeight: 1.2, align: "left" },
+                        spans: [{ text: "READY ", color: "success", style: "italic", weight: 700 }, { text: "NOW", color: "#ff00ff" }] },
+                ] } });
+            const assets = await prepareMotionFont(scene, AbortSignal.timeout(5000));
+            const ctx = new OffscreenCanvas(640, 360).getContext("2d");
+            drawMotionFrame({ ctx, scene, frame: 0, fps: 30, width: 640, height: 360 }, assets);
+            const pixel = (x, y) => Array.from(ctx.getImageData(x, y, 1, 1).data).slice(0, 3);
+            const samples = ctx.getImageData(0, 180, 640, 150).data;
+            let green = 0, magenta = 0;
+            for (let i = 0; i < samples.length; i += 4) {
+                if (samples[i] < 50 && samples[i + 1] > 175 && samples[i + 2] < 120) green++;
+                if (samples[i] > 230 && samples[i + 1] < 30 && samples[i + 2] > 230) magenta++;
+            }
+            return { left: pixel(170, 90), right: pixel(470, 90), outline: pixel(320, 54), glow: pixel(320, 142), green, magenta,
+                fonts: [...document.fonts].filter(({ family, status }) => family.replace(/["']/g, "") === "VidsAI Space Mono" && status === "loaded")
+                    .map(({ style, weight }) => `${style} ${weight}`).sort() };
+        });
+        assert.ok(painted.left[0] > 220 && painted.right[2] > 220);
+        assert.ok(painted.outline.every((value) => value > 225));
+        assert.ok(painted.glow.every((value) => value > 70));
+        assert.ok(painted.green > 200 && painted.magenta > 200);
+        assert.deepEqual(painted.fonts, ["italic 400", "italic 700", "normal 700", "normal normal"]);
+        console.log("Canvas rendered a gradient, outline, glow and mixed styled spans with the bundled font faces and semantic status color.");
+    }
     const runTool = async () => {
         const [submitted, result] = await Promise.all([
             page.waitForRequest((req) => req.method() === "PUT" && req.url().includes(url), { timeout: 45_000 }),

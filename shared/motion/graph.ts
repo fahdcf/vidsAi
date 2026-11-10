@@ -1,10 +1,10 @@
 import { z } from "zod";
+import { graphColor, graphPaintFields, graphTextFields } from "./graph-style";
 
 const coordinate = z.number().min(-2).max(3);
 const opacity = z.number().min(0).max(1);
 const scale = z.number().min(0).max(8);
 const rotation = z.number().min(-1440).max(1440);
-const paint = z.enum(["background", "foreground", "primary", "accent", "muted"]);
 const point = { x: coordinate, y: coordinate };
 const pathCommand = z.discriminatedUnion("op", [
     z.object({ op: z.literal("M"), ...point }).strict(),
@@ -36,12 +36,13 @@ const common = {
     keyframes: keyframes.default([]),
 };
 const leafSchema = z.discriminatedUnion("kind", [
-    z.object({ ...common, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
-        color: paint.default("foreground"), size: z.number().min(0.015).max(0.4), maxWidth: size.default(0.85) }).strict(),
-    z.object({ ...common, kind: z.literal("rect"), width: size, height: size,
-        color: paint, radius: z.number().min(0).max(0.5).default(0), audioReactive: z.boolean().optional() }).strict(),
-    z.object({ ...common, kind: z.literal("ellipse"), width: size, height: size, color: paint }).strict(),
-    z.object({ ...common, kind: z.literal("path"), commands: vectorPath, color: paint,
+    z.object({ ...common, ...graphPaintFields, ...graphTextFields, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
+        color: graphColor.default("foreground"), size: z.number().min(0.015).max(0.4), maxWidth: size.default(0.85) }).strict()
+        .refine(({ spans, text }) => !spans || spans.map((span) => span.text).join("") === text, "Styled spans must preserve the complete layer text."),
+    z.object({ ...common, ...graphPaintFields, kind: z.literal("rect"), width: size, height: size,
+        color: graphColor, radius: z.number().min(0).max(0.5).default(0), audioReactive: z.boolean().optional() }).strict(),
+    z.object({ ...common, ...graphPaintFields, kind: z.literal("ellipse"), width: size, height: size, color: graphColor }).strict(),
+    z.object({ ...common, ...graphPaintFields, kind: z.literal("path"), commands: vectorPath, color: graphColor,
         stroke: z.number().min(0.001).max(0.1).optional() }).strict(),
 ]);
 

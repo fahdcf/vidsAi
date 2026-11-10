@@ -1,8 +1,10 @@
-import { clamp, drawMotionPath, easeOut, lerp, smooth } from "./draw";
+import { alpha, clamp, drawMotionPath, easeOut, lerp, smooth } from "./draw";
 import type { MotionGraphNode } from "./graph";
 import type { MotionFrame } from "./registry";
 import { drawImpact, drawKineticWords } from "./typography-scenes";
 import { drawMotionText } from "./text";
+import { resolveGraphColor, type GraphColor } from "./graph-style";
+import { drawStyledMotionText } from "./styled-text";
 import { drawEasing, drawGrid, drawTunnel } from "./geometry-scenes";
 import { drawLiquid } from "./liquid-scene";
 import { drawIdentity } from "./identity-scene";
@@ -65,36 +67,63 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
                 drawGraph(frame, node.children, progress, assets, false);
                 continue;
             }
-            ctx.fillStyle = scene.palette[node.color];
+            const resolve = (color: GraphColor) => resolveGraphColor(scene.palette, color);
+            let fill: string | CanvasGradient = resolve(node.color);
+            if (node.gradient) {
+                const { x0, y0, x1, y1, stops } = node.gradient;
+                fill = ctx.createLinearGradient(x0 * unit, y0 * unit, x1 * unit, y1 * unit);
+                for (const { at, color } of stops) fill.addColorStop(at, resolve(color));
+            }
+            if (node.shadow) {
+                ctx.shadowColor = alpha(resolve(node.shadow.color), node.shadow.opacity);
+                ctx.shadowBlur = node.shadow.blur * unit;
+                ctx.shadowOffsetX = node.shadow.x * unit;
+                ctx.shadowOffsetY = node.shadow.y * unit;
+            }
+            const outline = node.outline && { color: resolve(node.outline.color), width: node.outline.width * unit };
+            ctx.fillStyle = fill;
             ctx.beginPath();
             switch (node.kind) {
                 case "text": {
                     const w = node.maxWidth * width;
-                    const h = node.size * unit * 2.5;
-                    drawMotionText(ctx, node.text, assets.fontFamily, scene.palette[node.color], {
-                        x: -w / 2, y: -h / 2, width: w, height: h, maxSize: node.size * unit,
-                    });
-                    break;
+                    const style = node.typography;
+                    const h = (style?.boxHeight ?? node.size * 2.5) * unit;
+                    const box = { x: -w / 2, y: -h / 2, width: w, height: h, maxSize: node.size * unit,
+                        align: style?.align, maxLines: style?.maxLines };
+                    if (style || node.spans || node.gradient || outline) {
+                        const runs = (node.spans ?? [{ text: node.text }]).map((span) => {
+                            const { family, weight, style: face, color, text } = { ...style, ...span };
+                            return { text, family: family ? motionFontFamilies[family] : assets.fontFamily,
+                                weight, style: face, color: color ? resolve(color) : fill };
+                        });
+                        drawStyledMotionText(ctx, runs, box, style?.lineHeight ?? 1.17, outline);
+                    } else drawMotionText(ctx, node.text, assets.fontFamily, resolve(node.color), box);
+                    continue;
                 }
                 case "rect": {
                     const w = node.width * unit;
                     const h = node.height * unit * (node.audioReactive && frame.audioLevel !== undefined ? 0.25 + 0.75 * frame.audioLevel : 1);
                     ctx.roundRect(-w / 2, -h / 2, w, h, node.radius * unit);
-                    ctx.fill();
                     break;
                 }
                 case "ellipse":
                     ctx.ellipse(0, 0, node.width * unit / 2, node.height * unit / 2, 0, 0, Math.PI * 2);
-                    ctx.fill();
                     break;
                 case "path":
                     drawMotionPath(ctx, node.commands, width, height);
                     if (node.stroke) {
-                        ctx.lineWidth = node.stroke * unit;
-                        ctx.strokeStyle = scene.palette[node.color];
+                        ctx.lineWidth = outline?.width ?? node.stroke * unit;
+                        ctx.strokeStyle = outline?.color ?? fill;
                         ctx.stroke();
-                    } else ctx.fill();
+                        continue;
+                    }
                     break;
+            }
+            ctx.fill();
+            if (outline) {
+                ctx.strokeStyle = outline.color;
+                ctx.lineWidth = outline.width;
+                ctx.stroke();
             }
         } finally {
             ctx.restore();
