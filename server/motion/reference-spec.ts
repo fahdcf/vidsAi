@@ -17,20 +17,20 @@ export async function runReferenceSpec(context: MotionAgentContext, storyboard: 
     const detailSamples = details.map(({ sceneId, time }, index) => ({ id: `f${index}`, sceneId, time, imageNumber: sheets.length + index + 1 }));
     const inputs = storyboard.scenes.map((scene) => {
         const notes = sceneReferenceEvidence(reference, scene, context.document);
-        const sourceInterval = notes?.timing ?? reference.interval;
-        const evidence = [...tiles, ...detailSamples.filter(({ sceneId }) => sceneId === scene.id)]
+        const sourceInterval = notes?.timing ?? null;
+        const evidence = notes ? [...tiles, ...detailSamples.filter(({ sceneId }) => sceneId === scene.id)]
             .filter(({ time }) => sourceInterval ? time >= sourceInterval.start && time <= sourceInterval.end : time === 0)
-            .map(({ id, time }) => ({ id, time }));
-        return { sceneId: scene.id, sourceInterval, requiredCopy: scene.copy, evidence, notes };
+            .map(({ id, time }) => ({ id, time })) : [];
+        return { sceneId: scene.id, sourceInterval, sourceSceneIndex: notes?.sourceSceneIndex ?? null, requiredCopy: scene.copy, evidence, notes };
     });
     const schema = z.object({ scenes: z.array(referenceSceneProposalSchema).length(inputs.length) }).strict();
     const expand = (proposals: z.infer<typeof schema>["scenes"]): ReferenceSceneSpec[] => {
         const byId = new Map(proposals.map((proposal) => [proposal.sceneId, proposal]));
         if (byId.size !== inputs.length) throw new Error("A reference specification needs one proposal per scene.");
-        return inputs.map(({ sceneId, sourceInterval, requiredCopy, evidence }) => {
-            const proposal = byId.get(sceneId);
+        return inputs.map(({ notes: _notes, ...scene }) => {
+            const proposal = byId.get(scene.sceneId);
             if (!proposal) throw new Error("The reference specification used an unexpected scene ID.");
-            return referenceSceneSpecSchema.parse({ ...proposal, sourceInterval, requiredCopy, evidence, source: "vision" });
+            return referenceSceneSpecSchema.parse({ ...proposal, ...scene, source: "vision" });
         });
     };
     try {

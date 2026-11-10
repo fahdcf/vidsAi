@@ -36,6 +36,7 @@ export const referenceSceneProposalSchema = z.object({
 
 export const referenceSceneSpecSchema = referenceSceneProposalSchema.extend({
     sourceInterval: referenceIntervalSchema.nullable(),
+    sourceSceneIndex: z.number().int().min(0).max(7).nullable().optional(),
     requiredCopy: z.string().max(180),
     evidence: z.array(z.object({ id: evidenceId, time: referenceIntervalSchema.shape.start }).strict()).max(40),
     source: z.enum(["vision", "observations"]),

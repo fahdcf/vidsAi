@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -19,7 +19,11 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
             case "observe": {
                 const times = JSON.parse(prompt.match(/seconds: (\[.*?\])/)[1]);
                 assert.ok(message.length > 1);
-                value = { observations: [{ time: times[0], copy: null, layout: "Centered shapes", confidence: 0.8 }] };
+                const sampleTimes = prompt.includes("readable text and layout")
+                    ? [times[0], ...(referenceMapping ? [times.find((time) => time >= 6)]
+                        : [times.find((time) => time >= 10.35), times.find((time) => time >= 12.5)])].filter((time) => time !== undefined)
+                    : [times[0]];
+                value = { observations: sampleTimes.map((time) => ({ time, copy: null, layout: "Centered shapes", confidence: 0.8 })) };
                 break;
             }
             case "reference-analyst": {
@@ -31,18 +35,20 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     palette: ["#ee6633"], motion: null, approximation: null };
                 const { start, end } = artifact.interval;
                 const liquid = analystRecognizesLiquid && graphic.some(({ type }) => type === "liquid") && start < 10.35 && end > 12.5;
-                value = { scenes: liquid ? [
+                value = { scenes: referenceMapping ? [{ ...observed, end: 5 }, { ...observed, title: "Product", sample: 1 }] : liquid ? [
                     { ...observed, end: 10.35 },
                     { ...observed, title: "Liquid shapes", end: 12.5, type: "liquid",
-                        palette: ["#ee426e", "#e35a9d", "#f487ad", "#2353ec"] },
-                    { ...observed, title: "Closing card", type: "identity" },
+                        palette: ["#ee426e", "#e35a9d", "#f487ad", "#2353ec"], sample: 1 },
+                    { ...observed, title: "Closing card", type: "identity", sample: 2 },
                 ] : [observed], unresolved: [] };
                 break;
             }
             case "director":
                 assert.ok(artifact.reference.observations.length);
                 value = { title: "Motion study", summary: "A staged motion study.", look: "reference",
-                    scenes: graphic.map(({ id, type, start_frame, end_frame }) => ({ id, type, start_frame, end_frame,
+                    ...(referenceMapping ? { referenceIntent: "match", timingMode: "source" } : {}),
+                    scenes: graphic.map(({ id, type, start_frame, end_frame }, index) => ({ id, type, start_frame, end_frame,
+                        ...(referenceMapping ? { referenceSceneIndex: index } : {}),
                         purpose: type === "graph" ? "Show a URL field, transcript button, and animated text rows" : "Tell the story",
                         copy: type === "graph" ? "Get transcript" : "" })) };
                 if (stages.filter((stage) => stage === "director").length === 1) value = null;

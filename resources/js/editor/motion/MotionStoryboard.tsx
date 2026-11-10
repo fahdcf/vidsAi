@@ -23,16 +23,21 @@ export default function MotionStoryboard({ draft, storyboard, canRevise, onPrevi
 }) {
     const scenes = draft?.tracks.motion_graphics.map((scene) => ({
         ...scene, copy: motionSceneCopy(scene), purpose: storyboard?.scenes.find(({ id }) => id === scene.id)?.purpose,
+        referenceSceneIndex: storyboard?.scenes.find(({ id }) => id === scene.id)?.referenceSceneIndex,
     })) ?? storyboard?.scenes ?? [];
     if (!scenes.length) return null;
     return <section className="panel motion-storyboard" aria-label="Storyboard">
         <h2>Storyboard</h2>
+        {storyboard?.referenceIntent && <p className="muted">
+            {storyboard.referenceIntent === "match" ? "Reference match" : "Reference inspired"} · {storyboard.timingMode === "source" ? "Source cuts" : "Custom timing"}
+        </p>}
         <ol>{scenes.map((scene, index) => <li key={scene.id}>
             <details>
                 <summary><span>Scene {index + 1} · {motionSceneLabel[scene.type as keyof typeof motionSceneLabel] ?? "Motion scene"}</span>
                     <span className="muted">{((scene.end_frame - scene.start_frame) / (draft?.fps ?? 30)).toFixed(1)}s</span></summary>
                 <div className="motion-scene-detail">
                     {scene.purpose && <p>{scene.purpose}</p>}
+                    {typeof scene.referenceSceneIndex === "number" && <p className="muted">Reference scene {scene.referenceSceneIndex + 1}</p>}
                     {scene.copy && <p className="motion-scene-copy">{scene.copy}</p>}
                     {"palette" in scene && <div className="motion-scene-palette" aria-label="Scene palette">
                         {Object.entries(scene.palette).map(([name, color]) => <span key={name} style={{ backgroundColor: color }}

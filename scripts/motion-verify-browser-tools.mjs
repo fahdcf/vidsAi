@@ -449,7 +449,8 @@ try {
     if (useGraphEngineer) graphic[1] = { ...graphic[1], type: "graph" };
     const rejectDetailVision = process.argv.includes("--detail-vision-fallback");
     const rejectSpec = process.argv.includes("--reference-spec-fallback");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec });
+    const referenceMapping = process.argv.includes("--reference-mapping");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -476,6 +477,16 @@ try {
     const detail = JSON.parse(motionArtifact(graphRun.id, detailStep.result_id).body.toString());
     assert.deepEqual(detail.samples.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
     assert.equal(new Set(detail.samples.map(({ time }) => time)).size, graphic.length);
+    if (referenceMapping) {
+        const director = motionSteps(graphRun.id).find(({ name }) => name === "director");
+        const { value: plan } = JSON.parse(motionArtifact(graphRun.id, director.result_id).body.toString());
+        assert.equal(plan.referenceIntent, "match");
+        assert.equal(plan.timingMode, "source");
+        assert.deepEqual(plan.scenes.map(({ referenceSceneIndex, end_frame }) => [referenceSceneIndex, end_frame]), [[0, 180], [1, 450]]);
+        assert.ok(detail.samples[0].time < 5 && detail.samples[1].time >= 5);
+        assert.deepEqual(specification.specs.map(({ sourceSceneIndex }) => sourceSceneIndex), [0, 1]);
+        console.log("Reference mapping preserved the measured cut on the scaled timeline and sampled the correct source scenes.");
+    }
     for (const { base64 } of detail.images) {
         assert.equal(await graphPage.evaluate(async (data) => {
             const bitmap = await createImageBitmap(await (await fetch(`data:image/jpeg;base64,${data}`)).blob());

@@ -9,7 +9,8 @@ export type MotionRunView = {
     projectId: number;
     startingRevision: number;
     targetSceneId: string | null;
-    storyboard: { title: string; scenes: { id: string; type: string; start_frame: number; end_frame: number; copy: string; purpose: string }[] } | null;
+    storyboard: { title: string; referenceIntent?: "match" | "inspired"; timingMode?: "source" | "custom";
+        scenes: { id: string; type: string; start_frame: number; end_frame: number; copy: string; purpose: string; referenceSceneIndex?: number | null }[] } | null;
     status: MotionStatus;
     error: string | null;
     pendingSetup: MotionSetupRequirements | null;

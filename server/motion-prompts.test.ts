@@ -9,6 +9,24 @@ import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion
 import { referenceClock, referenceTimeAt } from "../shared/motion/time-map";
 import { compileEngineerGraph, graphEngineerSchema } from "./motion/graph-engineer";
 import { referenceSceneSpecSchema } from "../shared/motion/reference-spec";
+import { mapStoryboardToReference } from "./motion/reference-segments";
+
+test("a reference match adopts source cuts while inspired edits retain their chosen timing", () => {
+    const reference = measuredReferenceAnalysis({ kind: "video", interval: { start: 0, end: 8 },
+        measured: { timestamps: [1, 5], palette: [], candidateCuts: [{ time: 2, score: 0.8, before: 1, after: 5 }] },
+        observations: [{ time: 1, copy: "Opening", layout: "Title", confidence: 0.9 },
+            { time: 5, copy: "Closing", layout: "Card", confidence: 0.9 }] });
+    const plan = motionStoryboardSchema.parse({ title: "Reel", summary: "Reel", look: "reference",
+        scenes: [{ id: "first", type: "graph", purpose: "Opening", copy: "Opening", start_frame: 0, end_frame: 75, referenceSceneIndex: 0 },
+            { id: "second", type: "graph", purpose: "Closing", copy: "Closing", start_frame: 75, end_frame: 150, referenceSceneIndex: 1 }] });
+    const output = { total_frames: 150, fps: 30 };
+    assert.deepEqual(mapStoryboardToReference(plan, reference, output).scenes.map(({ end_frame }) => end_frame), [38, 150]);
+    for (const custom of [{ ...plan, referenceIntent: "inspired" as const }, { ...plan, timingMode: "custom" as const }]) {
+        const mapped = mapStoryboardToReference(custom, reference, output);
+        assert.equal(mapped.timingMode, "custom");
+        assert.deepEqual(mapped.scenes, plan.scenes);
+    }
+});
 
 test("reference specifications require distinct source times for motion", () => {
     const spec = { sceneId: "panel", source: "vision", sourceInterval: { start: 0, end: 2 }, requiredCopy: "",

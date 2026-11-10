@@ -14,6 +14,10 @@ export function referenceTimeAt(frame: number, clock: ReturnType<typeof referenc
     return Math.min(clock.end, clock.start + Math.max(0, frame) * clock.secondsPerFrame);
 }
 
+export function referenceFrameAt(time: number, clock: ReturnType<typeof referenceClock>, totalFrames: number) {
+    return Math.min(totalFrames, Math.max(0, Math.round((time - clock.start) / clock.secondsPerFrame)));
+}
+
 export function motionTimeMap(document: Document, reference: Interval | null) {
     const { fps, total_frames, metadata } = document;
     const track = document.tracks.audio.find(({ id }) => id === "motion-soundtrack");

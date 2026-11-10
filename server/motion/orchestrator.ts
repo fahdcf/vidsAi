@@ -107,25 +107,31 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         if (!done("director")) return;
         const storyboard = agentResult(id, "director", motionStoryboardSchema);
         const reference = run.reference_binding_id ? agentResult(id, "reference_analysis", referenceAnalysisSchema) : null;
-        const useDetails = reference && storyboard.look === "reference";
-        if (useDetails) {
+        let useDetails = false;
+        if (reference && storyboard.look === "reference") {
             const snapshot = motionSnapshot(run);
-            const samples = storyboard.scenes.map((scene) => {
+            const samples = storyboard.scenes.flatMap((scene) => {
                 const evidence = sceneReferenceEvidence(reference, scene, snapshot);
-                const interval = evidence?.timing ?? reference.interval;
+                if (!evidence) return [];
+                const interval = evidence.timing;
+                const times = reference.measured.timestamps.filter((time) => !interval || (time >= interval.start && time <= interval.end));
+                if (!times.length) return [];
                 const source = reference.interval;
                 const projected = source ? referenceTimeAt((scene.start_frame + scene.end_frame) / 2, referenceClock(source, snapshot)) : 0;
                 const middle = interval && (projected < interval.start || projected >= interval.end)
                     ? (interval.start + interval.end) / 2 : projected;
-                const observations = evidence?.observations.filter(({ time }) => !interval || (time >= interval.start && time < interval.end)) ?? [];
+                const observations = evidence.observations.filter(({ time }) => !interval || (time >= interval.start && time < interval.end));
                 const closest = (times: readonly number[], time: number) => times.reduce((nearest, sample) =>
                     Math.abs(sample - time) < Math.abs(nearest - time) ? sample : nearest);
                 const observed = observations.length ? closest(observations.map(({ time }) => time), middle) : middle;
-                const time = closest(reference.measured.timestamps, Math.abs(observed - middle) <= 0.65 ? observed : middle);
-                return { sceneId: scene.id, time };
+                const time = closest(times, Math.abs(observed - middle) <= 0.65 ? observed : middle);
+                return [{ sceneId: scene.id, time }];
             });
-            add({ name: "reference_detail", lane: "browser", dependencies: ["director"], input: samples });
-            add({ name: "reference_spec", lane: "provider", dependencies: ["reference_detail"] });
+            if (samples.length) {
+                useDetails = true;
+                add({ name: "reference_detail", lane: "browser", dependencies: ["director"], input: samples });
+                add({ name: "reference_spec", lane: "provider", dependencies: ["reference_detail"] });
+            }
         }
         add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_spec"] : [])] });
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");

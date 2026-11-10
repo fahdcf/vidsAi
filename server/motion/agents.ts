@@ -12,7 +12,7 @@ import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
 import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes } from "./graph-engineer";
 import { observeReferenceSheet } from "./reference-observer";
-import { observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
+import { mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
 
 const frame = z.number().int().nonnegative().max(7200);
 const storyboardScene = z.object({
@@ -22,12 +22,15 @@ const storyboardScene = z.object({
     end_frame: frame,
     purpose: z.string().trim().min(1).max(200),
     copy: z.string().trim().max(180),
+    referenceSceneIndex: z.number().int().min(0).max(7).nullable().optional(),
 }).strict().refine((scene) => scene.end_frame > scene.start_frame);
 
 export const motionStoryboardSchema = z.object({
     title: z.string().trim().min(1).max(100),
     summary: z.string().trim().min(1).max(320),
     look: z.enum(["reference", "studio"]),
+    referenceIntent: z.enum(["match", "inspired"]).optional(),
+    timingMode: z.enum(["source", "custom"]).optional(),
     scenes: z.array(storyboardScene).min(1).max(8),
 }).strict().superRefine(({ scenes }, ctx) => {
     const ids = new Set<string>();
@@ -183,8 +186,8 @@ export async function runReferenceAnalyst(
     }
 }
 
-export function runMotionDirector(context: MotionAgentContext, reference: ReferenceAnalysis | null) {
-    return runMotionAgent(context, "director", "AGENT_COMPLEX", {
+export async function runMotionDirector(context: MotionAgentContext, reference: ReferenceAnalysis | null) {
+    const result = await runMotionAgent(context, "director", "AGENT_COMPLEX", {
         reference,
         components: motionComponentTypes.map((type) => {
             const { name, description } = describeMotionComponent(type);
@@ -198,8 +201,11 @@ export function runMotionDirector(context: MotionAgentContext, reference: Refere
     }, motionStoryboardSchema, {
         validate: ({ scenes }) => {
             if (scenes.at(-1)?.end_frame !== context.document.total_frames) throw new Error("Storyboard duration is incorrect.");
+            if (scenes.some(({ referenceSceneIndex }) => typeof referenceSceneIndex === "number" &&
+                (!reference || referenceSceneIndex >= reference.scenes.length))) throw new Error("Storyboard points to a missing reference scene.");
         },
     });
+    return reference ? { ...result, value: mapStoryboardToReference(result.value, reference, context.document) } : result;
 }
 
 export async function runMotionCopywriter(context: MotionAgentContext, storyboard: MotionStoryboard, exactCopy: readonly string[] = []) {
