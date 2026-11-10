@@ -409,7 +409,7 @@ try {
     complete("director", "provider", { value: { title: "Motion", summary: "Opening scene", look: "studio",
         scenes: [{ id: good.id, type: good.type, start_frame: 0, end_frame: good.end_frame, purpose: "Opening scene", copy: "" }] } });
     complete("copy", "provider", {});
-    complete("design", "provider", {});
+    complete("design", "provider", { value: { decision: "Legacy design artifact", scenes: [{ id: good.id, palette: good.palette, layout: good.layout, font: good.font }] } });
     complete("engineer:" + good.id, "provider", { value: { scene: bad, approximation: null, decision: "First pass" } });
     const realAssembly = new MotionOrchestrator();
     await realAssembly.tick(fifth.id);
@@ -451,7 +451,8 @@ try {
     const rejectSpec = process.argv.includes("--reference-spec-fallback");
     const referenceMapping = process.argv.includes("--reference-mapping");
     const referenceFollowup = process.argv.includes("--reference-followup");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup });
+    const componentCompatibility = process.argv.includes("--component-compatibility");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -555,11 +556,31 @@ try {
         assert.deepEqual(quality.approximations.map(({ sceneId }) => sceneId), rejectGraphEngineer ? [graphic[1].id] : []);
         console.log("Unavailable visual review preserved the draft and required approval before opening it in the editor.");
     } else {
-        assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.impactAt, 0.42);
+        const firstScene = document(project(graphProject)).tracks.motion_graphics[0];
+        if (componentCompatibility) assert.equal(firstScene.motionRate, 1.2);
+        else assert.equal(firstScene.params.impactAt, 0.42);
         assert.ok(stages.includes("repair"));
     }
     const published = document(project(graphProject));
     assert.equal(published.tracks.motion_graphics[1].id, graphic[1].id);
+    const scenes = published.tracks.motion_graphics;
+    assert.deepEqual(scenes.map(({ type }) => type), componentCompatibility ? ["graph", "graph"] : graphic.map(({ type }) => type));
+    if (componentCompatibility) {
+        const steps = motionSteps(graphRun.id);
+        const stage = (name) => steps.find((step) => step.name === name);
+        const proposal = JSON.parse(motionArtifact(graphRun.id, stage("director").result_id).body.toString()).value;
+        const design = JSON.parse(motionArtifact(graphRun.id, stage("design").result_id).body.toString()).value;
+        assert.deepEqual(proposal.scenes.map(({ type }) => type), ["impact", "identity"]);
+        assert.deepEqual(design.componentChecks.map(({ unsupported }) => unsupported), [["Slide a URL field into view"], ["Reveal a separate call-to-action button"]]);
+        assert.ok(stages.indexOf("visual-designer") < stages.indexOf("copywriter"));
+        assert.deepEqual(scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]),
+            proposal.scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]));
+        for (const [index, scene] of scenes.entries()) {
+            assert.ok(scene.params.layers.some(({ kind, keyframes }) => kind === "rect" && keyframes.length));
+            assert.ok(scene.params.layers.some(({ kind, text }) => kind === "text" && text === ["Get transcript", "Try it now"][index]));
+        }
+        console.log("The incompatible hook and closing card were published as editable custom graphs with their original copy and timing.");
+    }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {
         const step = motionSteps(graphRun.id).find(({ name }) => name === `engineer:${graphic[1].id}`);

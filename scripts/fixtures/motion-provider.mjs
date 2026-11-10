@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false } = {}) {
     const stages = [];
+    const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
+    const labels = ["Get transcript", "Try it now"];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
     globalThis.fetch = async (input, init) => {
@@ -49,11 +51,16 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     ...(referenceMapping ? { referenceIntent: "match", timingMode: "source" } : {}),
                     scenes: graphic.map(({ id, type, start_frame, end_frame }, index) => ({ id, type, start_frame, end_frame,
                         ...(referenceMapping ? { referenceSceneIndex: index } : {}),
-                        purpose: type === "graph" ? "Show a URL field, transcript button, and animated text rows" : "Tell the story",
-                        copy: type === "graph" ? "Get transcript" : "" })) };
+                        purpose: componentCompatibility ? required[index] : type === "graph" ? "Show a URL field, transcript button, and animated text rows" : "Tell the story",
+                        copy: componentCompatibility ? labels[index] : type === "graph" ? "Get transcript" : "" })) };
                 if (stages.filter((stage) => stage === "director").length === 1) value = null;
                 break;
             case "copywriter":
+                if (componentCompatibility) {
+                    assert.ok(artifact.storyboard.scenes.every(({ type }) => type === "graph"));
+                    value = { decision: "Kept both labels verbatim.", scenes: labels.map((copy) => ({ copy, parts: [] })) };
+                    break;
+                }
                 if (rejectCopywriter) { value = null; break; }
                 value = { decision: "Kept the opening and closing copy.", scenes: graphic.map(({ type, params }) => {
                     const parts = type === "impact" ? params.headline.split("\n") : type === "kinetic_words" ? params.words
@@ -96,7 +103,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     assert.equal(message.length, artifact.referenceFrames.length + 1);
                     if (rejectDetailVision) { value = null; break; }
                 } else assert.ok(rejectDetailVision);
-                value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }) => ({ palette, layout, font })) };
+                if (componentCompatibility) assert.deepEqual(artifact.components.map(({ type }) => type), ["impact", "identity"]);
+                value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }, index) => ({
+                    palette, layout, font, unsupported: componentCompatibility ? [required[index]] : [],
+                })) };
                 break;
             case "motion-engineer": {
                 assert.equal(typeof artifact.approvedCopy, "string");
@@ -115,10 +125,13 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     if (rejectDetailVision) { value = null; break; }
                 } else assert.ok(rejectDetailVision || (rejectGraphEngineer && artifact.target.type === "graph"));
                 if (artifact.target.type === "graph") {
-                    assert.equal(artifact.approvedCopy, "Get transcript");
+                    const index = graphic.findIndex(({ id }) => id === artifact.target.id);
+                    assert.equal(artifact.approvedCopy, componentCompatibility ? labels[index] : "Get transcript");
+                    if (componentCompatibility) assert.deepEqual(artifact.requiredCapabilities, [required[index]]);
                     value = rejectGraphEngineer ? { layers: [{ kind: "group" }], decision: "Invalid scene", approximation: null }
-                        : { layers: [{ kind: "text", text: artifact.approvedCopy, x: 0.5, y: 0.5, size: 0.08,
-                            maxWidth: 0.8, color: "foreground", reveal: 0.1 }], decision: "Built the editable layout.", approximation: null };
+                        : { layers: [...(componentCompatibility ? [{ kind: "rect", x: 0.5, y: 0.5, width: 0.65, height: 0.15, color: "muted", reveal: 0.1 }] : []),
+                            { kind: "text", text: artifact.approvedCopy, x: 0.5, y: 0.5, size: 0.08, maxWidth: 0.8, color: "foreground", reveal: 0.1 }],
+                            decision: "Built the editable layout.", approximation: null };
                     break;
                 }
                 const { params, finish, seed, motionRate, transitionIn } = graphic.find(({ id }) => id === artifact.target.id);
@@ -131,12 +144,15 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 if (rejectCritic || (rejectCriticAfterRepair && stages.includes("repair"))) { value = null; break; }
                 value = { decision: "Reviewed the browser frames.", scores: { readability: 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
                     issues: stages.filter((stage) => stage === "visual-critic").length === 1
-                        ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame, priority: "polish", issue: "Impact settles early", repair: "Move impact later" }]
+                        ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame, priority: "polish",
+                            issue: componentCompatibility ? "The URL field enters too slowly" : "Impact settles early",
+                            repair: componentCompatibility ? "Speed up the entrance" : "Move impact later" }]
                         : [], unresolved: [] };
                 break;
             case "repair":
-                value = { decision: "Moved the impact later.", approximation: null,
-                    scene: { ...artifact.scene, params: { ...artifact.scene.params, impactAt: 0.42 } } };
+                value = componentCompatibility ? { decision: "Sped up the entrance.", approximation: null, scene: { ...artifact.scene, motionRate: 1.2 } }
+                    : { decision: "Moved the impact later.", approximation: null,
+                        scene: { ...artifact.scene, params: { ...artifact.scene.params, impactAt: 0.42 } } };
                 break;
             default: throw new Error("Unexpected model role " + role);
         }

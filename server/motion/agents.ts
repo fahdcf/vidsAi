@@ -61,9 +61,12 @@ const designScene = z.object({
     font: z.enum(["archivo_black", "space_mono", "system"]),
     layout: motionLayout,
 }).strict();
+const unsupportedRequirements = z.array(z.string().trim().min(1).max(140)).max(4);
+const componentCheck = z.object({ sceneId: motionSceneId, unsupported: unsupportedRequirements }).strict();
 export const motionDesignSchema = z.object({
     scenes: z.array(designScene).min(1).max(8),
     decision: z.string().trim().min(1).max(280),
+    componentChecks: z.array(componentCheck).max(8).optional(),
 }).strict();
 export type MotionCopy = z.infer<typeof motionCopySchema>;
 export type MotionDesign = z.infer<typeof motionDesignSchema>;
@@ -267,15 +270,27 @@ const describeReferenceFrames = (frames: readonly ReferenceFrame[]) => frames.ma
 
 export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard, reference: ReferenceAnalysis | null = null,
     frames: readonly ReferenceFrame[] = [], referenceSpecs: readonly ReferenceSceneSpec[] = []) {
-    const schema = motionDesignSchema.extend({ scenes: z.array(designScene.omit({ id: true })).length(storyboard.scenes.length) });
+    const schema = motionDesignSchema.omit({ componentChecks: true }).extend({
+        scenes: z.array(designScene.omit({ id: true }).extend({ unsupported: unsupportedRequirements })).length(storyboard.scenes.length),
+    });
     const referenceScenes = reference && storyboard.look === "reference" ? storyboard.scenes.map((scene) => ({
         id: scene.id, evidence: sceneReferenceEvidence(reference, scene, context.document),
     })) : undefined;
+    const components = [...new Set(storyboard.scenes.map(({ type }) => type))].map((type) => {
+        const { description, editable } = describeMotionComponent(type);
+        return { type, description, editable };
+    });
     const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX",
-        { storyboard, referenceScenes, referenceFrames: describeReferenceFrames(details), referenceSpecs }, schema,
+        { storyboard, components, referenceScenes, referenceFrames: describeReferenceFrames(details), referenceSpecs }, schema,
         { images: details.map(({ image }) => image), requestTimeoutMs: details.length ? 45_000 : undefined }));
-    const scenes = result.value.scenes.map((scene, index) => ({ ...scene, id: storyboard.scenes[index].id }));
-    return { ...result, value: { ...result.value, scenes } };
+    const scenes = result.value.scenes.map(({ unsupported: _unsupported, ...scene }, index) => ({ ...scene, id: storyboard.scenes[index].id }));
+    const componentChecks = result.value.scenes.map(({ unsupported }, index) => ({ sceneId: scenes[index].id, unsupported }));
+    return { ...result, value: { decision: result.value.decision, scenes, componentChecks } };
+}
+
+export function resolveMotionStoryboard(storyboard: MotionStoryboard, design: MotionDesign): MotionStoryboard {
+    const incompatible = new Set(design.componentChecks?.filter(({ unsupported }) => unsupported.length).map(({ sceneId }) => sceneId));
+    return { ...storyboard, scenes: storyboard.scenes.map((scene) => incompatible.has(scene.id) ? { ...scene, type: "graph" } : scene) };
 }
 
 function sceneCopy(scene: MotionScene): string | null {
@@ -327,6 +342,7 @@ export async function runMotionEngineer(
         try {
             const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
+                requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
                 referenceSpec,
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),

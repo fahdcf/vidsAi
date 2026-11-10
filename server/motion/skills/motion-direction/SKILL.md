@@ -4,9 +4,11 @@ Establish one premise and a visual progression. Reserve a readable final hold. A
 
 Skill version 1 requires renderer version 1 and component version 1. Input contract ReferenceAnalysis. Output contract MotionPlan.
 
-Supported components are impact, identity. Available tools for eligible roles are list_motion_components, propose_motion_plan.
+Supported components include the specialized motion components and custom composition. Available tools for eligible roles are list_motion_components, propose_motion_plan.
 
 A timeline gap fails the compiler. Fit all scenes to the chosen frame duration.
+
+Match components to the required visual objects and animation. Hooks and closing beats can use any compatible composition.
 
 ```json
 [

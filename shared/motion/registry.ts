@@ -28,7 +28,7 @@ type Entry<T extends MotionSceneType> = {
 const entries: { [K in MotionSceneType]: Entry<K> } = {
     impact: {
         name: "Impact and rings",
-        description: "A bouncing shape opens into expanding rings, particles and a headline.",
+        description: "A bouncing circle opens into expanding rings, particles, a palette-color fill and one headline. No independent objects or text layers.",
         defaults: { headline: "MAKE IT MOVE" },
         editable: ["headline", "ringCount", "particles", "impactAt"],
         cost: ({ ringCount, particles }) => ({ geometry: ringCount + 8, particles, vectors: 0 }),
@@ -70,7 +70,7 @@ const entries: { [K in MotionSceneType]: Entry<K> } = {
     },
     identity: {
         name: "Identity card",
-        description: "A closing title, supporting detail, and optional mark.",
+        description: "A title reveal with a divider, supporting detail, short tag and an optional built-in circular mark. No custom logo, button, or independently animated elements.",
         defaults: { title: "VIDSAI" },
         editable: ["title", "detail", "tag", "showMark"],
         cost: () => ({ geometry: 12, particles: 0, vectors: 0 }),

@@ -23,7 +23,7 @@ import { motionReference, saveMotionReferenceAnalysis } from "./references";
 import { observeReferenceSheet, referenceObservationsSchema } from "./reference-observer";
 import {
     integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionDraftBlockers, motionStoryboardSchema,
-    motionCritiqueSchema, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
+    motionCritiqueSchema, resolveMotionStoryboard, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
     runMotionRepair, runMotionRevision, runReferenceAnalyst, type MotionBuild, type MotionCritique,
 } from "./agents";
 import {
@@ -103,14 +103,13 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         add({ name: "director", lane: "provider", dependencies: [
             ...(run.reference_binding_id ? ["reference_analysis"] : []), ...(speech ? ["audio_speech"] : []),
         ] });
-        add({ name: "copy", lane: "provider", dependencies: ["director"] });
         if (!done("director")) return;
-        const storyboard = agentResult(id, "director", motionStoryboardSchema);
+        const proposed = agentResult(id, "director", motionStoryboardSchema);
         const reference = run.reference_binding_id ? agentResult(id, "reference_analysis", referenceAnalysisSchema) : null;
         let useDetails = false;
-        if (reference && storyboard.look === "reference") {
+        if (reference && proposed.look === "reference") {
             const snapshot = motionSnapshot(run);
-            const samples = storyboard.scenes.flatMap((scene) => {
+            const samples = proposed.scenes.flatMap((scene) => {
                 const evidence = sceneReferenceEvidence(reference, scene, snapshot);
                 if (!evidence) return [];
                 const interval = evidence.timing;
@@ -133,6 +132,16 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
                 add({ name: "reference_spec", lane: "provider", dependencies: ["reference_detail"] });
             }
         }
+        if (useDetails && !done("reference_spec")) return;
+        const alreadyScheduled = steps.some(({ name }) => name === "design");
+        const requests = useDetails && (!alreadyScheduled || steps.some(({ name }) => name === "reference_followup"))
+            ? referenceFollowupRequest.parse(result<{ requests?: unknown }>(id, "reference_spec").requests ?? []) : [];
+        if (requests.length) add({ name: "reference_followup", lane: "browser", dependencies: ["reference_spec"], input: requests });
+        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_spec"] : []),
+            ...(requests.length ? ["reference_followup"] : [])] });
+        add({ name: "copy", lane: "provider", dependencies: ["design"] });
+        if (!done("design")) return;
+        const storyboard = resolveMotionStoryboard(proposed, agentResult(id, "design", motionDesignSchema));
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
         let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
@@ -151,13 +160,6 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         }
         const traceName = liquid && trace ? `trace:${liquid.id}` : null;
         if (traceName) add({ name: traceName, lane: "browser", dependencies: ["director"], input: trace });
-        if (useDetails && !done("reference_spec")) return;
-        const alreadyScheduled = steps.some(({ name }) => name === "design");
-        const requests = useDetails && (!alreadyScheduled || steps.some(({ name }) => name === "reference_followup"))
-            ? referenceFollowupRequest.parse(result<{ requests?: unknown }>(id, "reference_spec").requests ?? []) : [];
-        if (requests.length) add({ name: "reference_followup", lane: "browser", dependencies: ["reference_spec"], input: requests });
-        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_spec"] : []),
-            ...(requests.length ? ["reference_followup"] : [])] });
         const engineers = storyboard.scenes.map((target) => {
             const name = `engineer:${target.id}`;
             const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
@@ -319,7 +321,10 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const analysis = stored?.bindingId === run.reference_binding_id ? referenceAnalysisSchema.safeParse(stored.analysis) : null;
         return analysis?.success ? analysis.data : null;
     };
-    const storyboard = () => agentResult(id, "director", motionStoryboardSchema);
+    const proposedStoryboard = () => agentResult(id, "director", motionStoryboardSchema);
+    const design = () => agentResult(id, "design", motionDesignSchema);
+    const storyboard = () => motionSteps(id).some(({ name, status }) => name === "design" && status === "done")
+        ? resolveMotionStoryboard(proposedStoryboard(), design()) : proposedStoryboard();
     const details = () => {
         const steps = motionSteps(id);
         if (!steps.some(({ name, status }) => name === "reference_detail" && status === "done")) return [];
@@ -361,7 +366,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const analysis = reference();
         if (!analysis) throw new Error("The scene specification needs a reference analysis.");
         const capture = captureSchema.parse(result(id, "reference_capture"));
-        const value = await runReferenceSpec(context, storyboard(), analysis, imageBytes(capture.images), details().filter(({ crop }) => !crop));
+        const value = await runReferenceSpec(context, proposedStoryboard(), analysis, imageBytes(capture.images), details().filter(({ crop }) => !crop));
         return { value, summary: value.source === "vision"
             ? `Recorded visual evidence for ${value.specs.length} scenes.`
             : "Structured visual analysis was unavailable. Continuing with saved frames and observations." };
@@ -376,8 +381,10 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const full = frames.filter((frame) => !("followup" in frame) && !frame.crop);
         const uncovered = full.filter(({ sceneId }) => !followups.some((frame) => frame.sceneId === sceneId));
         const covered = full.filter((frame) => !uncovered.includes(frame));
-        const value = await runMotionDesigner(context, storyboard(), reference(), [...uncovered, ...followups, ...covered].slice(0, 8), referenceSpecs());
-        return { value, summary: value.value.decision };
+        const plan = proposedStoryboard();
+        const value = await runMotionDesigner(context, plan, reference(), [...uncovered, ...followups, ...covered].slice(0, 8), referenceSpecs());
+        const customCount = resolveMotionStoryboard(plan, value.value).scenes.filter(({ type }, index) => type !== plan.scenes[index].type).length;
+        return { value, summary: customCount ? `Selected custom composition for ${customCount} incompatible scene${customCount === 1 ? "" : "s"}.` : value.value.decision };
     }
     if (step.name.startsWith("engineer:")) {
         const plan = storyboard();
@@ -385,11 +392,11 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const analysis = plan.look === "reference" ? reference() : null;
         const evidence = analysis ? sceneReferenceEvidence(analysis, target, context.document) : null;
         const traceName = `trace:${target.id}`;
-        const traced = motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
+        const traced = target.type === "liquid" && motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
             ? traceResultSchema.parse(result(id, traceName)) : null;
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
-            agentResult(id, "design", motionDesignSchema), asset ? [asset] : [], evidence,
+            design(), asset ? [asset] : [], evidence,
             details().filter(({ sceneId }) => sceneId === target.id), referenceSpecs().find(({ sceneId }) => sceneId === target.id));
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;

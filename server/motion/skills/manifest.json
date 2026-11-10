@@ -30,7 +30,13 @@
       ],
       "components": [
         "impact",
-        "identity"
+        "kinetic_words",
+        "grid",
+        "easing",
+        "tunnel",
+        "liquid",
+        "identity",
+        "graph"
       ]
     },
     {
