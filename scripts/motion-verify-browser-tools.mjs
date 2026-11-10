@@ -813,7 +813,7 @@ try {
         const snapshot = document(project(graphProject));
         const source = `import type { MotionFrameInput, MotionSceneSdk } from "@vidsai/motion-sdk";
 export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
-    return [sdk.rect("title-bar", input.frame / 100, 0.5, 0.2, 0.1, "#ffaa11")];
+    return [sdk.rect("title-bar", 0.5 + 0.17 * sdk.math.sin(input.frame / input.fps), 0.18, 0.2, 0.1, String(input.properties.accent))];
 }`;
         const input = { version: 1, source, assets: [], properties: [{ id: "accent", label: "Accent", kind: "color", default: "#ffaa11" }] };
         const request = { commandId: randomUUID(), expectedRevision: snapshot.revision, sceneId: scenes[0].id, input };
@@ -835,6 +835,59 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
         assert.equal(replay.status, 200);
         assert.equal((await replay.json()).revision, revision);
         console.log("Scene compilation reported a TypeScript line diagnostic and persisted a deterministic build through a revision-checked command.");
+        if (process.argv.includes("--program-render")) {
+            await graphPage.goto(`${target}/projects/${graphProject}/editor`);
+            const controls = graphPage.getByRole("button", { name: "Tools", exact: true });
+            if (await controls.getAttribute("aria-pressed") === "false") await controls.click();
+            const procedural = graphPage.getByRole("group", { name: "Procedural controls" });
+            const sample = () => graphPage.locator('canvas[data-motion-frame="0"]').first().evaluate((canvas) =>
+                [...canvas.getContext("2d").getImageData(Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.18), 1, 1).data]);
+            const initial = await sample();
+            assert.ok(initial[0] > 225 && initial[1] < 200, JSON.stringify(initial));
+            await procedural.getByLabel("Accent", { exact: true }).fill("#17ff22");
+            const [changed] = await Promise.all([
+                graphPage.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/commands")),
+                procedural.getByRole("button", { name: "Save procedural controls", exact: true }).click(),
+            ]);
+            assert.ok(changed.ok(), await changed.text());
+            await graphPage.waitForFunction(() => {
+                const canvas = document.querySelector('canvas[data-motion-frame="0"]');
+                if (!canvas) return false;
+                const [red, green] = canvas.getContext("2d").getImageData(Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.18), 1, 1).data;
+                return red < 80 && green > 215;
+            });
+            const edited = document(project(graphProject)).tracks.motion_graphics[0].params;
+            assert.equal(edited.programValues.accent, "#17ff22");
+            assert.equal(edited.program.buildHash, program.buildHash);
+            await graphPage.getByRole("button", { name: "Export video", exact: true }).click();
+            await graphPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 90_000 });
+            const mp4 = await graphPage.getByRole("link", { name: "Download MP4", exact: true }).getAttribute("href");
+            const encoded = await graphPage.evaluate(async (url) => {
+                const video = document.createElement("video");
+                video.muted = true;
+                video.playsInline = true;
+                document.body.append(video);
+                const loaded = new Promise((resolve, reject) => {
+                    video.onloadeddata = resolve;
+                    video.onerror = reject;
+                });
+                video.src = url;
+                await loaded;
+                const decoded = new Promise((resolve) => video.requestVideoFrameCallback(resolve));
+                await video.play();
+                await decoded;
+                video.pause();
+                const canvas = document.createElement("canvas");
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext("2d");
+                ctx.drawImage(video, 0, 0);
+                video.remove();
+                return [...ctx.getImageData(Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.18), 1, 1).data];
+            }, mp4);
+            assert.ok(encoded[0] < 85 && encoded[1] > 205, JSON.stringify(encoded));
+            console.log("The procedural property changed the production preview and the same color was present in the exported MP4.");
+        }
     }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {

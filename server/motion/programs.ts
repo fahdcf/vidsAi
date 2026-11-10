@@ -57,6 +57,6 @@ export async function saveMotionProgram(project: Parameters<typeof document>[0],
     const result = await compileMotionProgram(input);
     if (!result.program) return result;
     return { ...result, ...committed.parse(commit(project, { commandId, expectedRevision,
-        operations: [{ tool: "update_motion_scene", params: { id: scene.id, patch: { params: { program: result.program } } } }],
+        operations: [{ tool: "update_motion_scene", params: { id: scene.id, patch: { params: { program: result.program, programValues: {} } } } }],
     })) };
 }

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { graphAssetRefs, graphComposition } from "./graph";
 import { motionContinuityTarget } from "./continuity";
+import { resolveSceneProgramValues } from "./scene-program";
 
 export const motionSceneId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 export const motionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -171,6 +172,12 @@ export const motionSceneSchema = z.discriminatedUnion("type", [
     if (scene.type === "graph" && scene.params.program?.assets.some((ref) =>
         !scene.assets.some(({ id, kind }) => id === ref.id && kind === ref.kind))) {
         ctx.addIssue({ code: "custom", path: ["params", "program", "assets"], message: "Program handles must reference matching scene assets." });
+    }
+    if (scene.type === "graph" && scene.params.programValues) {
+        try {
+            if (!scene.params.program) throw new Error("No program");
+            resolveSceneProgramValues(scene.params.program, scene.params.programValues);
+        } catch { ctx.addIssue({ code: "custom", path: ["params", "programValues"], message: "A scene module property is invalid." }); }
     }
 });
 

@@ -28,6 +28,8 @@ export function MotionLayer({ scene, nextScene, projectId, width, height, left, 
     const { delayRender, continueRender, cancelRender } = useDelayRender();
     const canvas = useRef<HTMLCanvasElement>(null);
     const ready = useRef<Awaited<ReturnType<typeof prepareMotionSceneAssets>> | null>(null);
+    const requesting = useRef(new Set<number>());
+    const programFailed = useRef(false);
     const last = useRef(frame);
     const [failure, setFailure] = useState<string>();
     const pixelWidth = Math.max(1, Math.round(width * scale));
@@ -36,15 +38,37 @@ export function MotionLayer({ scene, nextScene, projectId, width, height, left, 
     function draw() {
         const target = canvas.current;
         const ctx = target?.getContext("2d");
-        if (!target || !ctx || !ready.current) return;
+        const assets = ready.current;
+        if (!target || !ctx || !assets) return;
+        const localFrame = last.current;
+        if (assets.program && !programFailed.current && !assets.program.cached(localFrame, fps)) {
+            const inFlight = requesting.current;
+            if (inFlight.has(localFrame)) return;
+            inFlight.add(localFrame);
+            const waiting = isClientSideRendering ? delayRender(`Evaluating motion scene ${scene.id} frame ${localFrame}`) : null;
+            void assets.program.prepare(localFrame, fps).then(() => {
+                if (ready.current === assets && last.current === localFrame) draw();
+            }).catch((error: unknown) => {
+                if (ready.current !== assets) return;
+                const detail = error instanceof Error ? error : new Error("The scene module could not render.");
+                if (isClientSideRendering) cancelRender(detail);
+                else { programFailed.current = true; setFailure(detail.message); }
+            }).finally(() => {
+                inFlight.delete(localFrame);
+                if (waiting !== null) continueRender(waiting);
+            });
+            if (isClientSideRendering) return;
+        }
         const audioLevel = soundtrackLevelAt(scene.start_frame + last.current, fps, audioAnalysis, soundtrack);
-        drawMotionFrame({ ctx, scene, nextScene, frame: last.current, fps, width: pixelWidth, height: pixelHeight, audioLevel }, ready.current);
-        target.dataset.motionFrame = String(last.current);
+        drawMotionFrame({ ctx, scene, nextScene, frame: localFrame, fps, width: pixelWidth, height: pixelHeight, audioLevel }, assets);
+        if (!assets.program || assets.program.cached(localFrame, fps)) target.dataset.motionFrame = String(localFrame);
     }
 
     useLayoutEffect(() => {
         const abort = new AbortController();
+        programFailed.current = false;
         setFailure(undefined);
+        if (canvas.current) delete canvas.current.dataset.motionFrame;
         const handle = isClientSideRendering ? delayRender(`Preparing motion scene ${scene.id}`) : null;
         let waiting = handle;
         function releaseHandle() {
@@ -70,6 +94,7 @@ export function MotionLayer({ scene, nextScene, projectId, width, height, left, 
             abort.abort();
             ready.current?.release();
             ready.current = null;
+            requesting.current = new Set<number>();
             releaseHandle();
         };
     }, [scene, projectId, preloaded, pixelWidth, pixelHeight, fps, isClientSideRendering]);

@@ -10,11 +10,17 @@ const sdkFile = "/motion-sdk.d.ts";
 const sdkTypes = `declare module "${motionSdkModule}" {
     export type MotionFrameInput = Readonly<{ version: 1; frame: number; fps: number;
         properties: Readonly<Record<string, string | number | boolean>>; assetHandles: readonly string[] }>;
+    export type MotionPoint = Readonly<{op: "M" | "L"; x: number; y: number} | {op: "Q"; cx: number; cy: number; x: number; y: number}
+        | {op: "C"; c1x: number; c1y: number; c2x: number; c2y: number; x: number; y: number} | {op: "Z"}>;
     export type MotionCommand = Readonly<{ id: string; kind: "rect"; x: number; y: number; width: number; height: number; color: string }>
-        | Readonly<{ id: string; kind: "asset"; handle: string; x: number; y: number; width: number; height: number }>;
+        | Readonly<{ id: string; kind: "asset"; handle: string; x: number; y: number; width: number; height: number }>
+        | Readonly<{ id: string; kind: "text"; x: number; y: number; text: string; size: number; maxWidth: number; color: string }>
+        | Readonly<{ id: string; kind: "path"; x: number; y: number; points: readonly MotionPoint[]; color: string }>;
     export type MotionSceneSdk = Readonly<{ math: Readonly<Pick<Math, "sin" | "cos" | "PI">>;
         rect(id: string, x: number, y: number, width: number, height: number, color: string): MotionCommand;
-        asset(id: string, handle: string, x: number, y: number, width: number, height: number): MotionCommand }>;
+        asset(id: string, handle: string, x: number, y: number, width: number, height: number): MotionCommand;
+        text(id: string, text: string, x: number, y: number, size: number, maxWidth: number, color: string): MotionCommand;
+        path(id: string, points: readonly MotionPoint[], x: number, y: number, color: string): MotionCommand }>;
 }`;
 
 export type ProgramCompilation = { program: SceneProgram; diagnostics: [] } | { program: null; diagnostics: SceneProgramDiagnostic[] };

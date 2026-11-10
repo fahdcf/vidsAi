@@ -2,10 +2,12 @@ import variant from "@jitl/quickjs-wasmfile-release-sync";
 import wasmLocation from "@jitl/quickjs-wasmfile-release-sync/wasm?url";
 import { newQuickJSWASMModuleFromVariant, newVariant } from "quickjs-emscripten-core";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
-import { probeCommands, probeLimits, probeRequest, type ProbeResult } from "./probe-contract";
+import { programCommands } from "../program-commands";
+import { probeLimits, probeRequest, type ProbeResult } from "./probe-contract";
 
 const heapPages = 256;
 const encoder = new TextEncoder();
+let loading: Promise<Awaited<ReturnType<typeof newQuickJSWASMModuleFromVariant>>> | undefined;
 
 function runtimeDiagnostic(stack: string, sourceMap: string, offset: number): ProbeResult {
     const match = /scene\.js:(\d+)(?::(\d+))?/.exec(stack);
@@ -23,15 +25,20 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
     const request = probeRequest.safeParse(raw);
     if (!request.success) return { ok: false, reason: "input" };
     const { version, frames, fps, source, assetHandles, program } = request.data;
-    const memory = new WebAssembly.Memory({ initial: heapPages, maximum: heapPages });
     let vm: Awaited<ReturnType<typeof newQuickJSWASMModuleFromVariant>>;
     try {
-        vm = await newQuickJSWASMModuleFromVariant(newVariant(variant, { wasmLocation, wasmMemory: memory }));
-        if (vm.getWasmMemory() !== memory) return { ok: false, reason: "startup" };
+        if (!loading) {
+            const memory = new WebAssembly.Memory({ initial: heapPages, maximum: heapPages });
+            loading = newQuickJSWASMModuleFromVariant(newVariant(variant, { wasmLocation, wasmMemory: memory })).then((ready) => {
+                if (ready.getWasmMemory() !== memory) throw new Error("Unexpected WebAssembly heap.");
+                return ready;
+            });
+        }
+        vm = await loading;
     } catch {
         return { ok: false, reason: "startup" };
     }
-    const output: Extract<ProbeResult, { ok: true }> = { ok: true, frames: [], frameMs: [], heapBytes: memory.buffer.byteLength };
+    const output: Extract<ProbeResult, { ok: true }> = { ok: true, frames: [], frameMs: [], heapBytes: vm.getWasmMemory().buffer.byteLength };
     for (const frame of frames) {
         const start = performance.now();
         let checks = 0;
@@ -40,7 +47,6 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
         try {
             runtime.setMemoryLimit(4 * 1024 * 1024);
             runtime.setMaxStackSize(128 * 1024);
-            runtime.setInterruptHandler(() => interrupted ||= ++checks > 32 || performance.now() - start > 25);
             const ctx = runtime.newContext({ intrinsics: { BaseObjects: true, Eval: true, JSON: true } });
             try {
                 const input = JSON.stringify({ version, frame, fps, assetHandles, properties: program?.properties });
@@ -52,6 +58,8 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
                     const sdk = Object.freeze({ math,
                         rect: ${program ? '(id, x, y, width, height, color) => ({ kind: "rect", id, x, y, width, height, color })' : '(x, y, width, height, color) => ({ kind: "rect", x, y, width, height, color })'},
                         asset: ${program ? '(id, handle, x, y, width, height) => ({ kind: "asset", id, handle, x, y, width, height })' : '(handle, x, y, width, height) => ({ kind: "asset", handle, x, y, width, height })'},
+                        text: (id, text, x, y, size, maxWidth, color) => ({ kind: "text", id, text, x, y, size, maxWidth, color }),
+                        path: (id, points, x, y, color) => ({ kind: "path", id, points, x, y, color }),
                     });
                     const input = ${input};
                     Object.freeze(input.assetHandles);
@@ -61,6 +69,8 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
                         const render = (\n`;
                 const codePrefix = program ? "(() => {\nconst exports = {};\n" : "";
                 const code = program ? `${codePrefix}${source}\nreturn exports.frame;\n})()` : source;
+                const guestStart = performance.now();
+                runtime.setInterruptHandler(() => interrupted ||= ++checks > 32 || performance.now() - guestStart > 25);
                 const result = ctx.evalCode(`${prelude}${code}\n);
                         const json = stringify(render(input, sdk));
                         return typeof json === "string" && json.length <= ${probeLimits.outputBytes} ? json : "";
@@ -72,12 +82,15 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
                     result.error.dispose();
                     return { ok: false, reason: interrupted ? "interrupted" : "execution" };
                 }
+                if (interrupted || performance.now() - guestStart > 25) {
+                    result.value.dispose();
+                    return { ok: false, reason: "interrupted" };
+                }
                 const json = result.value.consume(ctx.getString);
-                if (interrupted || performance.now() - start > 25) return { ok: false, reason: "interrupted" };
                 if (json.startsWith("!")) return program ? runtimeDiagnostic(json.slice(1), program.sourceMap, (prelude + codePrefix).split("\n").length - 1)
                     : { ok: false, reason: "execution" };
                 if (!json || encoder.encode(json).length > probeLimits.outputBytes) return { ok: false, reason: "output" };
-                const commands = probeCommands.safeParse(JSON.parse(json));
+                const commands = programCommands.safeParse(JSON.parse(json));
                 if (!commands.success || commands.data.some((command) => command.kind === "asset" && !assetHandles.includes(command.handle))) {
                     return { ok: false, reason: "output" };
                 }
@@ -95,8 +108,12 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
     return output;
 }
 
+let busy = false;
 globalThis.addEventListener("message", async (event: MessageEvent<unknown>) => {
+    if (busy) return;
+    busy = true;
     let result: ProbeResult;
     try { result = await evaluate(event.data); } catch { result = { ok: false, reason: "execution" }; }
+    busy = false;
     postMessage(result);
-}, { once: true });
+});

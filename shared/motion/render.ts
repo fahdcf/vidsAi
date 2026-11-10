@@ -1,4 +1,4 @@
-import { alpha, clamp, drawMotionPath, easeOut, lerp, smooth } from "./draw";
+import { alpha, appendMotionPath, clamp, drawMotionPath, easeOut, lerp, smooth } from "./draw";
 import type { MotionGraphNode } from "./graph";
 import type { MotionFrame } from "./registry";
 import { drawImpact, drawKineticWords } from "./typography-scenes";
@@ -13,6 +13,7 @@ import type { MotionVectors } from "./assets";
 import { drawGraphWidget } from "./widgets";
 import { sampleGraphAnimation } from "./graph-animation";
 import { partialMotionPath } from "./partial-path";
+import type { BrowserMotionProgram } from "./runtime/browser-program";
 
 export const motionFontFamilies = {
     archivo_black: '"VidsAI Archivo Black", Arial, sans-serif',
@@ -24,7 +25,67 @@ export type ReadyMotionAssets = {
     fontFamily: string;
     vectors?: Readonly<Record<string, MotionVectors>>;
     images?: Readonly<Record<string, ImageBitmap>>;
+    program?: BrowserMotionProgram;
 };
+
+function drawGraphAsset({ ctx, scene }: MotionFrame, assets: ReadyMotionAssets, id: string, kind: "image" | "vectors",
+    w: number, h: number, progress: number) {
+    if (kind === "image") {
+        const image = assets.images?.[id];
+        if (!image) throw new Error("The graph image is unavailable.");
+        const scale = Math.min(w / image.width, h / image.height);
+        const dw = image.width * scale, dh = image.height * scale;
+        ctx.drawImage(image, -dw / 2, -dh / 2, dw, dh);
+    } else {
+        const vectors = assets.vectors?.[id];
+        if (!vectors) throw new Error("The graph vector asset is unavailable.");
+        ctx.translate(-w / 2, -h / 2);
+        const opacity = ctx.globalAlpha;
+        for (const shape of chooseMotionVectorShapes(vectors, progress)) {
+            ctx.fillStyle = resolveGraphColor(scene.palette, shape.fill);
+            ctx.globalAlpha = opacity * shape.opacity;
+            drawMotionPath(ctx, shape.path, w, h);
+            ctx.fill("evenodd");
+        }
+    }
+}
+
+function drawProgram(frame: MotionFrame, assets: ReadyMotionAssets, progress: number) {
+    const { ctx, width, height } = frame;
+    const { program } = assets;
+    if (!program) return;
+    const unit = Math.min(width, height);
+    for (const command of program.cached(frame.frame, frame.fps) ?? []) {
+        ctx.save();
+        try {
+            ctx.translate(command.x * width, command.y * height);
+            if (command.kind === "asset") {
+                const asset = program.handles.get(command.handle);
+                if (asset) drawGraphAsset(frame, assets, asset.id, asset.kind, command.width * unit, command.height * unit, progress);
+            } else if (command.kind === "text") {
+                const w = command.maxWidth * width, h = command.size * unit * 2.5;
+                drawMotionText(ctx, command.text, assets.fontFamily, command.color,
+                    { x: -w / 2, y: -h / 2, width: w, height: h, maxSize: command.size * unit });
+            } else if (command.kind === "path") {
+                const key = JSON.stringify(command.points);
+                let geometry = program.geometry.get(key);
+                if (!geometry) {
+                    geometry = new Path2D();
+                    appendMotionPath(geometry, command.points, 1, 1);
+                    if (program.geometry.size >= 32) program.geometry.delete(program.geometry.keys().next().value!);
+                    program.geometry.set(key, geometry);
+                }
+                ctx.scale(width, height);
+                ctx.fillStyle = command.color;
+                ctx.fill(geometry);
+            } else {
+                const w = command.width * unit, h = command.height * unit;
+                ctx.fillStyle = command.color;
+                ctx.fillRect(-w / 2, -h / 2, w, h);
+            }
+        } finally { ctx.restore(); }
+    }
+}
 
 function animatedTransform(node: MotionGraphNode, progress: number, root: boolean) {
     let previous = { x: root ? 0.5 : 0, y: root ? 0.5 : 0, scale: 1, rotation: 0, opacity: 1, ...node.transform };
@@ -98,25 +159,7 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
             }
             const resolve = (color: GraphColor) => resolveGraphColor(scene.palette, color);
             if (node.kind === "image" || node.kind === "vector") {
-                const w = node.width * unit, h = node.height * unit;
-                if (node.kind === "image") {
-                    const image = assets.images?.[node.assetId];
-                    if (!image) throw new Error("The graph image is unavailable.");
-                    const scale = Math.min(w / image.width, h / image.height);
-                    const dw = image.width * scale, dh = image.height * scale;
-                    ctx.drawImage(image, -dw / 2, -dh / 2, dw, dh);
-                } else {
-                    const vectors = assets.vectors?.[node.assetId];
-                    if (!vectors) throw new Error("The graph vector asset is unavailable.");
-                    ctx.translate(-w / 2, -h / 2);
-                    const opacity = ctx.globalAlpha;
-                    for (const shape of chooseMotionVectorShapes(vectors, progress)) {
-                        ctx.fillStyle = resolve(shape.fill);
-                        ctx.globalAlpha = opacity * shape.opacity;
-                        drawMotionPath(ctx, shape.path, w, h);
-                        ctx.fill("evenodd");
-                    }
-                }
+                drawGraphAsset(frame, assets, node.assetId, node.kind === "image" ? "image" : "vectors", node.width * unit, node.height * unit, progress);
                 continue;
             }
             let fill: string | CanvasGradient = resolve(node.color);
@@ -217,7 +260,7 @@ export function drawMotionFrame(frame: MotionFrame, assets: ReadyMotionAssets) {
     ctx.fillStyle = scene.palette.background;
     ctx.fillRect(0, 0, width, height);
     switch (scene.type) {
-        case "graph": drawGraph(frame, scene.params.layers, progress, assets); break;
+        case "graph": drawGraph(frame, scene.params.layers, progress, assets); drawProgram(frame, assets, progress); break;
         case "impact": drawImpact({ ...frame, scene }, progress, assets.fontFamily); break;
         case "kinetic_words": drawKineticWords({ ...frame, scene }, progress, assets.fontFamily); break;
         case "grid": drawGrid({ ...frame, scene }, progress); break;

@@ -214,6 +214,8 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
                     assets.set(scene.id, ready);
                 }
                 const audioLevel = soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, soundtrack);
+                await ready.program?.prepare(frame - scene.start_frame, draft.fps);
+                signal.throwIfAborted();
                 drawMotionFrame({ ctx: context, scene, nextScene: targets[index], frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
                 target.drawImage(canvas, 0, 0);
             }

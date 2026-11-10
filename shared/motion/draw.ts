@@ -15,8 +15,7 @@ export const overshoot = (value: number) => {
 };
 export const alpha = (hex: string, opacity: number) => hex + Math.round(clamp(opacity) * 255).toString(16).padStart(2, "0");
 
-export function drawMotionPath(ctx: MotionDrawingContext, commands: MotionPath, width: number, height: number) {
-    ctx.beginPath();
+export function appendMotionPath(ctx: CanvasPath, commands: MotionPath, width: number, height: number) {
     for (const command of commands) {
         switch (command.op) {
             case "M": ctx.moveTo(command.x * width, command.y * height); break;
@@ -26,6 +25,11 @@ export function drawMotionPath(ctx: MotionDrawingContext, commands: MotionPath, 
             case "Z": ctx.closePath(); break;
         }
     }
+}
+
+export function drawMotionPath(ctx: MotionDrawingContext, commands: MotionPath, width: number, height: number) {
+    ctx.beginPath();
+    appendMotionPath(ctx, commands, width, height);
 }
 
 export function seededNoise(seed: number, index: number) {

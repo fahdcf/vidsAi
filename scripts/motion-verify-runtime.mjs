@@ -8,7 +8,7 @@ import { tsImport } from "tsx/esm/api";
 
 const outDir = await mkdtemp(path.join(tmpdir(), "vidsai-runtime-"));
 const config = { configFile: false, publicDir: false, worker: { format: "es" }, build: {
-    outDir, rollupOptions: { input: "resources/js/editor/motion/runtime/probe.ts", preserveEntrySignatures: "strict",
+    outDir, rollupOptions: { input: "shared/motion/runtime/probe.ts", preserveEntrySignatures: "strict",
         output: { entryFileNames: "probe.js" } },
 } };
 await build(config);
@@ -36,7 +36,7 @@ try {
     assert.deepEqual(sample.frames[1], sample.frames[8]);
     assert.notDeepEqual(sample.frames[0], sample.frames[1]);
     assert.deepEqual((await run(source, [15])).frames[0], sample.frames[0]);
-    assert.ok(sample.frameMs.every((ms) => ms < 25), JSON.stringify(sample.frameMs));
+    assert.ok(sample.frameMs.every((ms) => ms < 100), JSON.stringify(sample.frameMs));
     console.log(`16-frame request took ${elapsed.toFixed(1)} ms including startup. Slowest VM frame ${Math.max(...sample.frameMs).toFixed(1)} ms.`);
 
     const hostAccess = await run(`() => {

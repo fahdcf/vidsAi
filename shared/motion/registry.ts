@@ -81,7 +81,8 @@ const entries: { [K in MotionSceneType]: Entry<K> } = {
         description: "Compose animated text, shapes, paths, groups and masks from validated drawing primitives.",
         defaults: { layers: [{ id: "heading", kind: "text", text: "MAKE IT MOVE", size: 0.1 }] },
         editable: ["layers"],
-        cost: ({ layers }) => ({ geometry: graphGeometryCost(layers), particles: 0, vectors: 0 }),
+        cost: ({ layers, program }) => ({ geometry: graphGeometryCost(layers) + (program ? 512 : 0), particles: 0,
+            vectors: program?.assets.some(({ kind }) => kind === "vectors") ? 1 : 0 }),
     },
 };
 

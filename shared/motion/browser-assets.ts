@@ -3,6 +3,7 @@ import type { MotionScene } from "./schema";
 import { motionAssetByteLimit, parseMotionVectors, type MotionAssetFiles, type MotionVectors } from "./assets";
 import { graphAssetRefs } from "./graph";
 import { imageDimensions } from "./image-dimensions";
+import type { BrowserMotionProgram } from "./runtime/browser-program";
 
 const bundled = {
     archivo_black: { name: "VidsAI Archivo Black", url: "/motion-fonts/ArchivoBlack-Regular.ttf" },
@@ -42,11 +43,14 @@ export async function prepareMotionSceneAssets(
     const ready = await prepareMotionFont(scene, signal);
     const vectors: Record<string, MotionVectors> = {};
     const images: Record<string, ImageBitmap> = {};
-    const imageIds = new Set(scene.type === "graph" ? graphAssetRefs(scene.params.layers).filter(({ kind }) => kind === "image").map(({ id }) => id) : []);
+    const imageIds = new Set(scene.type === "graph" ? [...graphAssetRefs(scene.params.layers), ...(scene.params.program?.assets ?? [])]
+        .filter(({ kind }) => kind === "image").map(({ id }) => id) : []);
+    let program: BrowserMotionProgram | undefined;
     const fonts: FontFace[] = [];
     const release = () => {
         for (const face of fonts.splice(0)) document.fonts.delete(face);
         for (const [id, image] of Object.entries(images)) { image.close(); delete images[id]; }
+        program?.close();
     };
     try {
         for (const ref of scene.assets) {
@@ -78,7 +82,11 @@ export async function prepareMotionSceneAssets(
             }
         }
         signal.throwIfAborted();
-        return { ...ready, images, vectors, release };
+        if (scene.type === "graph" && scene.params.program) {
+            const { prepareBrowserProgram } = await import("./runtime/browser-program");
+            program = await prepareBrowserProgram(scene.params.program, scene.params.programValues, scene.end_frame - scene.start_frame, signal);
+        }
+        return { ...ready, images, vectors, program, release };
     } catch (error) {
         release();
         throw error;

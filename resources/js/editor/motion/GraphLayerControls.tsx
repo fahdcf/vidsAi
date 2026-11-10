@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { graphLayers, type MotionGraphNode } from "../../../../shared/motion/graph";
 import { graphAnimation } from "../../../../shared/motion/graph-animation";
 import { resolveGraphColor } from "../../../../shared/motion/graph-style";
+import { resolveSceneProgramValues } from "../../../../shared/motion/scene-program";
 import type { MotionScene, SaveMotionOperations } from "./MotionSceneControls";
 
 type GraphScene = Extract<MotionScene, { type: "graph" }>;
@@ -10,6 +11,32 @@ type Layer = { node: MotionGraphNode; depth: number; siblings: MotionGraphNode[]
 const paintRoles = ["background", "foreground", "primary", "accent", "muted", "success", "warning", "danger"];
 const layerProperties = ["x", "y", "scale", "rotation", "opacity", "reveal", "draw", "textReveal", "deform"] as const;
 const easings = ["linear", "ease_in", "ease_out", "smooth", "spring", "hold"] as const;
+
+function ProgramProperties({ scene, busy, save }: { scene: GraphScene; busy: boolean; save: SaveMotionOperations }) {
+    const { program, programValues } = scene.params;
+    if (!program?.properties.length) return null;
+    const values = resolveSceneProgramValues(program, programValues);
+    return <form className="motion-scene-controls graph-layer-controls" data-no-autosave onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const programValues = Object.fromEntries(program.properties.map(({ id, kind }) => [id,
+            kind === "number" ? Number(data.get(id)) : kind === "toggle" ? data.has(id) : String(data.get(id))]));
+        if (program.properties.every(({ id }) => programValues[id] === values[id])) return;
+        save([{ tool: "update_motion_scene", params: { id: scene.id, patch: { params: { programValues } } } }]);
+    }}>
+        <fieldset disabled={busy}>
+            <legend>Procedural controls</legend>
+            {program.properties.map((field) => <label key={field.id}>{field.label}
+                {field.kind === "number" ? <input name={field.id} type="number" required min={field.min} max={field.max} step="any" defaultValue={Number(values[field.id])} />
+                    : field.kind === "toggle" ? <input name={field.id} type="checkbox" defaultChecked={Boolean(values[field.id])} />
+                        : field.kind === "asset" ? <select name={field.id} defaultValue={String(values[field.id])}>{field.options.map((handle) =>
+                            <option key={handle} value={handle}>{handle}</option>)}</select>
+                        : <input name={field.id} type={field.kind === "color" ? "color" : "text"} maxLength={180} defaultValue={String(values[field.id])} />}
+            </label>)}
+            <button type="submit" className="primary">Save procedural controls</button>
+        </fieldset>
+    </form>;
+}
 
 function list(nodes: MotionGraphNode[], depth = 0): Layer[] {
     return nodes.flatMap((node, index) => [{ node, depth, siblings: nodes, index },
@@ -170,5 +197,6 @@ export default function GraphLayerControls({ scene, selected, select, busy, save
                 [siblings[index], siblings[index + direction]] = [siblings[index + direction], siblings[index]];
             })} />
         {error && <p role="alert">{error}</p>}
+        <ProgramProperties scene={scene} busy={busy} save={save} />
     </section>;
 }
