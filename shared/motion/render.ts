@@ -54,9 +54,22 @@ function animatedTransform(node: MotionGraphNode, progress: number, root: boolea
 function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: number, assets: ReadyMotionAssets, root = true) {
     const { ctx, scene, width, height } = frame;
     const unit = Math.min(width, height);
+    const link = root && scene.type === "graph" && scene.params.continuity;
+    const localEnd = scene.end_frame - scene.start_frame - 1;
+    const next = link && frame.nextScene?.id === link.nextSceneId && frame.frame > localEnd - link.frames ? frame.nextScene : undefined;
     for (const node of nodes) {
         const { reveal = 1, draw = 1, textReveal, deform = 0, ...tracks } = sampleGraphAnimation(node.animation, progress);
         const transform = { ...animatedTransform(node, progress, root), ...tracks };
+        if (link && next && link.nodeIds.includes(node.id)) {
+            const target = next.params.layers.find(({ id }) => id === node.id);
+            if (target) {
+                const destination = { ...animatedTransform(target, 0, true), ...sampleGraphAnimation(target.animation, 0) };
+                const amount = smooth(clamp((frame.frame - (localEnd - link.frames + 1)) / (link.frames - 1)));
+                for (const key of ["x", "y", "scale", "rotation", "opacity"] as const) {
+                    transform[key] = lerp(transform[key], destination[key], amount);
+                }
+            }
+        }
         if (transform.opacity <= 0 || transform.scale <= 0) continue;
         if (reveal <= 0) continue;
         ctx.save();

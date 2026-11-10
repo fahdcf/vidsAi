@@ -1,5 +1,6 @@
 import { getClipSequenceTiming, normalizeDocument, type Document } from "@vidsai/contracts";
 import { motionSceneCost } from "../../../../shared/motion/registry";
+import { graphShadowCount } from "../../../../shared/motion/graph";
 
 export const browserRenderProfile = {
     version: 1,
@@ -34,6 +35,8 @@ export const motionRenderProfile = {
     maxParticles: 1000,
     maxVectorAssets: 2,
     maxAssets: 12,
+    maxActiveAssets: 6,
+    maxSurfacePixels: 6_220_800,
     maxAssetBytes: 20 * 1024 * 1024,
 } as const;
 
@@ -69,8 +72,13 @@ export function prepareBrowserExportTimeline(draft: Document, quality: BrowserEx
                 fade_in_frames: track.fade_in_frames * 2, fade_out_frames: track.fade_out_frames * 2 })),
             overlays: draft.tracks.overlays.map(span),
             subtitles: draft.tracks.subtitles.map((caption) => ({ ...span(caption), words: caption.words?.map(span) })),
-            motion_graphics: draft.tracks.motion_graphics.map((scene) => ({ ...span(scene),
-                transitionIn: scene.transitionIn ? { ...scene.transitionIn, frames: scene.transitionIn.frames * 2 } : undefined })),
+            motion_graphics: draft.tracks.motion_graphics.map((scene) => {
+                const scaled = { ...span(scene), transitionIn: scene.transitionIn ? { ...scene.transitionIn, frames: scene.transitionIn.frames * 2 } : undefined };
+                if (scaled.type === "graph" && scaled.params.continuity) {
+                    scaled.params = { ...scaled.params, continuity: { ...scaled.params.continuity, frames: scaled.params.continuity.frames * 2 } };
+                }
+                return scaled;
+            }),
         },
         metadata: { ...draft.metadata, motion_cues: draft.metadata.motion_cues?.map((cue) => ({ ...cue, frame: cue.frame * 2 })) },
     });
@@ -165,17 +173,21 @@ export function validateBrowserRenderProfile(
             "Use up to eight motion scenes and no more than two overlapping scenes.");
         limit(new Set(motion.flatMap(({ assets }) => assets.map(({ id }) => id))).size > m.maxAssets, "motion_complexity",
             `Use no more than ${m.maxAssets} project assets inside motion scenes.`);
-        const costs = motion.map((scene) => ({ scene, cost: motionSceneCost(scene) }));
+        const costs = motion.map((scene) => ({ scene, cost: motionSceneCost(scene),
+            surfaces: 1 + (scene.transitionIn ? 0.25 : 0) + (scene.type === "graph" ? graphShadowCount(scene.params.layers) * 0.25 : 0) }));
         const overloaded = motion.some(({ start_frame: frame }) => {
             const totals = costs.filter(({ scene }) => scene.start_frame <= frame && frame < scene.end_frame)
-                .reduce((sum, { cost }) => ({
+                .reduce((sum, { cost, scene, surfaces }) => ({
                     geometry: sum.geometry + cost.geometry,
                     particles: sum.particles + cost.particles,
                     vectors: sum.vectors + cost.vectors,
-                }), { geometry: 0, particles: 0, vectors: 0 });
-            return totals.geometry > m.maxGeometry || totals.particles > m.maxParticles || totals.vectors > m.maxVectorAssets;
+                    assets: sum.assets + scene.assets.length,
+                    surfaces: sum.surfaces + surfaces,
+                }), { geometry: 0, particles: 0, vectors: 0, assets: 0, surfaces: 0 });
+            return totals.geometry > m.maxGeometry || totals.particles > m.maxParticles || totals.vectors > m.maxVectorAssets ||
+                totals.assets > m.maxActiveAssets || width * height * totals.surfaces > m.maxSurfacePixels;
         });
-        limit(overloaded, "motion_complexity", "Reduce overlapping shapes or particles to fit the browser motion limit.");
+        limit(overloaded, "motion_complexity", "Reduce overlapping motion, effects or assets to fit the browser render budget.");
     }
     const maxWidth = width > height ? q.longEdge : q.shortEdge;
     const maxHeight = height > width ? q.longEdge : q.shortEdge;

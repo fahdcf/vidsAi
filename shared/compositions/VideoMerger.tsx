@@ -13,6 +13,7 @@ import {AnimatedMediaClip, MediaSettings} from './AnimatedMediaClip';
 import {CompositionMedia, compositionMediaUrl} from './CompositionMedia';
 import {getClipSequenceTiming} from '../contracts/clip-sequence';
 import {MotionLayer} from './MotionLayer';
+import {motionContinuityTarget} from '../motion/continuity';
 import type {MotionAssetFiles} from '../motion/assets';
 import {
   EditState,
@@ -852,7 +853,7 @@ export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionA
 
         {motionGraphics.map((scene) => (
           <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.end_frame - scene.start_frame} layout='none'>
-            <MotionLayer scene={scene} projectId={editState.project_id} width={finalVideoWidth} height={finalVideoHeight}
+            <MotionLayer scene={scene} nextScene={motionContinuityTarget(scene, motionGraphics)} projectId={editState.project_id} width={finalVideoWidth} height={finalVideoHeight}
               left={leftOffset} top={topOffset} fps={fps} scale={motionScale} preloaded={motionAssets}
               soundtrack={soundtrack} audioAnalysis={editState.metadata.motion_audio_analysis} />
           </Sequence>

@@ -2,6 +2,7 @@ import type { BrowserMotionInput, BrowserMotionReference, BrowserMotionTask } fr
 import { isFollowupSourceTime, motionEvidenceFramesPerSheet, motionPreviewFramesPerSheet } from "../../../../shared/motion/browser-tools";
 import type { Document } from "../../../../shared/contracts";
 import { prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
+import { motionContinuityTarget } from "../../../../shared/motion/continuity";
 import { drawMotionFrame } from "../../../../shared/motion/render";
 import { soundtrackLevelAt } from "../../../../shared/motion/time-map";
 import { api } from "../api";
@@ -194,7 +195,8 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
         for (const frame of frames) {
             signal.throwIfAborted();
             const active = scenes.filter(({ start_frame, end_frame }) => frame >= start_frame && frame < end_frame);
-            const key = await sha256(new TextEncoder().encode(JSON.stringify([draft.project_id, width, height, draft.fps, frame, active])).buffer);
+            const targets = active.map((scene) => motionContinuityTarget(scene, scenes));
+            const key = await sha256(new TextEncoder().encode(JSON.stringify([draft.project_id, width, height, draft.fps, frame, active, targets])).buffer);
             const time = frame / draft.fps;
             const cached = previewFrames.get(key);
             if (cached) {
@@ -205,14 +207,14 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
             }
             target.fillStyle = "#000";
             target.fillRect(0, 0, width, height);
-            for (const scene of active) {
+            for (const [index, scene] of active.entries()) {
                 let ready = assets.get(scene.id);
                 if (!ready) {
                     ready = await prepareMotionSceneAssets(scene, draft.project_id, signal);
                     assets.set(scene.id, ready);
                 }
                 const audioLevel = soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, soundtrack);
-                drawMotionFrame({ ctx: context, scene, frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
+                drawMotionFrame({ ctx: context, scene, nextScene: targets[index], frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
                 target.drawImage(canvas, 0, 0);
             }
             const image = await composite.convertToBlob({ type: "image/jpeg", quality: 0.84 });

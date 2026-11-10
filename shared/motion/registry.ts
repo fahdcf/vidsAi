@@ -14,6 +14,7 @@ export type MotionFrame<T extends MotionScene = MotionScene> = {
     width: number;
     height: number;
     audioLevel?: number;
+    nextScene?: Extract<MotionScene, { type: "graph" }>;
 };
 
 type Cost = { geometry: number; particles: number; vectors: number };

@@ -5,7 +5,7 @@ import { graphAuthoring, graphComposition, motionGraphVersion } from "../shared/
 import { graphAnimation, sampleGraphAnimation } from "../shared/motion/graph-animation";
 import { partialMotionPath } from "../shared/motion/partial-path";
 import { motionComponentTypes, describeMotionComponent, motionSceneCost } from "../shared/motion/registry";
-import { motionSceneSchema } from "../shared/motion/schema";
+import { motionSceneSchema, motionTrackSchema } from "../shared/motion/schema";
 import { applyOperations } from "../shared/editing-core";
 import { motionBenchmark, motionReferenceTimes } from "../scripts/fixtures/motion-benchmark";
 
@@ -90,4 +90,16 @@ test("graph intervals hold at boundaries, permit independent overlap and keep sp
     assert.equal(graphAnimation.safeParse([{ ...spec[1], to: 1.01 }]).success, false);
     assert.deepEqual(partialMotionPath([{ op: "M", x: 0, y: 0 }, { op: "Q", cx: 0.5, cy: 1, x: 1, y: 0 }], 0.5),
         [{ op: "M", x: 0, y: 0 }, { op: "Q", cx: 0.25, cy: 0.5, x: 0.5, y: 0.5 }]);
+});
+
+test("graph continuity links only unchanged layers across adjacent cuts", () => {
+    const common = { type: "graph", componentVersion: 1 };
+    const layers = [{ id: "shared", kind: "rect", color: "success", width: 0.25, height: 0.2 }];
+    const first = { ...common, id: "first", start_frame: 0, end_frame: 30,
+        params: { version: 1, layers, continuity: { nextSceneId: "second", frames: 12, nodeIds: ["shared"] } } };
+    const second = { ...common, id: "second", start_frame: 30, end_frame: 60,
+        params: { version: 1, layers: [{ ...layers[0], transform: { x: 0.75 } }] } };
+    assert.ok(motionTrackSchema.safeParse([first, second]).success);
+    assert.equal(motionTrackSchema.safeParse([first, { ...second, start_frame: 29 }]).success, false);
+    assert.equal(motionTrackSchema.safeParse([first, { ...second, params: { layers: [{ ...layers[0], color: "danger" }] } }]).success, false);
 });

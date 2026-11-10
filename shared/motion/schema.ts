@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { graphAssetRefs, graphComposition } from "./graph";
+import { motionContinuityTarget } from "./continuity";
 
 export const motionSceneId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 export const motionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -173,6 +174,11 @@ export type MotionScene = z.infer<typeof motionSceneSchema>;
 export type MotionSceneType = MotionScene["type"];
 
 export const motionTrackSchema = z.array(motionSceneSchema).max(8).superRefine((scenes, ctx) => {
+    for (const [index, scene] of scenes.entries()) {
+        if (scene.type === "graph" && scene.params.continuity && !motionContinuityTarget(scene, scenes)) {
+            ctx.addIssue({ code: "custom", path: [index, "params", "continuity"], message: "Continuity needs matching stable layers in adjacent scenes." });
+        }
+    }
     const boundaries = scenes.flatMap((scene) => [
         { frame: scene.start_frame, count: 1 }, { frame: scene.end_frame, count: -1 },
     ]).sort((a, b) => a.frame - b.frame || a.count - b.count);

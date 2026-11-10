@@ -117,7 +117,10 @@ export const graphLayers = z.unknown().superRefine((value, ctx) => {
 }).pipe(z.array(nodeSchema).min(1).max(MAX_GRAPH_NODES));
 
 export const motionGraphVersion = 1;
-export const graphComposition = z.object({ version: z.literal(motionGraphVersion).optional(), layers: graphLayers }).strict();
+const continuity = z.object({ nextSceneId: common.id, frames: z.number().int().min(2).max(7200),
+    nodeIds: z.array(common.id).min(1).max(4).refine((ids) => new Set(ids).size === ids.length) }).strict();
+export const graphComposition = z.object({ version: z.literal(motionGraphVersion).optional(), layers: graphLayers,
+    continuity: continuity.optional() }).strict();
 const versionedGraph = graphComposition.required({ version: true });
 const flatRecord = z.object({
     parentId: common.id.nullable(),
@@ -128,8 +131,9 @@ const flatRecord = z.object({
 export const graphAuthoringInput = z.object({
     version: z.literal(motionGraphVersion),
     nodes: z.array(flatRecord).min(1).max(MAX_GRAPH_NODES),
+    continuity: continuity.optional(),
 }).strict();
-export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versionedGraph>>(({ version, nodes }, ctx) => {
+export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versionedGraph>>(({ version, nodes, continuity }, ctx) => {
     const byId = new Map(nodes.map((record) => [record.node.id, record]));
     if (byId.size !== nodes.length) {
         ctx.addIssue({ code: "custom", path: ["nodes"], message: "Graph node IDs must be unique." });
@@ -158,7 +162,7 @@ export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versi
     }
     const layersFor = (parent: string | null): MotionGraphNode[] => (byParent.get(parent) ?? []).sort((a, b) => a.order - b.order)
         .map(({ node }) => node.kind === "group" ? { ...node, children: layersFor(node.id) } : node);
-    return { version, layers: layersFor(null) };
+    return { version, layers: layersFor(null), ...(continuity ? { continuity } : {}) };
 }).pipe(versionedGraph);
 
 export function graphGeometryCost(nodes: readonly MotionGraphNode[]): number {
@@ -178,4 +182,9 @@ export function graphCopy(nodes: readonly MotionGraphNode[]): string[] {
 export function graphAssetRefs(nodes: readonly MotionGraphNode[]): { id: string; kind: "image" | "vectors" }[] {
     return nodes.flatMap((node) => node.kind === "group" ? graphAssetRefs(node.children)
         : node.kind === "image" || node.kind === "vector" ? [{ id: node.assetId, kind: node.kind === "image" ? "image" : "vectors" }] : []);
+}
+
+export function graphShadowCount(nodes: readonly MotionGraphNode[]): number {
+    return nodes.reduce((total, node) => total + (node.kind === "group" ? graphShadowCount(node.children)
+        : "shadow" in node && node.shadow?.opacity ? 1 : 0), 0);
 }

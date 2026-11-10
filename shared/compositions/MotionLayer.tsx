@@ -9,6 +9,7 @@ import type { TimelineAudioItem } from "../timeline";
 
 type Props = {
     scene: MotionScene;
+    nextScene?: Extract<MotionScene, { type: "graph" }>;
     projectId: string;
     width: number;
     height: number;
@@ -21,7 +22,7 @@ type Props = {
     audioAnalysis?: MotionAudioAnalysis;
 };
 
-export function MotionLayer({ scene, projectId, width, height, left, top, fps, scale, preloaded, soundtrack, audioAnalysis }: Props) {
+export function MotionLayer({ scene, nextScene, projectId, width, height, left, top, fps, scale, preloaded, soundtrack, audioAnalysis }: Props) {
     const frame = useCurrentFrame();
     const { isClientSideRendering } = useRemotionEnvironment();
     const { delayRender, continueRender, cancelRender } = useDelayRender();
@@ -37,7 +38,7 @@ export function MotionLayer({ scene, projectId, width, height, left, top, fps, s
         const ctx = target?.getContext("2d");
         if (!target || !ctx || !ready.current) return;
         const audioLevel = soundtrackLevelAt(scene.start_frame + last.current, fps, audioAnalysis, soundtrack);
-        drawMotionFrame({ ctx, scene, frame: last.current, fps, width: pixelWidth, height: pixelHeight, audioLevel }, ready.current);
+        drawMotionFrame({ ctx, scene, nextScene, frame: last.current, fps, width: pixelWidth, height: pixelHeight, audioLevel }, ready.current);
         target.dataset.motionFrame = String(last.current);
     }
 
@@ -76,7 +77,7 @@ export function MotionLayer({ scene, projectId, width, height, left, top, fps, s
     useLayoutEffect(() => {
         last.current = frame;
         draw();
-    }, [frame, scene, fps, pixelWidth, pixelHeight, soundtrack, audioAnalysis]);
+    }, [frame, scene, nextScene, fps, pixelWidth, pixelHeight, soundtrack, audioAnalysis]);
 
     useLayoutEffect(() => {
         const target = canvas.current;
@@ -97,7 +98,7 @@ export function MotionLayer({ scene, projectId, width, height, left, top, fps, s
             target.removeEventListener("contextlost", lost);
             target.removeEventListener("contextrestored", restored);
         };
-    }, [scene, fps, pixelWidth, pixelHeight, isClientSideRendering, cancelRender]);
+    }, [scene, nextScene, fps, pixelWidth, pixelHeight, isClientSideRendering, cancelRender]);
 
     return (
         <>

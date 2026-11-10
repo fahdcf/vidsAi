@@ -343,6 +343,47 @@ try {
         assert.deepEqual(late.clip[1], middle.clip[0]);
         console.log("Explicit intervals revealed strokes, masks and text while a silent waveform animated. Seeking reproduced the same pixels.");
     }
+    if (process.argv.includes("--graph-continuity")) {
+        const cut = await page.evaluate(async () => {
+            const { motionTrackSchema, defaultMotionPalette } = await import("/shared/motion/schema.ts");
+            const { motionContinuityTarget } = await import("/shared/motion/continuity.ts");
+            const { drawMotionFrame } = await import("/shared/motion/render.ts");
+            const { motionBenchmark } = await import("/scripts/fixtures/motion-benchmark.ts");
+            const { validateBrowserRenderProfile, prepareBrowserExportTimeline } = await import("/resources/js/editor/browser-export/profile.ts");
+            const node = { id: "shared", kind: "rect", color: "#ff3300", width: 0.1, height: 0.15 };
+            const common = { type: "graph", componentVersion: 1, finish: { grain: 0, vignette: 0 }, palette: defaultMotionPalette };
+            const scenes = motionTrackSchema.parse([
+                { ...common, id: "first", start_frame: 0, end_frame: 30, params: { layers: [{ ...node, transform: { x: 0.25 } }],
+                    continuity: { nextSceneId: "second", frames: 15, nodeIds: ["shared"] } } },
+                { ...common, id: "second", start_frame: 30, end_frame: 60,
+                    params: { layers: [{ ...node, transform: { x: 0.75 } }] } },
+            ]);
+            const ctx = new OffscreenCanvas(320, 180).getContext("2d");
+            const draw = (scene, frame, track = scenes) => {
+                drawMotionFrame({ ctx, scene, nextScene: motionContinuityTarget(scene, track), frame, fps: 30, width: 320, height: 180 }, { fontFamily: "Arial" });
+                const data = ctx.getImageData(0, 90, 320, 1).data;
+                return Array.from({ length: 320 }, (_, x) => x).filter((x) => data[x * 4] === 255 && data[x * 4 + 1] === 51);
+            };
+            const draft = motionBenchmark(false);
+            const snapshot = { ...draft, width: 1920, height: 1080, fps: 30, total_frames: 60,
+                tracks: { ...draft.tracks, motion_graphics: scenes } };
+            const scaled = prepareBrowserExportTimeline(snapshot, "motion1080smooth").tracks.motion_graphics;
+            const shadow = { color: "#000000", x: 0, y: 0, opacity: 1, blur: 0.01 };
+            const withEffects = (scene, count) => ({ ...scene, params: { layers: Array.from({ length: count }, (_, i) => ({ ...node, id: "shadow-" + i, shadow })) } });
+            const costly = { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [withEffects(scenes[0], 3), { ...withEffects(scenes[1], 3), start_frame: 24 }] } };
+            return { end: draw(scenes[0], 29), early: draw(scenes[0], 0), middle: draw(scenes[0], 22),
+                start: draw(scenes[1], 0), again: draw(scenes[0], 29), at60: draw(scaled[0], 59, scaled),
+                scaledFrames: scaled[0].params.continuity.frames,
+                budget: validateBrowserRenderProfile(costly, costly, "motion1080").filter(({ code }) => code === "motion_complexity") };
+        });
+        assert.deepEqual(cut.end, cut.start);
+        assert.deepEqual(cut.end, cut.again);
+        assert.deepEqual(cut.end, cut.at60);
+        assert.ok(cut.early[0] < cut.middle[0] && cut.middle[0] < cut.end[0]);
+        assert.equal(cut.scaledFrames, 30);
+        assert.ok(cut.budget.some(({ message }) => message.includes("effects or assets")));
+        console.log("A shared layer moved continuously across a cut at both frame rates and overlapping effects were charged to the browser budget.");
+    }
     const runTool = async () => {
         const [submitted, result] = await Promise.all([
             page.waitForRequest((req) => req.method() === "PUT" && req.url().includes(url), { timeout: 45_000 }),
