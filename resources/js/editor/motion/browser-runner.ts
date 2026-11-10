@@ -13,21 +13,58 @@ async function sha256(bytes: ArrayBuffer) {
     return Array.from(new Uint8Array(hash), (value) => value.toString(16).padStart(2, "0")).join("");
 }
 
+async function encodeEvidence(image: Blob, limit: number, signal: AbortSignal) {
+    const buffer = await image.arrayBuffer();
+    if (buffer.byteLength > limit) throw new Error("A browser evidence image exceeds its size limit.");
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let offset = 0; offset < bytes.length; offset += 8192) {
+        binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
+    }
+    const result = { mime: "image/jpeg" as const, base64: btoa(binary), sha256: await sha256(buffer) };
+    signal.throwIfAborted();
+    return result;
+}
+
 async function images(frames: readonly MotionReferenceFrame[], signal: AbortSignal, size = motionEvidenceFramesPerSheet) {
     const results = [];
     for (let index = 0; index < frames.length; index += size) {
         const sheet = await createReferenceSheet(frames.slice(index, index + size), signal);
-        const buffer = await sheet.arrayBuffer();
-        if (buffer.byteLength > 600_000) throw new Error("A browser contact sheet exceeds its size limit.");
-        const bytes = new Uint8Array(buffer);
-        let binary = "";
-        for (let offset = 0; offset < bytes.length; offset += 8192) {
-            binary += String.fromCharCode(...bytes.subarray(offset, offset + 8192));
-        }
-        results.push({ mime: "image/jpeg" as const, base64: btoa(binary), sha256: await sha256(buffer) });
-        signal.throwIfAborted();
+        results.push(await encodeEvidence(sheet, 600_000, signal));
     }
     return results;
+}
+
+async function captureDetails(input: Extract<BrowserMotionInput, { tool: "reference_detail" }>, signal: AbortSignal) {
+    const { reference, samples } = input;
+    const source = await referenceFile(reference, signal);
+    try {
+        let frames: Blob[];
+        if (reference.metadata.kind === "video") {
+            const times = [...new Set(samples.map(({ time }) => time))].sort((a, b) => a - b);
+            const captured = await sampleMotionReference(source, times.map((time) => time + 0.00001), signal, { maxEdge: 960 });
+            if (captured.some(({ sourceTime }, index) => Math.abs(sourceTime - times[index]) > 0.002)) {
+                throw new Error("The detailed frame timestamp changed.");
+            }
+            frames = samples.map(({ time }) => captured[times.indexOf(time)].image);
+        } else {
+            const bitmap = await createImageBitmap(source);
+            try {
+                const scale = Math.min(1, 960 / Math.max(bitmap.width, bitmap.height));
+                const canvas = new OffscreenCanvas(Math.max(1, Math.round(bitmap.width * scale)), Math.max(1, Math.round(bitmap.height * scale)));
+                const context = canvas.getContext("2d");
+                if (!context) throw new Error("Reference image drawing is unavailable.");
+                context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+                const image = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.82 });
+                frames = samples.map(() => image);
+            } finally { bitmap.close(); }
+        }
+        const images = await Promise.all(frames.map((image) => encodeEvidence(image, 300_000, signal)));
+        return { bindingId: reference.bindingId, samples, images };
+    } catch {
+        signal.throwIfAborted();
+        return { bindingId: reference.bindingId, samples: [], images: [] };
+    }
 }
 
 async function referenceFile(reference: BrowserMotionReference, signal: AbortSignal) {
@@ -136,6 +173,7 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
 
 export async function runMotionBrowserInput(input: BrowserMotionInput, signal: AbortSignal) {
     if (input.tool === "reference_capture") return captureReference(input.reference, signal);
+    if (input.tool === "reference_detail") return captureDetails(input, signal);
     if (input.tool === "preview") return renderPreview(input.document, signal);
     const { reference, interval, colors } = input;
     const source = await referenceFile(reference, signal);

@@ -83,7 +83,9 @@ Run focused schema and recovery tests, then inspect the real reference analysis 
 
 The first audio delivery passed the product tests and browser creation flow with the product reference. The 1.25–6.25-second trim exported with a measured waveform offset of 0 ms in three sampled regions. Browser checks also covered mute, replacement, a reference without an audio track, and recovery from an interrupted upload after refresh. The remaining audio analysis and reference specification tasks stay open. The browser verification command accepts `--reference-audio`, `--silent-reference`, `--replacement-audio` and `--audio-export`.
 
-The next delivery uses sustained changes in saved visual observations to estimate scene boundaries when the outline model fails. Replaying the product reference's saved observations recovered six sections with zero measured cuts. The designer and engineer now receive scene-specific text and layout observations, selected by unique copy match or proportional timing. Direct image handoffs, adaptive crops and a validated scene-to-reference mapping remain open.
+The scene analysis delivery uses sustained changes in saved visual observations to estimate scene boundaries when the outline model fails. Replaying the product reference's saved observations recovered six sections with zero measured cuts. The designer and engineer receive scene-specific text and layout observations, selected by unique copy match or proportional timing.
+
+The browser now captures an individual reference frame of up to 960 pixels for each planned scene, with a scene ID and source timestamp. The designer receives the ordered frames and each engineer receives its scene frame. Browser verification checks the decoded dimensions, scene IDs, image delivery, and text recovery after rejected vision output. Adaptive crops, a validated scene-to-reference mapping, and fresh live visual acceptance remain open.
 
 ## C. Expand the editable composition language
 

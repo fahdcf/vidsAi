@@ -237,12 +237,30 @@ function applyCopyParts(scene: MotionScene, parts: string[]) {
     }
 }
 
-export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard, reference: ReferenceAnalysis | null = null) {
+type ReferenceFrame = { sceneId: string; time: number; image: MotionVisionImage };
+
+async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request: (frames: readonly ReferenceFrame[]) => Promise<T>) {
+    try {
+        return await request(frames);
+    } catch (error) {
+        if (!frames.length || (!(error instanceof MotionAgentUnavailable) &&
+            !(error instanceof MotionBudgetError && error.scope === "provider"))) throw error;
+        return request([]);
+    }
+}
+
+const describeReferenceFrames = (frames: readonly ReferenceFrame[]) => frames.map(({ sceneId, time }, index) =>
+    ({ sceneId, time, imageNumber: index + 1 }));
+
+export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard, reference: ReferenceAnalysis | null = null,
+    frames: readonly ReferenceFrame[] = []) {
     const schema = motionDesignSchema.extend({ scenes: z.array(designScene.omit({ id: true })).length(storyboard.scenes.length) });
     const referenceScenes = reference && storyboard.look === "reference" ? storyboard.scenes.map((scene) => ({
         id: scene.id, evidence: sceneReferenceEvidence(reference, scene, context.document.total_frames),
     })) : undefined;
-    const result = await runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX", { storyboard, referenceScenes }, schema);
+    const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX",
+        { storyboard, referenceScenes, referenceFrames: describeReferenceFrames(details) }, schema,
+        { images: details.map(({ image }) => image), requestTimeoutMs: details.length ? 45_000 : undefined }));
     const scenes = result.value.scenes.map((scene, index) => ({ ...scene, id: storyboard.scenes[index].id }));
     return { ...result, value: { ...result.value, scenes } };
 }
@@ -278,6 +296,7 @@ export async function runMotionEngineer(
     design: MotionDesign,
     assets: readonly MotionScene["assets"][number][] = [],
     reference: ReturnType<typeof sceneReferenceEvidence> = null,
+    frame?: ReferenceFrame,
 ) {
     const approved = copy.scenes.find(({ id }) => id === target.id);
     const styling = design.scenes.find(({ id }) => id === target.id);
@@ -290,13 +309,15 @@ export async function runMotionEngineer(
             componentVersion: 1, assets, params,
         });
         try {
-            const result = await runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
+            const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
+                referenceFrames: describeReferenceFrames(details),
                 layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Use only the palette role names for colors.",
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
+                images: details.map(({ image }) => image),
                 validate: ({ layers }) => { makeScene(compileEngineerGraph(layers)); },
-            });
+            }));
             const { layers, ...value } = result.value;
             return { ...result, value: { ...value, scene: makeScene(compileEngineerGraph(layers)) } };
         } catch (error) {
@@ -320,12 +341,15 @@ export async function runMotionEngineer(
         }
         return parts?.length ? motionSceneSchema.parse(applyCopyParts(scene, parts)) : scene;
     };
-    const result = await runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
+    const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
         target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
+        referenceFrames: describeReferenceFrames(details),
         audioCues: context.document.metadata.motion_cues ?? [],
     }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
         validate: ({ scene }) => { buildScene(scene); },
-    });
+        images: details.map(({ image }) => image),
+        requestTimeoutMs: details.length ? 45_000 : undefined,
+    }));
     return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
 }
 

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { captureSchema, previewSchema, traceResultSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
+import { captureSchema, previewSchema, referenceDetailResult, traceResultSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
 import { motionAssetProvenance } from "../../shared/motion/assets";
 import { db, json, project } from "../database";
 import { document } from "../document";
@@ -93,6 +93,7 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
             fail(409, "The browser task lease is no longer current.");
         }
         const value = step.name === "reference_capture" ? captureSchema.parse(result)
+            : step.name === "reference_detail" ? referenceDetailResult.parse(result)
             : step.name.startsWith("trace:") ? traceResultSchema.parse(result) : previewSchema.parse(result);
         if (step.status === "done" && step.result_id) {
             const prior = motionArtifact(runId, step.result_id);
@@ -123,7 +124,7 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
             return { duplicate: false };
         }
         if (!("images" in value)) fail(422, "The browser tool result did not match its request.");
-        if (input.tool === "reference_capture" && "bindingId" in value) {
+        if (input.tool === "reference_capture" && "measured" in value) {
             const { bindingId, metadata: { kind, interval } } = input.reference;
             if (value.bindingId !== bindingId) fail(409, "The reference was replaced.");
             const times = value.measured.timestamps;
@@ -135,6 +136,11 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         if (input.tool === "preview" && "frames" in value &&
             (value.frames.some((frame) => frame >= input.document.total_frames) ||
                 new Set(value.frames).size !== value.frames.length)) fail(422, "The preview sample frames are invalid.");
+        if (input.tool === "reference_detail" && "samples" in value &&
+            (value.bindingId !== input.reference.bindingId || (value.samples.length > 0 &&
+                JSON.stringify(value.samples) !== JSON.stringify(input.samples)))) {
+            fail(422, "The detailed frames do not match the assigned reference scenes.");
+        }
         for (const image of value.images) {
             const bytes = Buffer.from(image.base64, "base64");
             if (bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff ||
@@ -145,7 +151,9 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         }
         const summary = "measured" in value
             ? `The browser sampled ${value.measured.timestamps.length} reference frames.`
-            : `The browser rendered ${value.frames.length} preview frames for review.`;
+            : "samples" in value ? value.samples.length ? `The browser captured ${value.samples.length} detailed scene frames.`
+                : "Detailed reference frames were unavailable. Continuing with the saved visual observations."
+                : `The browser rendered ${value.frames.length} preview frames for review.`;
         if (!finishMotionStep(run, step, { value, summary })) fail(409, "The browser task lease expired.");
         return { duplicate: false };
     }).immediate();

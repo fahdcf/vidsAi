@@ -322,7 +322,8 @@ try {
     const useGraphEngineer = rejectGraphEngineer || process.argv.includes("--graph-engineer");
     const rejectCritic = process.argv.includes("--review-fallback");
     if (useGraphEngineer) graphic[1] = { ...graphic[1], type: "graph" };
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic });
+    const rejectDetailVision = process.argv.includes("--detail-vision-fallback");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectDetailVision });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -339,6 +340,16 @@ try {
         restore();
     }
     assert.equal(motionRun(graphRun.id).status, "ready");
+    const detailStep = motionSteps(graphRun.id).find(({ name }) => name === "reference_detail");
+    const detail = JSON.parse(motionArtifact(graphRun.id, detailStep.result_id).body.toString());
+    assert.deepEqual(detail.samples.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
+    assert.equal(new Set(detail.samples.map(({ time }) => time)).size, graphic.length);
+    for (const { base64 } of detail.images) {
+        assert.equal(await graphPage.evaluate(async (data) => {
+            const bitmap = await createImageBitmap(await (await fetch(`data:image/jpeg;base64,${data}`)).blob());
+            try { return Math.max(bitmap.width, bitmap.height); } finally { bitmap.close(); }
+        }, base64), 960);
+    }
     if (rejectCritic) {
         assert.equal(document(project(graphProject)).tracks.motion_graphics.length, 0);
         await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectDetailVision = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -58,11 +58,21 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
             case "visual-designer":
                 assert.equal(artifact.referenceScenes.length, graphic.length);
                 assert.ok(artifact.referenceScenes.some(({ evidence }) => evidence?.observations.length));
+                if (artifact.referenceFrames.length) {
+                    assert.deepEqual(artifact.referenceFrames.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
+                    assert.equal(message.length, graphic.length + 1);
+                    if (rejectDetailVision) { value = null; break; }
+                } else assert.ok(rejectDetailVision);
                 value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }) => ({ palette, layout, font })) };
                 break;
             case "motion-engineer": {
                 assert.equal(typeof artifact.approvedCopy, "string");
                 assert.ok(artifact.reference?.observations.length);
+                if (artifact.referenceFrames.length) {
+                    assert.equal(artifact.referenceFrames[0].sceneId, artifact.target.id);
+                    assert.equal(message.length, 2);
+                    if (rejectDetailVision) { value = null; break; }
+                } else assert.ok(rejectDetailVision);
                 if (artifact.target.type === "graph") {
                     assert.equal(artifact.approvedCopy, "Get transcript");
                     value = rejectGraphEngineer ? { layers: [{ kind: "group" }], decision: "Invalid scene", approximation: null }

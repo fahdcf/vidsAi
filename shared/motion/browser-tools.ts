@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Document } from "../contracts";
 import { referenceAnalysisSchema, referenceIntervalSchema } from "./reference";
-import { motionColor } from "./schema";
+import { motionColor, motionSceneId } from "./schema";
 
 export const motionEvidenceFramesPerSheet = 12;
 export const motionPreviewFramesPerSheet = 6;
@@ -16,6 +16,13 @@ export const captureSchema = z.object({
     measured: referenceAnalysisSchema.shape.measured,
     images: evidenceImages,
 }).strict();
+const detailSample = z.object({ sceneId: motionSceneId, time: referenceIntervalSchema.shape.start }).strict();
+export const referenceDetailRequest = z.array(detailSample).min(1).max(8);
+export const referenceDetailResult = z.object({
+    bindingId: z.uuid(),
+    samples: z.array(detailSample).max(8),
+    images: z.array(evidenceImage.extend({ base64: z.base64().min(4).max(400_000) })).max(8),
+}).strict().refine(({ samples, images }) => samples.length === images.length);
 export const previewSchema = z.object({
     frames: z.array(z.number().int().nonnegative().max(7199)).min(1).max(32),
     framesPerSheet: z.literal(motionPreviewFramesPerSheet).optional(),
@@ -40,6 +47,10 @@ export type BrowserMotionReference = { bindingId: string; assetId: string; url: 
 export type BrowserMotionInput = {
     tool: "reference_capture";
     reference: BrowserMotionReference;
+} | {
+    tool: "reference_detail";
+    reference: BrowserMotionReference;
+    samples: z.infer<typeof referenceDetailRequest>;
 } | ({
     tool: "trace";
     reference: BrowserMotionReference;

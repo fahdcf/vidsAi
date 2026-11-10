@@ -8,7 +8,7 @@ import { motionSceneSchema } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
-import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
+import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceDetailRequest, referenceDetailResult, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
@@ -95,10 +95,30 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         }
         add({ name: "director", lane: "provider", dependencies: run.reference_binding_id ? ["reference_analysis"] : [] });
         add({ name: "copy", lane: "provider", dependencies: ["director"] });
-        add({ name: "design", lane: "provider", dependencies: ["director"] });
         if (!done("director")) return;
         const storyboard = agentResult(id, "director", motionStoryboardSchema);
         const reference = run.reference_binding_id ? agentResult(id, "reference_analysis", referenceAnalysisSchema) : null;
+        const useDetails = reference && storyboard.look === "reference";
+        if (useDetails) {
+            const { total_frames } = motionSnapshot(run);
+            const samples = storyboard.scenes.map((scene) => {
+                const evidence = sceneReferenceEvidence(reference, scene, total_frames);
+                const interval = evidence?.timing ?? reference.interval;
+                const source = reference.interval;
+                const projected = source ? source.start + (source.end - source.start) *
+                    ((scene.start_frame + scene.end_frame) / (2 * total_frames)) : 0;
+                const middle = interval && (projected < interval.start || projected >= interval.end)
+                    ? (interval.start + interval.end) / 2 : projected;
+                const observations = evidence?.observations.filter(({ time }) => !interval || (time >= interval.start && time < interval.end)) ?? [];
+                const closest = (times: readonly number[], time: number) => times.reduce((nearest, sample) =>
+                    Math.abs(sample - time) < Math.abs(nearest - time) ? sample : nearest);
+                const observed = observations.length ? closest(observations.map(({ time }) => time), middle) : middle;
+                const time = closest(reference.measured.timestamps, Math.abs(observed - middle) <= 0.65 ? observed : middle);
+                return { sceneId: scene.id, time };
+            });
+            add({ name: "reference_detail", lane: "browser", dependencies: ["director"], input: samples });
+        }
+        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_detail"] : [])] });
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
         let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
@@ -120,7 +140,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         const engineers = storyboard.scenes.map((target) => {
             const name = `engineer:${target.id}`;
             const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
-            add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency], input: { sceneId: target.id } });
+            add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency, ...(useDetails ? ["reference_detail"] : [])], input: { sceneId: target.id } });
             return name;
         });
         add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
@@ -165,13 +185,15 @@ export function readyMotionSteps(runId: string) {
 }
 
 export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMotionInput {
-    if (step.name === "reference_capture" || step.name.startsWith("trace:")) {
+    if (step.name === "reference_capture" || step.name === "reference_detail" || step.name.startsWith("trace:")) {
         const reference = motionReference(run.project_id);
         if (reference?.bindingId !== run.reference_binding_id) throw new Error("The reference was replaced.");
         if (!reference?.available) throw new Error("Relink the reference file.");
         const selected = { bindingId: reference.bindingId, assetId: reference.assetId, url: reference.url,
             metadata: referenceMetadata.parse(reference.metadata) };
         if (step.name === "reference_capture") return { tool: "reference_capture", reference: selected };
+        if (step.name === "reference_detail") return { tool: "reference_detail", reference: selected,
+            samples: referenceDetailRequest.parse(json(step.input, null)) };
         return { tool: "trace", reference: selected, ...traceRequestSchema.parse(json(step.input, null)) };
     }
     const { round = 1 } = json<{ round?: number }>(step.input, {});
@@ -266,6 +288,11 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return analysis?.success ? analysis.data : null;
     };
     const storyboard = () => agentResult(id, "director", motionStoryboardSchema);
+    const details = () => {
+        if (!motionSteps(id).some(({ name, status }) => name === "reference_detail" && status === "done")) return [];
+        const detail = referenceDetailResult.parse(result(id, "reference_detail"));
+        return detail.samples.map((sample, index) => ({ ...sample, image: imageBytes([detail.images[index]])[0] }));
+    };
     const build = (n: number) => result<BuildArtifact>(id, stepNames(n).assemble);
     if (step.name === "revise") {
         const scene = context.document.tracks.motion_graphics.find(({ id }) => id === run.target_scene_id)!;
@@ -294,7 +321,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return { value, summary: value.value.decision };
     }
     if (step.name === "design") {
-        const value = await runMotionDesigner(context, storyboard(), reference());
+        const value = await runMotionDesigner(context, storyboard(), reference(), details());
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("engineer:")) {
@@ -307,7 +334,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             ? traceResultSchema.parse(result(id, traceName)) : null;
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
-            agentResult(id, "design", motionDesignSchema), asset ? [asset] : [], evidence);
+            agentResult(id, "design", motionDesignSchema), asset ? [asset] : [], evidence,
+            details().find(({ sceneId }) => sceneId === target.id));
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],
