@@ -1,6 +1,36 @@
 import { ADTS, AudioSampleSink, BlobSource, BufferTarget, Conversion, Input, MP3, MP4, Output, WAVE, WavOutputFormat } from "mediabunny";
+import { motionAudioAnalysisSchema } from "../../../../shared/motion/schema";
 
 export type AudioCue = { seconds: number; confidence: number; source: "detected" | "manual" };
+
+function estimateRhythm(cues: readonly AudioCue[]) {
+    if (cues.length < 5) return null;
+    const intervals = cues.slice(1).map(({ seconds }, index) => seconds - cues[index].seconds);
+    const ordered = [...intervals].sort((a, b) => a - b);
+    const period = ordered[Math.floor(ordered.length / 2)];
+    if (period < 0.28 || period > 1.05) return null;
+    const confidence = intervals.filter((interval) => Math.abs(interval - period) <= period * 0.12).length / intervals.length;
+    if (confidence < 0.8) return null;
+    return { bpm: Math.round(60 / period), confidence, times: cues.map(({ seconds }) => seconds) };
+}
+
+function summarizeEnvelope(envelope: readonly number[], duration: number, cues: readonly AudioCue[]) {
+    const energy = Array.from({ length: Math.ceil(duration * 10) }, (_, index) =>
+        Number(Math.min(1, Math.max(...envelope.slice(index * 4, index * 4 + 4), 0)).toFixed(4)));
+    const silence = [];
+    let quietStart: number | null = null;
+    for (let index = 0; index <= energy.length; index++) {
+        if (index < energy.length && energy[index] <= 0.003) {
+            quietStart ??= index;
+        } else if (quietStart !== null) {
+            const start = quietStart / 10;
+            const end = Math.min(index / 10, duration);
+            if (end - start >= 0.195 && silence.length < 24) silence.push({ start, end });
+            quietStart = null;
+        }
+    }
+    return motionAudioAnalysisSchema.parse({ duration, energy, silence, rhythm: estimateRhythm(cues) });
+}
 
 export async function extractReferenceAudio(source: Blob, interval: { start: number; end: number }, signal: AbortSignal) {
     signal.throwIfAborted();
@@ -57,13 +87,15 @@ export async function analyzeMotionAudio(source: Blob, seconds: number, signal: 
             try {
                 signal.throwIfAborted();
                 const pcm = new Float32Array(sample.numberOfFrames);
-                sample.copyTo(pcm, { format: "f32-planar", planeIndex: 0 });
-                for (let i = 0; i < pcm.length; i++) {
-                    const time = sample.timestamp - start + i / sample.sampleRate;
-                    const bucket = Math.floor(time / binSize);
-                    if (bucket < 0 || bucket >= buckets.length) continue;
-                    buckets[bucket] += pcm[i] * pcm[i];
-                    counts[bucket]++;
+                for (let channel = 0; channel < sample.numberOfChannels; channel++) {
+                    sample.copyTo(pcm, { format: "f32-planar", planeIndex: channel });
+                    for (let i = 0; i < pcm.length; i++) {
+                        const time = sample.timestamp - start + i / sample.sampleRate;
+                        const bucket = Math.floor(time / binSize);
+                        if (bucket < 0 || bucket >= buckets.length) continue;
+                        buckets[bucket] += pcm[i] * pcm[i];
+                        counts[bucket]++;
+                    }
                 }
                 duration = Math.min(seconds, Math.max(duration, sample.timestamp + sample.duration - start));
             } finally {
@@ -85,7 +117,7 @@ export async function analyzeMotionAudio(source: Blob, seconds: number, signal: 
                 if (cues.length >= 40) break;
             }
         }
-        return { duration, cues };
+        return { duration, cues, analysis: summarizeEnvelope(envelope, duration, cues) };
     } finally {
         signal.removeEventListener("abort", dispose);
         dispose();

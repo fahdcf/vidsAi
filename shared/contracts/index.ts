@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { EditState } from "../timeline";
-import { motionCuesSchema, motionGenerationSchema, motionTrackSchema } from "../motion/schema";
+import { motionAudioAnalysisSchema, motionCuesSchema, motionGenerationSchema, motionTrackSchema } from "../motion/schema";
 export { getClipSequenceTiming } from "./clip-sequence";
 export const browserPlanningLimitsSchema = z.object({
   version: z.literal(1),
@@ -125,6 +125,7 @@ export const documentSchema = z
       .object({
         workflow: z.enum(["video_from_scratch", "motion_graphics"]).default("video_from_scratch"),
         motion_cues: motionCuesSchema.optional(),
+        motion_audio_analysis: motionAudioAnalysisSchema.optional(),
         motion_audio_source: z.enum(["reference", "uploaded", "silent", "muted"]).optional(),
         motion_generation: motionGenerationSchema.optional(),
         language: z.string(),

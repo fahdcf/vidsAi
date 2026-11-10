@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { normalizeDocument } from "../../shared/contracts";
-import { motionCuesSchema } from "../../shared/motion/schema";
+import { motionAudioAnalysisSchema, motionCuesSchema } from "../../shared/motion/schema";
 import { motionAssetProvenance } from "../../shared/motion/assets";
 import { referenceMetadata } from "../../shared/motion/browser-tools";
 import { db, insert, json, project, update } from "../database";
@@ -17,7 +17,7 @@ const createInput = motionProjectInput.extend({ attachments: requirements });
 const finishInput = z.object({
     referenceBindingId: z.uuid().nullable(),
     logoId: z.uuid().nullable(),
-    audio: z.object({ id: z.uuid(), cues: motionCuesSchema }).strict().nullable(),
+    audio: z.object({ id: z.uuid(), cues: motionCuesSchema, analysis: motionAudioAnalysisSchema.optional() }).strict().nullable(),
     referenceAudio: z.enum(["silent", "muted"]).optional(),
 }).strict();
 type SetupRow = { requirements: string; setup_hash: string; finished_hash: string | null };
@@ -108,6 +108,11 @@ export function finalizeMotionSetup(runId: string, accountId: number, raw: unkno
                 start_frame: 0, end_frame: end, volume: fromReference ? 1 : 0.65,
                 fade_in_frames: fromReference ? 0 : Math.min(4, end), fade_out_frames: fromReference ? 0 : Math.min(12, end) });
             snapshot.metadata.motion_cues = input.audio.cues.filter(({ frame }) => frame < end);
+            if (input.audio.analysis) {
+                const limit = Math.min(snapshot.total_frames / snapshot.fps, soundtrack.duration_seconds ?? 0);
+                if (input.audio.analysis.duration > limit + 1 / snapshot.fps) fail(422, "The audio analysis extends beyond the soundtrack.");
+                snapshot.metadata.motion_audio_analysis = input.audio.analysis;
+            }
             snapshot.metadata.motion_audio_source = fromReference ? "reference" : "uploaded";
         }
         if (input.referenceAudio) snapshot.metadata.motion_audio_source = input.referenceAudio;

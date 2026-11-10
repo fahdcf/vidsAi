@@ -13,7 +13,7 @@ export type MotionUploadReceipts = {
     reference?: { selection: MotionReferenceSelection; saved: SavedMotionReference };
     logo?: { file: File; id: string };
     audio?: { file: File; id: string };
-    extracted?: { key: string; audio: (Pick<MotionAudioSelection, "file" | "cues"> & { trackId: number }) | null };
+    extracted?: { key: string; audio: (Pick<MotionAudioSelection, "file" | "cues" | "analysis"> & { trackId: number }) | null };
 };
 
 function upload<T>(url: string, form: FormData, signal: AbortSignal, progress: (fraction: number | null) => void) {
@@ -75,7 +75,7 @@ export async function uploadMotionSetup(
         }
         logoId = receipts.logo.id;
     }
-    let selection: Pick<MotionAudioSelection, "file" | "cues"> | null = files.audio;
+    let selection: Pick<MotionAudioSelection, "file" | "cues" | "analysis"> | null = files.audio;
     let provenance: z.infer<typeof motionAssetProvenance> = { kind: "imported" };
     let referenceAudio: "silent" | "muted" | undefined;
     if (requirements.referenceAudio && !selection) {
@@ -110,7 +110,7 @@ export async function uploadMotionSetup(
         }
         const cues = [...new Map(selection.cues.map(({ seconds, confidence, source }) =>
             [Math.floor(seconds * 30), { frame: Math.floor(seconds * 30), confidence, source }])).values()];
-        audio = { id: receipts.audio.id, cues };
+        audio = { id: receipts.audio.id, cues, analysis: selection.analysis };
     }
     progress({ name: "project setup", fraction: null });
     await api(`/motion-runs/${runId}/setup`, { referenceBindingId: reference?.bindingId ?? null, logoId, audio, referenceAudio }, "POST", signal);

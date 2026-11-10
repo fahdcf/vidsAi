@@ -87,6 +87,8 @@ The first audio delivery passed the product tests and browser creation flow with
 
 Reference audio now records the source hash, audio track ID, trim and conversion version. A browser check deliberately dropped the response after a successful asset upload. Reloading and resuming completed setup and exported an MP4 with exactly one derived audio asset in the project.
 
+The local portion of BA4 now persists measured onsets, 100 ms energy buckets, silence intervals and a separate estimate of rhythmic timing when the onsets are sufficiently regular. Browser verification `--audio-timing` checks a 120 BPM stereo fixture with pulses isolated to its right channel. The real reference setup and browser export also passed with the new timing metadata. Optional model-based speech or sound-event interpretation still needs qualification.
+
 The scene analysis delivery uses sustained changes in saved visual observations to estimate scene boundaries when the outline model fails. Replaying the product reference's saved observations recovered six sections with zero measured cuts. The designer and engineer receive scene-specific text and layout observations, selected by unique copy match or proportional timing.
 
 The browser now captures an individual reference frame of up to 960 pixels for each planned scene, with a scene ID and source timestamp. The designer receives the ordered frames and each engineer receives its scene frame. Browser verification checks the decoded dimensions, scene IDs, image delivery, and text recovery after rejected vision output. Adaptive crops, a validated scene-to-reference mapping, and fresh live visual acceptance remain open.

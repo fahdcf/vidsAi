@@ -100,6 +100,7 @@ try {
         const saved = document(project(motionRun(audioRun).project_id));
         assert.equal(saved.metadata.motion_audio_source, "reference");
         assert.ok(saved.metadata.motion_cues.length > 0);
+        assert.equal(saved.metadata.motion_audio_analysis.energy.length, 50);
         const [track] = saved.tracks.audio;
         assert.equal(track.start_frame, 0);
         assert.equal(track.end_frame, 150);
@@ -158,6 +159,14 @@ try {
     await page.route(base + "/__motion_tool", (r) => r.fulfill({ contentType: "text/html",
         body: '<!doctype html><meta name="csrf-token" content="' + a.csrf + '"><title>Motion tools</title>' }));
     await page.goto(base + "/__motion_tool");
+    if (process.argv.includes("--audio-timing")) {
+        const timing = await page.evaluate(async () => (await import("/scripts/fixtures/motion-audio-timing.ts")).analyzeStereoRhythmFixture());
+        assert.equal(timing.analysis.rhythm.bpm, 120);
+        assert.ok(timing.analysis.silence.some(({ start, end }) => start === 0 && end >= 0.4));
+        assert.ok(timing.analysis.silence.some(({ end }) => end === 4));
+        assert.equal(timing.cues.length, 6);
+        console.log("Stereo audio analysis found the expected onsets, silence and 120 BPM rhythm.");
+    }
     if (process.argv.includes("--quality-fixtures")) {
         const checks = await page.evaluate(async () => {
             const { motionQualityCases } = await import("/scripts/fixtures/motion-quality-cases.ts");

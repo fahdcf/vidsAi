@@ -38,6 +38,22 @@ const frame = z.number().int().min(0).max(7200);
 export const motionCueSchema = z.object({
     frame, confidence: z.number().min(0).max(1), source: z.enum(["detected", "manual"]),
 }).strict();
+const audioTime = z.number().min(0).max(30);
+export const motionAudioAnalysisSchema = z.object({
+    duration: audioTime.positive(),
+    energy: z.array(z.number().min(0).max(1)).min(1).max(300),
+    silence: z.array(z.object({ start: audioTime, end: audioTime }).strict()).max(24),
+    rhythm: z.object({ bpm: z.number().min(55).max(220), confidence: z.number().min(0).max(1),
+        times: z.array(audioTime).min(5).max(40),
+    }).strict().nullable(),
+}).strict().superRefine(({ duration, energy, silence, rhythm }, context) => {
+    if (energy.length !== Math.ceil(duration * 10) || silence.some(({ start, end }, index) => end > duration || start >= end ||
+        (index > 0 && start < silence[index - 1].end)) || rhythm?.times.some((time, index) => time >= duration ||
+        (index > 0 && time <= rhythm.times[index - 1]))) {
+        context.addIssue({ code: "custom", message: "Audio timing data is outside the soundtrack timeline." });
+    }
+});
+export type MotionAudioAnalysis = z.infer<typeof motionAudioAnalysisSchema>;
 export const motionCuesSchema = z.array(motionCueSchema).max(40).refine((cues) =>
     cues.every((cue, i) => i === 0 || cue.frame > cues[i - 1].frame), "Motion cues must be unique and in frame order.");
 export type MotionCue = z.infer<typeof motionCueSchema>;

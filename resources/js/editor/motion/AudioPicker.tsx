@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import { analyzeMotionAudio, type AudioCue } from "./audio-analysis";
+import type { MotionAudioAnalysis } from "../../../../shared/motion/schema";
 
-export type MotionAudioSelection = { file: File; cues: AudioCue[]; duration: number; usage: "user_supplied" };
+export type MotionAudioSelection = { file: File; cues: AudioCue[]; duration: number; usage: "user_supplied"; analysis?: MotionAudioAnalysis };
 
 export function AudioPicker({ seconds, onChange, disabled }: {
     seconds: number;
@@ -71,6 +72,7 @@ export function AudioPicker({ seconds, onChange, disabled }: {
             {busy && <p role="status">Finding audio cues…</p>}
             {error && <p role="alert">{error}</p>}
             {preview && <audio src={preview} controls aria-label="Soundtrack preview" />}
+            {selected?.analysis?.rhythm && <p className="muted">Estimated tempo {selected.analysis.rhythm.bpm} BPM</p>}
             {selected && selected.cues.length > 0 && <details>
                 <summary>{selected.cues.length} soundtrack cues</summary>
                 {selected.cues.map((cue, index) => <label key={`${index}-${cue.seconds}`}>
