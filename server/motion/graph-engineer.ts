@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { graphAuthoring, motionGraphVersion } from "../../shared/motion/graph";
+import { graphAuthoring, graphAuthoringInput, motionGraphVersion } from "../../shared/motion/graph";
 import { graphColor, graphPaintFields, graphTextFields } from "../../shared/motion/graph-style";
 
 const placement = {
@@ -17,11 +17,15 @@ const ellipse = z.object({ ...placement, ...box, kind: z.literal("ellipse") }).s
 const layer = z.discriminatedUnion("kind", [text, rect, ellipse]);
 type Layer = z.infer<typeof layer>;
 
-export const graphEngineerSchema = z.object({
-    layers: z.array(layer).min(1).max(20),
+const decision = {
     decision: z.string().trim().min(1).max(280),
     approximation: z.string().trim().min(1).max(240).nullable(),
-}).strict();
+};
+export const graphEngineerSchema = z.union([
+    z.object({ layers: z.array(layer).min(1).max(20), ...decision }).strict(),
+    z.object({ composition: graphAuthoringInput, ...decision }).strict(),
+]);
+export type GraphEngineerProposal = z.infer<typeof graphEngineerSchema>;
 
 export function compileEngineerGraph(layers: readonly Layer[], timing?: { start: number; end: number; cueFrames: ReadonlySet<number> }) {
     return graphAuthoring.parse({ version: motionGraphVersion, nodes: layers.map(({ x, y, reveal, audioCueFrame, ...shape }, index) => {

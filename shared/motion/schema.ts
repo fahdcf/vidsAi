@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { graphComposition } from "./graph";
+import { graphAssetRefs, graphComposition } from "./graph";
 
 export const motionSceneId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 export const motionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -162,6 +162,10 @@ export const motionSceneSchema = z.discriminatedUnion("type", [
         if (!scene.assets.some(({ id, kind }) => id === assetId && kind === "vectors")) {
             ctx.addIssue({ code: "custom", path: ["params", "assetId"], message: "Vector liquid needs a matching vector asset reference." });
         }
+    }
+    if (scene.type === "graph" && graphAssetRefs(scene.params.layers).some((ref) =>
+        !scene.assets.some(({ id, kind }) => id === ref.id && kind === ref.kind))) {
+        ctx.addIssue({ code: "custom", path: ["assets"], message: "Graph layers must reference matching project assets." });
     }
 });
 

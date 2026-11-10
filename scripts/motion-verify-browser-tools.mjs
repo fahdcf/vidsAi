@@ -488,7 +488,39 @@ try {
     const referenceMapping = process.argv.includes("--reference-mapping");
     const referenceFollowup = process.argv.includes("--reference-followup");
     const componentCompatibility = process.argv.includes("--component-compatibility");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility });
+    let graphAssets;
+    if (process.argv.includes("--graph-assets")) {
+        assert.ok(componentCompatibility, "Use --component-compatibility with --graph-assets.");
+        const upload = (kind, name, file, headers = a.headers) => {
+            const form = new FormData();
+            form.set("kind", kind);
+            form.set("provenance", JSON.stringify({ kind: "imported" }));
+            form.set("file", file, name);
+            return fetch(`${target}/projects/${graphProject}/motion-assets`, { method: "POST",
+                headers: { cookie: headers.cookie, "X-CSRF-TOKEN": headers["X-CSRF-TOKEN"] }, body: form });
+        };
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16"><path fill="#2458ff" d="M 0 0 L 16 0 L 16 16 L 0 16 Z"/></svg>`;
+        assert.equal((await upload("vectors", "foreign.svg", new Blob([svg]), b.headers)).status, 404);
+        assert.equal((await upload("vectors", "unsupported.svg", new Blob(['<svg viewBox="0 0 10 10"><text x="1" y="1">label</text></svg>']))).status, 422);
+        const vector = await upload("vectors", "shape.svg", new Blob([svg]));
+        assert.equal(vector.status, 201);
+        const vectorAsset = await vector.json();
+        const stored = await fetch(`${target}/projects/${graphProject}/assets/${vectorAsset.id}`, { headers: a.headers });
+        assert.match(stored.headers.get("content-type"), /^application\/json/);
+        assert.match((await stored.json()).sourceSha256, /^[a-f0-9]{64}$/);
+        assert.deepEqual(vectorAsset.provenance, { kind: "imported" });
+        const png = await graphPage.evaluate(async () => {
+            const canvas = new OffscreenCanvas(8, 8);
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#ff22a0";
+            ctx.fillRect(0, 0, 8, 8);
+            return [...new Uint8Array(await (await canvas.convertToBlob()).arrayBuffer())];
+        });
+        const image = await upload("image", "square.png", new Blob([Uint8Array.from(png)], { type: "image/png" }));
+        assert.equal(image.status, 201);
+        graphAssets = { vector: vectorAsset.id, image: (await image.json()).id };
+    }
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -612,10 +644,28 @@ try {
         assert.deepEqual(scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]),
             proposal.scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]));
         for (const [index, scene] of scenes.entries()) {
+            if (graphAssets && index === 1) continue;
             assert.ok(scene.params.layers.some(({ kind, keyframes }) => kind === "rect" && keyframes.length));
             assert.ok(scene.params.layers.some(({ kind, text }) => kind === "text" && text === ["Get transcript", "Try it now"][index]));
         }
         console.log("The incompatible hook and closing card were published as editable custom graphs with their original copy and timing.");
+    }
+    if (graphAssets) {
+        assert.deepEqual(scenes[1].assets.map(({ id }) => id).sort(), Object.values(graphAssets).sort());
+        const pixels = await graphPage.evaluate(async ({ scene, projectId }) => {
+            const { prepareMotionSceneAssets } = await import("/shared/motion/browser-assets.ts");
+            const { drawMotionFrame } = await import("/shared/motion/render.ts");
+            const assets = await prepareMotionSceneAssets(scene, projectId, AbortSignal.timeout(5000));
+            try {
+                const ctx = new OffscreenCanvas(360, 360).getContext("2d");
+                drawMotionFrame({ ctx, scene: { ...scene, finish: { grain: 0, vignette: 0, framing: false } }, frame: 10, fps: 30, width: 360, height: 360 }, assets);
+                return [[90, 108], [43, 108], [270, 108]].map(([x, y]) => [...ctx.getImageData(x, y, 1, 1).data].slice(0, 3));
+            } finally { assets.release(); }
+        }, { scene: scenes[1], projectId: String(graphProject) });
+        assert.deepEqual(pixels[0], [255, 34, 160]);
+        assert.notDeepEqual(pixels[1], pixels[0]);
+        assert.deepEqual(pixels[2], [36, 88, 255]);
+        console.log("A generated graph rendered an owned PNG inside its group mask and an imported SVG as normalized vector data.");
     }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {

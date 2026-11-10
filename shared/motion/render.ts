@@ -6,10 +6,11 @@ import { drawMotionText } from "./text";
 import { resolveGraphColor, type GraphColor } from "./graph-style";
 import { drawStyledMotionText } from "./styled-text";
 import { drawEasing, drawGrid, drawTunnel } from "./geometry-scenes";
-import { drawLiquid } from "./liquid-scene";
+import { chooseMotionVectorShapes, drawLiquid } from "./liquid-scene";
 import { drawIdentity } from "./identity-scene";
 import { finishMotionFrame } from "./finish";
 import type { MotionVectors } from "./assets";
+import { drawGraphWidget } from "./widgets";
 
 export const motionFontFamilies = {
     archivo_black: '"VidsAI Archivo Black", Arial, sans-serif',
@@ -20,6 +21,7 @@ export const motionFontFamilies = {
 export type ReadyMotionAssets = {
     fontFamily: string;
     vectors?: Readonly<Record<string, MotionVectors>>;
+    images?: Readonly<Record<string, ImageBitmap>>;
 };
 
 function animatedTransform(node: MotionGraphNode, progress: number, root: boolean) {
@@ -68,6 +70,28 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
                 continue;
             }
             const resolve = (color: GraphColor) => resolveGraphColor(scene.palette, color);
+            if (node.kind === "image" || node.kind === "vector") {
+                const w = node.width * unit, h = node.height * unit;
+                if (node.kind === "image") {
+                    const image = assets.images?.[node.assetId];
+                    if (!image) throw new Error("The graph image is unavailable.");
+                    const scale = Math.min(w / image.width, h / image.height);
+                    const dw = image.width * scale, dh = image.height * scale;
+                    ctx.drawImage(image, -dw / 2, -dh / 2, dw, dh);
+                } else {
+                    const vectors = assets.vectors?.[node.assetId];
+                    if (!vectors) throw new Error("The graph vector asset is unavailable.");
+                    ctx.translate(-w / 2, -h / 2);
+                    const opacity = ctx.globalAlpha;
+                    for (const shape of chooseMotionVectorShapes(vectors, progress)) {
+                        ctx.fillStyle = resolve(shape.fill);
+                        ctx.globalAlpha = opacity * shape.opacity;
+                        drawMotionPath(ctx, shape.path, w, h);
+                        ctx.fill("evenodd");
+                    }
+                }
+                continue;
+            }
             let fill: string | CanvasGradient = resolve(node.color);
             if (node.gradient) {
                 const { x0, y0, x1, y1, stops } = node.gradient;
@@ -84,6 +108,13 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
             ctx.fillStyle = fill;
             ctx.beginPath();
             switch (node.kind) {
+                case "widget":
+                    drawGraphWidget(ctx, node, unit, progress, assets.fontFamily, resolve(node.labelColor), frame.audioLevel);
+                    if (node.variant === "button" || node.variant === "card" || node.variant === "text-row") {
+                        if (outline) { ctx.strokeStyle = outline.color; ctx.lineWidth = outline.width; ctx.stroke(); }
+                        continue;
+                    }
+                    break;
                 case "text": {
                     const w = node.maxWidth * width;
                     const style = node.typography;

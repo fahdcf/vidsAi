@@ -55,6 +55,7 @@ test("an authored reveal begins at the supplied soundtrack cue", () => {
     const graph = graphEngineerSchema.parse({ layers: [{ kind: "rect", x: 0.5, y: 0.5, width: 0.1, height: 0.3,
         color: "primary", audioReactive: true, audioCueFrame: 45 }], decision: "Reveal on the accent", approximation: null });
     const timing = { start: 30, end: 61, cueFrames: new Set([45]) };
+    assert.ok("layers" in graph);
     const [layer] = compileEngineerGraph(graph.layers, timing).layers;
     assert.equal(layer.keyframes[0].at, 0.5);
     assert.equal(layer.keyframes[0].opacity, 0);

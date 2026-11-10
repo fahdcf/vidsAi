@@ -1,6 +1,8 @@
 import { motionFontFamilies, type ReadyMotionAssets } from "./render";
 import type { MotionScene } from "./schema";
 import { motionAssetByteLimit, parseMotionVectors, type MotionAssetFiles, type MotionVectors } from "./assets";
+import { graphAssetRefs } from "./graph";
+import { imageDimensions } from "./image-dimensions";
 
 const bundled = {
     archivo_black: { name: "VidsAI Archivo Black", url: "/motion-fonts/ArchivoBlack-Regular.ttf" },
@@ -39,16 +41,28 @@ export async function prepareMotionSceneAssets(
 ): Promise<ReadyMotionAssets & { release: () => void }> {
     const ready = await prepareMotionFont(scene, signal);
     const vectors: Record<string, MotionVectors> = {};
+    const images: Record<string, ImageBitmap> = {};
+    const imageIds = new Set(scene.type === "graph" ? graphAssetRefs(scene.params.layers).filter(({ kind }) => kind === "image").map(({ id }) => id) : []);
     const fonts: FontFace[] = [];
     const release = () => {
         for (const face of fonts.splice(0)) document.fonts.delete(face);
+        for (const [id, image] of Object.entries(images)) { image.close(); delete images[id]; }
     };
     try {
         for (const ref of scene.assets) {
-            if (ref.kind === "image") continue;
+            if (ref.kind === "image" && !imageIds.has(ref.id)) continue;
             const saved = preloaded?.[ref.id];
             const file = saved ? null : await readAsset(projectId, ref, signal);
-            if (ref.kind === "vectors") {
+            if (ref.kind === "image") {
+                const image = saved?.kind === "image" ? saved.file : file;
+                if (!image || !image.size || image.size > motionAssetByteLimit.image) throw new Error("The graph image is unavailable or too large.");
+                const header = new Uint8Array(await image.slice(0, 256 * 1024).arrayBuffer());
+                const { width, height } = imageDimensions(header, image.size);
+                if (!width || !height || Math.max(width, height) > 4096 || width * height > 4_000_000) throw new Error("The graph image exceeds the pixel budget.");
+                signal.throwIfAborted();
+                images[ref.id] = await createImageBitmap(image);
+                signal.throwIfAborted();
+            } else if (ref.kind === "vectors") {
                 if (saved?.kind === "vectors") vectors[ref.id] = saved.data;
                 else if (file) vectors[ref.id] = parseMotionVectors(await file.text());
                 else throw new Error("The vector asset type is incompatible.");
@@ -64,7 +78,7 @@ export async function prepareMotionSceneAssets(
             }
         }
         signal.throwIfAborted();
-        return { ...ready, vectors, release };
+        return { ...ready, images, vectors, release };
     } catch (error) {
         release();
         throw error;

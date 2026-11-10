@@ -35,6 +35,7 @@ const common = {
     transform: transform.default({}),
     keyframes: keyframes.default([]),
 };
+const assetFields = { ...common, assetId: z.uuid(), width: size, height: size };
 const leafSchema = z.discriminatedUnion("kind", [
     z.object({ ...common, ...graphPaintFields, ...graphTextFields, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
         color: graphColor.default("foreground"), size: z.number().min(0.015).max(0.4), maxWidth: size.default(0.85) }).strict()
@@ -44,6 +45,12 @@ const leafSchema = z.discriminatedUnion("kind", [
     z.object({ ...common, ...graphPaintFields, kind: z.literal("ellipse"), width: size, height: size, color: graphColor }).strict(),
     z.object({ ...common, ...graphPaintFields, kind: z.literal("path"), commands: vectorPath, color: graphColor,
         stroke: z.number().min(0.001).max(0.1).optional() }).strict(),
+    z.object({ ...assetFields, kind: z.literal("image") }).strict(),
+    z.object({ ...assetFields, kind: z.literal("vector") }).strict(),
+    z.object({ ...common, ...graphPaintFields, kind: z.literal("widget"),
+        variant: z.enum(["button", "card", "play-icon", "text-row", "waveform"]), width: size, height: size,
+        color: graphColor, label: z.string().trim().max(120).default(""), labelColor: graphColor.default("foreground"),
+        bars: z.number().int().min(5).max(32).default(15) }).strict(),
 ]);
 
 export type MotionGraphNode = z.infer<typeof leafSchema> | {
@@ -107,10 +114,11 @@ const flatRecord = z.object({
     node: z.union([leafSchema, groupFields]),
 }).strict();
 
-export const graphAuthoring = z.object({
+export const graphAuthoringInput = z.object({
     version: z.literal(motionGraphVersion),
     nodes: z.array(flatRecord).min(1).max(MAX_GRAPH_NODES),
-}).strict().transform<z.input<typeof versionedGraph>>(({ version, nodes }, ctx) => {
+}).strict();
+export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versionedGraph>>(({ version, nodes }, ctx) => {
     const byId = new Map(nodes.map((record) => [record.node.id, record]));
     if (byId.size !== nodes.length) {
         ctx.addIssue({ code: "custom", path: ["nodes"], message: "Graph node IDs must be unique." });
@@ -146,5 +154,17 @@ export function graphGeometryCost(nodes: readonly MotionGraphNode[]): number {
     return nodes.reduce((count, node) => count + 1 +
         (node.kind === "path" ? node.commands.length
             : node.kind === "group" ? (node.mask?.length ?? 0) + graphGeometryCost(node.children)
+                : node.kind === "widget" && node.variant === "waveform" ? node.bars
+                : node.kind === "vector" ? 384
                 : 0), 0);
+}
+
+export function graphCopy(nodes: readonly MotionGraphNode[]): string[] {
+    return nodes.flatMap((node) => node.kind === "group" ? graphCopy(node.children)
+        : node.kind === "text" ? [node.text] : node.kind === "widget" && node.label ? [node.label] : []);
+}
+
+export function graphAssetRefs(nodes: readonly MotionGraphNode[]): { id: string; kind: "image" | "vectors" }[] {
+    return nodes.flatMap((node) => node.kind === "group" ? graphAssetRefs(node.children)
+        : node.kind === "image" || node.kind === "vector" ? [{ id: node.assetId, kind: node.kind === "image" ? "image" : "vectors" }] : []);
 }

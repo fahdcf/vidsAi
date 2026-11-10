@@ -4,6 +4,7 @@ import type { MotionFrame } from "./registry";
 import type { MotionScene } from "./schema";
 import type { MotionVectors } from "./assets";
 import type { MotionPath } from "./graph";
+import { resolveGraphColor } from "./graph-style";
 
 type Frame = MotionFrame<Extract<MotionScene, { type: "liquid" }>>;
 
@@ -50,7 +51,7 @@ function interpolatePath(a: MotionPath, b: MotionPath, t: number): MotionPath {
     });
 }
 
-function chooseShapes(vectors: MotionVectors, t: number) {
+export function chooseMotionVectorShapes(vectors: MotionVectors, t: number) {
     const frames = vectors.frames;
     const right = frames.findIndex((frame) => frame.at >= t);
     if (right < 0) return frames.at(-1)!.shapes;
@@ -80,7 +81,7 @@ export function drawLiquid({ ctx, scene, width, height }: Frame, t: number, asse
         const h = w * 9 / 16;
         ctx.save();
         ctx.translate((width - w) / 2, (height - h) / 2);
-        const shapes = chooseShapes(vectors, t);
+        const shapes = chooseMotionVectorShapes(vectors, t);
         const gradient = params.style === "liquid_gradient" ? ctx.createLinearGradient(w * 0.28, h * 0.23, w * 0.73, h * 0.8) : null;
         if (gradient) {
             gradient.addColorStop(0, palette.primary);
@@ -97,7 +98,7 @@ export function drawLiquid({ ctx, scene, width, height }: Frame, t: number, asse
         }
         for (const shape of shapes) {
             drawMotionPath(ctx, shape.path, w, h);
-            ctx.fillStyle = gradient && shape.fill !== "foreground" ? gradient : alpha(palette[shape.fill], shape.opacity);
+            ctx.fillStyle = gradient && shape.fill !== "foreground" ? gradient : alpha(resolveGraphColor(palette, shape.fill), shape.opacity);
             ctx.fill("evenodd");
         }
         ctx.restore();

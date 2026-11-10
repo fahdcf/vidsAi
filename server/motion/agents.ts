@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { Document } from "../../shared/contracts";
 import { compileMotionPlan, motionSceneExceedsBudget } from "../../shared/motion/compile";
 import { motionComponentTypes, describeMotionComponent } from "../../shared/motion/registry";
+import { graphAssetRefs, graphAuthoring, graphCopy } from "../../shared/motion/graph";
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import type { ReferenceSceneSpec } from "../../shared/motion/reference-spec";
@@ -10,7 +11,8 @@ import { motionTimeMap, soundtrackLevelAt } from "../../shared/motion/time-map";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
-import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes } from "./graph-engineer";
+import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes, type GraphEngineerProposal } from "./graph-engineer";
+import { motionGraphAssets } from "./assets";
 import { observeReferenceSheet } from "./reference-observer";
 import { mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
 
@@ -308,6 +310,7 @@ function sameSceneCopy(a: MotionScene, b: MotionScene) {
     if (a.type === "kinetic_words" && b.type === "kinetic_words") return JSON.stringify(a.params.words) === JSON.stringify(b.params.words);
     if (a.type === "easing" && b.type === "easing") return JSON.stringify(a.params.labels) === JSON.stringify(b.params.labels);
     if (a.type === "identity" && b.type === "identity") return a.params.detail === b.params.detail && a.params.tag === b.params.tag;
+    if (a.type === "graph" && b.type === "graph") return JSON.stringify(graphCopy(a.params.layers)) === JSON.stringify(graphCopy(b.params.layers));
     return true;
 }
 
@@ -335,14 +338,30 @@ export async function runMotionEngineer(
     if (target.type === "graph") {
         const timing = { start: target.start_frame, end: target.end_frame, cueFrames: new Set(audioCues.map(({ frame }) => frame)) };
         const notes = graphSceneNotes(context.brief, wording);
-        const makeScene = (params: ReturnType<typeof compileEngineerGraph>) => motionSceneSchema.parse({
-            ...styling, id: target.id, type: target.type, start_frame: target.start_frame, end_frame: target.end_frame,
-            componentVersion: 1, assets, params,
-        });
+        const availableAssets = motionGraphAssets(context.document.project_id);
+        const makeScene = (params: ReturnType<typeof compileEngineerGraph>) => {
+            const used = new Map(assets.map((ref) => [ref.id, ref]));
+            for (const ref of graphAssetRefs(params.layers)) {
+                if (!availableAssets.some(({ id, kind }) => id === ref.id && kind === ref.kind)) throw new Error("The selected graph asset is unavailable.");
+                used.set(ref.id, ref);
+            }
+            return motionSceneSchema.parse({ ...styling, id: target.id, type: target.type, start_frame: target.start_frame,
+                end_frame: target.end_frame, componentVersion: 1, assets: [...used.values()], params });
+        };
+        const compile = (proposal: GraphEngineerProposal) => {
+            if (!("composition" in proposal)) return makeScene(compileEngineerGraph(proposal.layers, timing));
+            const params = graphAuthoring.parse(proposal.composition);
+            const required = wording.replace(/\s+/g, " ").trim();
+            if (required && !graphCopy(params.layers).join(" ").replace(/\s+/g, " ").includes(required)) {
+                throw new Error("The composition changed the approved copy.");
+            }
+            return makeScene(params);
+        };
         try {
             const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
                 requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
+                availableAssets,
                 referenceSpec,
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
@@ -351,10 +370,10 @@ export async function runMotionEngineer(
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
                 images: details.map(({ image }) => image),
-                validate: ({ layers }) => { makeScene(compileEngineerGraph(layers, timing)); },
+                validate: (proposal) => { compile(proposal); },
             }));
-            const { layers, ...value } = result.value;
-            return { ...result, value: { ...value, scene: makeScene(compileEngineerGraph(layers, timing)) } };
+            const { decision, approximation } = result.value;
+            return { ...result, value: { decision, approximation, scene: compile(result.value) } };
         } catch (error) {
             context.signal.throwIfAborted();
             if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;

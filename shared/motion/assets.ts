@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { vectorPath } from "./graph";
+import { graphColor } from "./graph-style";
 
 export const motionAssetKind = z.enum(["font", "image", "vectors", "audio"]);
 export type MotionAssetKind = z.infer<typeof motionAssetKind>;
@@ -27,12 +28,13 @@ const vectorFrame = z.object({
     at: z.number().min(0).max(1),
     shapes: z.array(z.object({
         path: vectorPath,
-        fill: z.enum(["primary", "accent", "muted", "foreground"]),
+        fill: graphColor,
         opacity: z.number().min(0).max(1).default(1),
     }).strict()).min(1).max(8),
 }).strict();
 export const motionVectorAsset = z.object({
     version: z.literal(1),
+    sourceSha256: z.string().regex(/^[a-f0-9]{64}$/).optional(),
     interpolate: z.boolean().default(true),
     frames: z.array(vectorFrame).min(1).max(180),
 }).strict().superRefine(({ frames }, ctx) => {

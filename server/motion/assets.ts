@@ -7,6 +7,7 @@ import { mediaDuration } from "../media";
 import { fail } from "../security";
 import type { Document } from "../../shared/contracts";
 import { motionAssetByteLimit, motionAssetKind, motionAssetProvenance, parseMotionVectors, type MotionAssetKind } from "../../shared/motion/assets";
+import { importMotionSvg } from "./svg";
 
 function mimeType(kind: MotionAssetKind, bytes: Buffer, name: string) {
     switch (kind) {
@@ -50,13 +51,18 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
             }
         }
     }
-    const mime = mimeType(kind, upload.buffer, upload.originalname);
+    let bytes = upload.buffer;
+    if (kind === "vectors" && path.extname(upload.originalname).toLowerCase() === ".svg") {
+        try { bytes = Buffer.from(JSON.stringify(importMotionSvg(bytes))); }
+        catch { fail(422, "Use a static SVG with a viewBox and filled absolute M, L, Q, C and Z paths."); }
+    }
+    const mime = mimeType(kind, bytes, upload.originalname);
     const id = randomUUID();
     const storedPath = `project-assets/${projectId}/${id}`;
     const filename = path.join(mediaRoot, "private", storedPath);
     await fs.mkdir(path.dirname(filename), { recursive: true });
-    await fs.writeFile(filename, upload.buffer, { flag: "wx" });
-    const sha256 = createHash("sha256").update(upload.buffer).digest("hex");
+    await fs.writeFile(filename, bytes, { flag: "wx" });
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
     const provenanceJson = JSON.stringify(provenance);
     let savedId: string;
     try {
@@ -70,7 +76,7 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
             }
             insert("project_assets", {
                 id, project_id: projectId, path: storedPath, name: upload.originalname.slice(0, 255),
-                mime, size: upload.buffer.length, duration_seconds: duration, created_at: now(), updated_at: now(),
+                mime, size: bytes.length, duration_seconds: duration, created_at: now(), updated_at: now(),
             });
             insert("motion_asset_metadata", { asset_id: id, kind, sha256, provenance: provenanceJson });
             return id;
@@ -81,6 +87,12 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
     }
     if (savedId !== id) await fs.unlink(filename);
     return { id: savedId, kind, sha256, provenance, url: `${origin}/projects/${projectId}/assets/${savedId}` };
+}
+
+export function motionGraphAssets(projectId: string) {
+    return db.prepare(`SELECT a.id, a.name, m.kind FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
+        WHERE a.project_id=? AND m.kind IN ('image', 'vectors') ORDER BY a.created_at DESC, a.id LIMIT 12`).all(projectId) as
+        { id: string; name: string; kind: "image" | "vectors" }[];
 }
 
 export function validateMotionAssetOwnership(projectId: number, document: Document) {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets } = {}) {
     const stages = [];
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
     const labels = ["Get transcript", "Try it now"];
@@ -132,6 +132,20 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                         : { layers: [...(componentCompatibility ? [{ kind: "rect", x: 0.5, y: 0.5, width: 0.65, height: 0.15, color: "muted", reveal: 0.1 }] : []),
                             { kind: "text", text: artifact.approvedCopy, x: 0.5, y: 0.5, size: 0.08, maxWidth: 0.8, color: "foreground", reveal: 0.1 }],
                             decision: "Built the editable layout.", approximation: null };
+                    if (graphAssets && index === 1) {
+                        assert.deepEqual(artifact.availableAssets.map(({ id }) => id).sort(), Object.values(graphAssets).sort());
+                        const root = (order, node) => ({ parentId: null, order, node });
+                        const mask = [{ op: "M", x: -0.11, y: -0.12 }, { op: "L", x: 0.11, y: -0.12 },
+                            { op: "L", x: 0.11, y: 0.12 }, { op: "L", x: -0.11, y: 0.12 }, { op: "Z" }];
+                        value = { decision: "Built the reference CTA with an editable mask and owned artwork.", approximation: null,
+                            composition: { version: 1, nodes: [
+                                root(0, { id: "media", kind: "group", transform: { x: 0.25, y: 0.3 }, mask }),
+                                { parentId: "media", order: 0, node: { id: "image", kind: "image", assetId: graphAssets.image, width: 0.3, height: 0.3 } },
+                                root(1, { id: "vector", kind: "vector", assetId: graphAssets.vector, width: 0.3, height: 0.3, transform: { x: 0.75, y: 0.3 } }),
+                                root(2, { id: "button", kind: "widget", variant: "button", width: 0.7, height: 0.15, color: "primary", label: artifact.approvedCopy, transform: { x: 0.5, y: 0.75 } }),
+                                root(3, { id: "waveform", kind: "widget", variant: "waveform", width: 0.6, height: 0.14, color: "success", transform: { x: 0.5, y: 0.56 } }),
+                            ] } };
+                    }
                     break;
                 }
                 const { params, finish, seed, motionRate, transitionIn } = graphic.find(({ id }) => id === artifact.target.id);
