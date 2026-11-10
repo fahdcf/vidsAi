@@ -22,6 +22,7 @@ export function motionReasoningEffort(model: string, mode: "deep" | "off", conci
 export const motionRoleMode = {
     director: "deep",
     referenceAnalyst: "deep",
+    referenceSpec: "deep",
     copywriter: "off",
     visualDesigner: "deep",
     motionEngineer: "deep",

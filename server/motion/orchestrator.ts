@@ -6,6 +6,7 @@ import { compileMotionPlan, motionPlanSchema } from "../../shared/motion/compile
 import { motionRendererVersion } from "../../shared/motion/registry";
 import { motionQualitySchema, motionSceneSchema, type MotionQuality } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
+import { referenceSceneSpecSchema } from "../../shared/motion/reference-spec";
 import { referenceClock, referenceTimeAt } from "../../shared/motion/time-map";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
@@ -14,6 +15,7 @@ import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budge
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
 import { sceneReferenceEvidence } from "./reference-segments";
+import { runReferenceSpec } from "./reference-spec";
 import { motionSpeechTiming, type SpeechSpan } from "./speech";
 import { motionSkillManifest } from "./prompts";
 import { pendingMotionSetup } from "./setup";
@@ -123,8 +125,9 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
                 return { sceneId: scene.id, time };
             });
             add({ name: "reference_detail", lane: "browser", dependencies: ["director"], input: samples });
+            add({ name: "reference_spec", lane: "provider", dependencies: ["reference_detail"] });
         }
-        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_detail"] : [])] });
+        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_spec"] : [])] });
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
         let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
@@ -309,6 +312,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return [...detail.samples.map((sample, index) => ({ ...sample, image: imageBytes([detail.images[index]])[0], crop: undefined })),
             ...(detail.crops ?? []).map(({ sceneId, time, bounds, image }) => ({ sceneId, time, crop: bounds, image: imageBytes([image])[0] }))];
     };
+    const referenceSpecs = () => motionSteps(id).some(({ name, status }) => name === "reference_spec" && status === "done")
+        ? z.array(referenceSceneSpecSchema).max(8).parse(result<{ specs: unknown }>(id, "reference_spec").specs) : [];
     const build = (n: number) => result<BuildArtifact>(id, stepNames(n).assemble);
     if (step.name === "revise") {
         const scene = context.document.tracks.motion_graphics.find(({ id }) => id === run.target_scene_id)!;
@@ -332,12 +337,21 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const value = await runMotionDirector(context, reference());
         return { value, summary: value.value.summary };
     }
+    if (step.name === "reference_spec") {
+        const analysis = reference();
+        if (!analysis) throw new Error("The scene specification needs a reference analysis.");
+        const capture = captureSchema.parse(result(id, "reference_capture"));
+        const value = await runReferenceSpec(context, storyboard(), analysis, imageBytes(capture.images), details().filter(({ crop }) => !crop));
+        return { value, summary: value.source === "vision"
+            ? `Recorded visual evidence for ${value.specs.length} scenes.`
+            : "Structured visual analysis was unavailable. Continuing with saved frames and observations." };
+    }
     if (step.name === "copy") {
         const value = await runMotionCopywriter(context, storyboard());
         return { value, summary: value.value.decision };
     }
     if (step.name === "design") {
-        const value = await runMotionDesigner(context, storyboard(), reference(), details().filter(({ crop }) => !crop));
+        const value = await runMotionDesigner(context, storyboard(), reference(), details().filter(({ crop }) => !crop), referenceSpecs());
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("engineer:")) {
@@ -351,7 +365,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
             agentResult(id, "design", motionDesignSchema), asset ? [asset] : [], evidence,
-            details().filter(({ sceneId }) => sceneId === target.id));
+            details().filter(({ sceneId }) => sceneId === target.id), referenceSpecs().find(({ sceneId }) => sceneId === target.id));
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],

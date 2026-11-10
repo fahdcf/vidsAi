@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -55,9 +55,23 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     return { copy: parts.join(" "), parts };
                 }) };
                 break;
+            case "reference-spec":
+                assert.ok(message.length > 1 && artifact.contactSheetTiles.length);
+                if (rejectSpec) { value = null; break; }
+                value = { scenes: artifact.scenes.map(({ sceneId, evidence, sourceInterval }) => {
+                    const first = evidence[0];
+                    const next = evidence.find(({ time }) => time !== first?.time);
+                    return { sceneId, objects: first ? [{ id: "primary-shape", label: "Visible shape",
+                        bounds: { left: 0.25, top: 0.25, width: 0.5, height: 0.5 }, alignment: "center", layer: 1,
+                        colorRole: "accent", color: "#ee6633", text: null, persistentKey: null, confidence: 0.8, evidenceIds: [first.id] }] : [],
+                        events: sourceInterval && first && next ? [{ kind: "hold", objectId: "primary-shape", description: "Shape holds",
+                            confidence: 0.8, evidenceIds: [first.id, next.id] }] : [], uncertainties: [] };
+                }) };
+                break;
             case "visual-designer":
                 assert.equal(artifact.referenceScenes.length, graphic.length);
                 assert.ok(artifact.referenceScenes.some(({ evidence }) => evidence?.observations.length));
+                assert.deepEqual(artifact.referenceSpecs.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
                 if (artifact.referenceFrames.length) {
                     assert.deepEqual(artifact.referenceFrames.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
                     assert.equal(message.length, graphic.length + 1);
@@ -68,6 +82,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
             case "motion-engineer": {
                 assert.equal(typeof artifact.approvedCopy, "string");
                 assert.ok(artifact.reference?.observations.length);
+                assert.equal(artifact.referenceSpec.sceneId, artifact.target.id);
                 if (artifact.referenceFrames.length) {
                     assert.ok(artifact.referenceFrames.every(({ sceneId }) => sceneId === artifact.target.id));
                     assert.equal(message.length, artifact.referenceFrames.length + 1);

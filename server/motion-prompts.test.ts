@@ -8,6 +8,19 @@ import { validateMotionResources } from "./motion/resource-check";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
 import { referenceClock, referenceTimeAt } from "../shared/motion/time-map";
 import { compileEngineerGraph, graphEngineerSchema } from "./motion/graph-engineer";
+import { referenceSceneSpecSchema } from "../shared/motion/reference-spec";
+
+test("reference specifications require distinct source times for motion", () => {
+    const spec = { sceneId: "panel", source: "vision", sourceInterval: { start: 0, end: 2 }, requiredCopy: "",
+        evidence: [{ id: "s0", time: 0.25 }, { id: "s1", time: 1.25 }, { id: "f0", time: 0.25 }],
+        objects: [], uncertainties: [], events: [{ kind: "transition", objectId: null, description: "Panel moves", confidence: 0.7,
+            evidenceIds: ["s0", "s1"] }] };
+    assert.equal(referenceSceneSpecSchema.safeParse(spec).success, true);
+    for (const evidenceIds of [["s0", "f0"], ["s0", "s9"]]) {
+        assert.equal(referenceSceneSpecSchema.safeParse({ ...spec, events: [{ ...spec.events[0], evidenceIds }] }).success, false);
+    }
+    assert.equal(referenceSceneSpecSchema.safeParse({ ...spec, sourceInterval: null }).success, false);
+});
 
 test("reference clocks preserve matching-duration offsets and scale changed durations", () => {
     const reference = { start: 1.25, end: 6.25 };
@@ -31,7 +44,7 @@ test("an authored reveal begins at the supplied soundtrack cue", () => {
 });
 
 test("the packaged prompts, skills, schemas and tools are available", () => {
-    assert.deepEqual(validateMotionResources(), { skills: 9, prompts: 7, examples: 18 });
+    assert.deepEqual(validateMotionResources(), { skills: 9, prompts: 8, examples: 18 });
 });
 
 test("untrusted attachment text stays in the context and cannot enable a tool", () => {

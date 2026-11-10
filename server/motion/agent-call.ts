@@ -45,7 +45,7 @@ export async function runMotionAgent<T>(
     const { document, brief, budget, signal, onProgress } = context;
     const mode = role === "repair" ? "deep" : motionRoleMode[role];
     const images = options.images ?? [];
-    const maxTokens = mode === "off" ? 2048 : ["referenceAnalyst", "director", "visualCritic"].includes(role) ? 6400 : 4096;
+    const maxTokens = mode === "off" ? 2048 : ["referenceAnalyst", "referenceSpec", "director", "visualCritic"].includes(role) ? 6400 : 4096;
     const providers = await qualifiedMotionProviders(route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
     ]);

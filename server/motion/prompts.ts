@@ -21,6 +21,7 @@ const skillManifest = z.object({
 export const motionSkillManifest = skillManifest.skills;
 const definitions = {
     referenceAnalyst: { filename: "reference-analyst", toolRole: "referenceAnalyst", skills: ["reference-analysis", "liquid-and-vector-tracing"] },
+    referenceSpec: { filename: "reference-spec", toolRole: "referenceAnalyst", skills: ["reference-analysis", "responsive-layout"] },
     director: { filename: "director", toolRole: "director", skills: ["motion-direction", "audio-and-pacing", "browser-rendering"] },
     copywriter: { filename: "copywriter", toolRole: "copywriter", skills: ["kinetic-typography", "responsive-layout"] },
     visualDesigner: { filename: "visual-designer", toolRole: "designer", skills: ["responsive-layout", "geometry-and-particles"] },

@@ -448,7 +448,8 @@ try {
     const rejectCriticAfterRepair = process.argv.includes("--review-after-repair-fallback");
     if (useGraphEngineer) graphic[1] = { ...graphic[1], type: "graph" };
     const rejectDetailVision = process.argv.includes("--detail-vision-fallback");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision });
+    const rejectSpec = process.argv.includes("--reference-spec-fallback");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -465,6 +466,12 @@ try {
         restore();
     }
     assert.equal(motionRun(graphRun.id).status, "ready");
+    const specStep = motionSteps(graphRun.id).find(({ name }) => name === "reference_spec");
+    const specification = JSON.parse(motionArtifact(graphRun.id, specStep.result_id).body.toString());
+    assert.equal(specification.source, rejectSpec ? "observations" : "vision");
+    assert.deepEqual(specification.specs.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
+    if (rejectSpec) assert.ok(specification.specs.every(({ objects, events, uncertainties }) => !objects.length && !events.length && uncertainties.length));
+    else assert.ok(specification.specs.every(({ objects, events }) => objects.length > 0 && events.length > 0));
     const detailStep = motionSteps(graphRun.id).find(({ name }) => name === "reference_detail");
     const detail = JSON.parse(motionArtifact(graphRun.id, detailStep.result_id).body.toString());
     assert.deepEqual(detail.samples.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
