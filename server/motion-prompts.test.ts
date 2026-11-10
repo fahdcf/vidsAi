@@ -7,6 +7,7 @@ import { MotionProviderError, requestMotionJson } from "./motion/providers/chat"
 import { validateMotionResources } from "./motion/resource-check";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
 import { referenceClock, referenceTimeAt } from "../shared/motion/time-map";
+import { compileEngineerGraph, graphEngineerSchema } from "./motion/graph-engineer";
 
 test("reference clocks preserve matching-duration offsets and scale changed durations", () => {
     const reference = { start: 1.25, end: 6.25 };
@@ -17,6 +18,16 @@ test("reference clocks preserve matching-duration offsets and scale changed dura
     assert.equal(shorter.sourcePacing, false);
     assert.equal(referenceTimeAt(45, shorter), 3.75);
     assert.equal(referenceTimeAt(90, shorter), reference.end);
+});
+
+test("an authored reveal begins at the supplied soundtrack cue", () => {
+    const graph = graphEngineerSchema.parse({ layers: [{ kind: "rect", x: 0.5, y: 0.5, width: 0.1, height: 0.3,
+        color: "primary", audioReactive: true, audioCueFrame: 45 }], decision: "Reveal on the accent", approximation: null });
+    const timing = { start: 30, end: 61, cueFrames: new Set([45]) };
+    const [layer] = compileEngineerGraph(graph.layers, timing).layers;
+    assert.equal(layer.keyframes[0].at, 0.5);
+    assert.equal(layer.keyframes[0].opacity, 0);
+    assert.throws(() => compileEngineerGraph(graph.layers, { ...timing, cueFrames: new Set([44]) }), /available audio cue/);
 });
 
 test("the packaged prompts, skills, schemas and tools are available", () => {

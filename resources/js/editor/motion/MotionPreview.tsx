@@ -67,7 +67,8 @@ export default function MotionPreview({ draft, playerRef, label = "Draft preview
     return <section className="panel motion-preview" aria-label={label}>
         <header><h2>{label}</h2><span className="muted">{duration.toFixed(1)}s</span></header>
         <Player ref={player} component={VideoMerger}
-            inputProps={{ editState: visual, motionScale: Math.min(1, 720 / Math.max(draft.width, draft.height)) }}
+            inputProps={{ editState: visual, motionScale: Math.min(1, 720 / Math.max(draft.width, draft.height)),
+                motionSoundtrack: clocked ? track : undefined }}
             durationInFrames={draft.total_frames} compositionWidth={draft.width} compositionHeight={draft.height}
             fps={draft.fps} initialFrame={initialFrame} controls={!clocked} clickToPlay={!clocked} spaceKeyToPlayOrPause={!clocked}
             style={{ width: "100%", maxWidth, aspectRatio: `${draft.width}/${draft.height}` }} />

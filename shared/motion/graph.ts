@@ -39,7 +39,7 @@ const leafSchema = z.discriminatedUnion("kind", [
     z.object({ ...common, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
         color: paint.default("foreground"), size: z.number().min(0.015).max(0.4), maxWidth: size.default(0.85) }).strict(),
     z.object({ ...common, kind: z.literal("rect"), width: size, height: size,
-        color: paint, radius: z.number().min(0).max(0.5).default(0) }).strict(),
+        color: paint, radius: z.number().min(0).max(0.5).default(0), audioReactive: z.boolean().optional() }).strict(),
     z.object({ ...common, kind: z.literal("ellipse"), width: size, height: size, color: paint }).strict(),
     z.object({ ...common, kind: z.literal("path"), commands: vectorPath, color: paint,
         stroke: z.number().min(0.001).max(0.1).optional() }).strict(),

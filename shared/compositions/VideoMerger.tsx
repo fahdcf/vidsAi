@@ -682,7 +682,8 @@ const AudioTrackRenderer: React.FC<{
   );
 };
 
-export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionAssetFiles; motionScale?: number}> = ({editState, motionAssets, motionScale = 1}) => {
+export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionAssetFiles; motionScale?: number; motionSoundtrack?: TimelineAudioItem}> =
+  ({editState, motionAssets, motionScale = 1, motionSoundtrack}) => {
   const {isClientSideRendering} = useRemotionEnvironment();
 
   const {width: canvasWidth, height: canvasHeight, fps: compositionFps, durationInFrames: compositionDuration} = useVideoConfig();
@@ -699,6 +700,7 @@ export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionA
   const subtitles = editState.tracks.subtitles || [];
   const overlays = editState.tracks.overlays || [];
   const audioTracks = editState.tracks.audio || [];
+  const soundtrack = motionSoundtrack ?? audioTracks.find(({ id }) => id === "motion-soundtrack");
   const motionGraphics = [...(editState.tracks.motion_graphics || [])].sort((a, b) => a.layer - b.layer || a.start_frame - b.start_frame);
 
   const renderedClips = videoTrack.map((clip, index) => {
@@ -851,7 +853,8 @@ export const VideoMerger: React.FC<{editState: EditState; motionAssets?: MotionA
         {motionGraphics.map((scene) => (
           <Sequence key={scene.id} from={scene.start_frame} durationInFrames={scene.end_frame - scene.start_frame} layout='none'>
             <MotionLayer scene={scene} projectId={editState.project_id} width={finalVideoWidth} height={finalVideoHeight}
-              left={leftOffset} top={topOffset} fps={fps} scale={motionScale} preloaded={motionAssets} />
+              left={leftOffset} top={topOffset} fps={fps} scale={motionScale} preloaded={motionAssets}
+              soundtrack={soundtrack} audioAnalysis={editState.metadata.motion_audio_analysis} />
           </Sequence>
         ))}
 

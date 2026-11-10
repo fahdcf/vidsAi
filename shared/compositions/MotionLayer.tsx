@@ -3,7 +3,9 @@ import { useCurrentFrame, useDelayRender, useRemotionEnvironment } from "remotio
 import { drawMotionFrame } from "../motion/render";
 import { prepareMotionSceneAssets } from "../motion/browser-assets";
 import type { MotionAssetFiles } from "../motion/assets";
-import type { MotionScene } from "../motion/schema";
+import type { MotionAudioAnalysis, MotionScene } from "../motion/schema";
+import { soundtrackLevelAt } from "../motion/time-map";
+import type { TimelineAudioItem } from "../timeline";
 
 type Props = {
     scene: MotionScene;
@@ -15,9 +17,11 @@ type Props = {
     fps: number;
     scale: number;
     preloaded?: MotionAssetFiles;
+    soundtrack?: TimelineAudioItem;
+    audioAnalysis?: MotionAudioAnalysis;
 };
 
-export function MotionLayer({ scene, projectId, width, height, left, top, fps, scale, preloaded }: Props) {
+export function MotionLayer({ scene, projectId, width, height, left, top, fps, scale, preloaded, soundtrack, audioAnalysis }: Props) {
     const frame = useCurrentFrame();
     const { isClientSideRendering } = useRemotionEnvironment();
     const { delayRender, continueRender, cancelRender } = useDelayRender();
@@ -32,7 +36,8 @@ export function MotionLayer({ scene, projectId, width, height, left, top, fps, s
         const target = canvas.current;
         const ctx = target?.getContext("2d");
         if (!target || !ctx || !ready.current) return;
-        drawMotionFrame({ ctx, scene, frame: last.current, fps, width: pixelWidth, height: pixelHeight }, ready.current);
+        const audioLevel = soundtrackLevelAt(scene.start_frame + last.current, fps, audioAnalysis, soundtrack);
+        drawMotionFrame({ ctx, scene, frame: last.current, fps, width: pixelWidth, height: pixelHeight, audioLevel }, ready.current);
         target.dataset.motionFrame = String(last.current);
     }
 
@@ -71,7 +76,7 @@ export function MotionLayer({ scene, projectId, width, height, left, top, fps, s
     useLayoutEffect(() => {
         last.current = frame;
         draw();
-    }, [frame, scene, fps, pixelWidth, pixelHeight]);
+    }, [frame, scene, fps, pixelWidth, pixelHeight, soundtrack, audioAnalysis]);
 
     useLayoutEffect(() => {
         const target = canvas.current;

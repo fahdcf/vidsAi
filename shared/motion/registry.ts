@@ -13,6 +13,7 @@ export type MotionFrame<T extends MotionScene = MotionScene> = {
     fps: number;
     width: number;
     height: number;
+    audioLevel?: number;
 };
 
 type Cost = { geometry: number; particles: number; vectors: number };

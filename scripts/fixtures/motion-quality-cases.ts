@@ -10,6 +10,9 @@ const card = { id: "card", kind: "rect", width: 0.8, height: 0.3, radius: 0.02, 
 const graph = (id: string, layers: unknown[]) => motionSceneSchema.parse({ ...common, id, type: "graph", params: { layers } });
 
 export const motionQualityCases = {
+    audioReactive: {
+        scene: graph("soundtrack-bar", [{ ...card, width: 0.06, height: 0.5, color: "foreground", audioReactive: true }]),
+    },
     occludedLabel: {
         scene: graph("covered-label", [label, card]),
         corrected: graph("visible-label", [card, label]),

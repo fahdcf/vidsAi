@@ -77,7 +77,8 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
                     break;
                 }
                 case "rect": {
-                    const w = node.width * unit, h = node.height * unit;
+                    const w = node.width * unit;
+                    const h = node.height * unit * (node.audioReactive && frame.audioLevel !== undefined ? 0.25 + 0.75 * frame.audioLevel : 1);
                     ctx.roundRect(-w / 2, -h / 2, w, h, node.radius * unit);
                     ctx.fill();
                     break;

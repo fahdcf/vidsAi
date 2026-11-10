@@ -5,7 +5,7 @@ import { motionComponentTypes, describeMotionComponent } from "../../shared/moti
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
-import { motionTimeMap } from "../../shared/motion/time-map";
+import { motionTimeMap, soundtrackLevelAt } from "../../shared/motion/time-map";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
@@ -190,6 +190,8 @@ export function runMotionDirector(context: MotionAgentContext, reference: Refere
         }),
         audioCues: context.document.metadata.motion_cues ?? [],
         timeMap: motionTimeMap(context.document, reference?.interval ?? null),
+        soundtrackRhythm: context.document.metadata.motion_audio_analysis?.rhythm,
+        soundtrackSilence: context.document.metadata.motion_audio_analysis?.silence,
         speechTiming: context.speechTiming,
     }, motionStoryboardSchema, {
         validate: ({ scenes }) => {
@@ -305,7 +307,9 @@ export async function runMotionEngineer(
     const styling = design.scenes.find(({ id }) => id === target.id);
     if (!approved || !styling) throw new Error("The scene is missing its copy or design artifact.");
     const { copy: wording, parts } = approved;
+    const audioCues = context.document.metadata.motion_cues?.filter(({ frame }) => frame >= target.start_frame && frame < target.end_frame - 1) ?? [];
     if (target.type === "graph") {
+        const timing = { start: target.start_frame, end: target.end_frame, cueFrames: new Set(audioCues.map(({ frame }) => frame)) };
         const notes = graphSceneNotes(context.brief, wording);
         const makeScene = (params: ReturnType<typeof compileEngineerGraph>) => motionSceneSchema.parse({
             ...styling, id: target.id, type: target.type, start_frame: target.start_frame, end_frame: target.end_frame,
@@ -314,16 +318,17 @@ export async function runMotionEngineer(
         try {
             const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
+                audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
                 referenceFrames: describeReferenceFrames(details),
                 layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Use only the palette role names for colors.",
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
                 images: details.map(({ image }) => image),
-                validate: ({ layers }) => { makeScene(compileEngineerGraph(layers)); },
+                validate: ({ layers }) => { makeScene(compileEngineerGraph(layers, timing)); },
             }));
             const { layers, ...value } = result.value;
-            return { ...result, value: { ...value, scene: makeScene(compileEngineerGraph(layers)) } };
+            return { ...result, value: { ...value, scene: makeScene(compileEngineerGraph(layers, timing)) } };
         } catch (error) {
             context.signal.throwIfAborted();
             if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;
@@ -348,7 +353,7 @@ export async function runMotionEngineer(
     const result = await withReferenceFrames(frame ? [frame] : [], (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
         target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
         referenceFrames: describeReferenceFrames(details),
-        audioCues: context.document.metadata.motion_cues ?? [],
+        audioCues,
         speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
     }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
         validate: ({ scene }) => { buildScene(scene); },
@@ -437,9 +442,12 @@ export async function runMotionCritic(
     const frames = observations.map(({ time, ...observation }) => ({ ...observation,
         frame: preview.frames.reduce((nearest, frame) => Math.abs(frame / draft.fps - time) < Math.abs(nearest / draft.fps - time) ? frame : nearest),
     }));
+    const track = draft.tracks.audio.find(({ id }) => id === "motion-soundtrack");
     const scenes = draft.tracks.motion_graphics.filter(({ id }) => !targetSceneId || id === targetSceneId).map((scene) => {
         const { id, type, start_frame, end_frame, palette, font } = scene;
-        const samples = frames.filter(({ frame }) => frame >= start_frame && frame < end_frame);
+        const samples = frames.filter(({ frame }) => frame >= start_frame && frame < end_frame).map((sample) => ({
+            ...sample, soundtrackLevel: soundtrackLevelAt(sample.frame, draft.fps, draft.metadata.motion_audio_analysis, track),
+        }));
         const copy = scene.type === "easing" ? [scene.params.heading, ...scene.params.labels]
             : scene.type === "identity" ? [scene.params.title, scene.params.detail, scene.params.tag]
                 : scene.type === "kinetic_words" ? scene.params.words : sceneCopy(scene);
@@ -448,6 +456,9 @@ export async function runMotionCritic(
     });
     const review = await runMotionAgent(context, "visualCritic", "AGENT_COMPLEX", {
         fps: draft.fps, scenes, focused: Boolean(targetSceneId),
+        soundtrack: { timeMap: motionTimeMap(draft, reference?.interval ?? null).soundtrack,
+            sampledCues: draft.metadata.motion_cues?.filter(({ frame }) => preview.frames.includes(frame)) ?? [],
+            speechTiming: context.speechTiming },
         reference: targetSceneId ? null : reference?.scenes.map(({ supportedType, palette, motionLandmarks }) =>
             ({ supportedType, palette, motionLandmarks })) ?? null,
     }, visualReviewSchema, {

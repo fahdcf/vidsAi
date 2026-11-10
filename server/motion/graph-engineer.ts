@@ -5,11 +5,13 @@ const color = z.enum(["background", "foreground", "primary", "accent", "muted"])
 const placement = {
     x: z.number().min(0).max(1), y: z.number().min(0).max(1), color,
     reveal: z.number().min(0).max(0.8).optional(),
+    audioCueFrame: z.number().int().min(0).max(7200).optional(),
 };
 const box = { width: z.number().min(0.001).max(1.8), height: z.number().min(0.001).max(1) };
 const text = z.object({ ...placement, kind: z.literal("text"), text: z.string().trim().min(1).max(180),
     size: z.number().min(0.015).max(0.28), maxWidth: z.number().min(0.08).max(0.92) }).strict();
-const rect = z.object({ ...placement, ...box, kind: z.literal("rect"), radius: z.number().min(0).max(0.15).optional() }).strict();
+const rect = z.object({ ...placement, ...box, kind: z.literal("rect"), radius: z.number().min(0).max(0.15).optional(),
+    audioReactive: z.boolean().optional() }).strict();
 const ellipse = z.object({ ...placement, ...box, kind: z.literal("ellipse") }).strict();
 const layer = z.discriminatedUnion("kind", [text, rect, ellipse]);
 type Layer = z.infer<typeof layer>;
@@ -20,12 +22,19 @@ export const graphEngineerSchema = z.object({
     approximation: z.string().trim().min(1).max(240).nullable(),
 }).strict();
 
-export function compileEngineerGraph(layers: readonly Layer[]) {
-    return motionComponentParams.graph.parse({ layers: layers.map(({ x, y, reveal, ...shape }, index) => {
+export function compileEngineerGraph(layers: readonly Layer[], timing?: { start: number; end: number; cueFrames: ReadonlySet<number> }) {
+    return motionComponentParams.graph.parse({ layers: layers.map(({ x, y, reveal, audioCueFrame, ...shape }, index) => {
+        if (audioCueFrame !== undefined) {
+            if (!timing || reveal !== undefined || !timing.cueFrames.has(audioCueFrame) ||
+                audioCueFrame < timing.start || audioCueFrame >= timing.end - 1) {
+                throw new Error("The layer must use an available audio cue inside the scene.");
+            }
+            reveal = (audioCueFrame - timing.start) / (timing.end - timing.start - 1);
+        }
         const animated = reveal !== undefined;
         return { ...shape, id: `layer-${index + 1}`, transform: { x, y: animated ? y + 0.035 : y, opacity: animated ? 0 : 1 },
-            keyframes: animated ? [...(reveal > 0 ? [{ at: reveal, opacity: 0 }] : []),
-                { at: reveal + 0.12, y, opacity: 1, ease: "ease_out" }] : [] };
+            keyframes: reveal === undefined ? [] : [...(reveal > 0 ? [{ at: reveal, opacity: 0 }] : []),
+                { at: Math.min(1, reveal + 0.12), y, opacity: 1, ease: "ease_out" }] };
     }) });
 }
 

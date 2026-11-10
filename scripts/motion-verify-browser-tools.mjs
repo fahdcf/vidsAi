@@ -174,7 +174,8 @@ try {
         }
         if (process.argv.includes("--audio-export")) {
             const projectId = motionRun(audioRun).project_id;
-            const [scene] = motionBenchmark().tracks.motion_graphics;
+            const { motionQualityCases } = await import("./fixtures/motion-quality-cases.ts");
+            const { scene } = motionQualityCases.audioReactive;
             commit(project(projectId), { commandId: randomUUID(), expectedRevision: saved.revision, operations: [
                 { tool: "replace_motion_plan", params: { title: "Reference audio export", scenes: [{ ...scene, end_frame: 150 }] } },
             ] });
@@ -209,8 +210,8 @@ try {
             const { drawMotionFrame } = await import("/shared/motion/render.ts");
             const canvas = new OffscreenCanvas(640, 360);
             const ctx = canvas.getContext("2d");
-            function inspect(scene) {
-                drawMotionFrame({ ctx, scene, frame: 59, fps: 30, width: 640, height: 360 }, { fontFamily: "Arial" });
+            function inspect(scene, audioLevel) {
+                drawMotionFrame({ ctx, scene, frame: 59, fps: 30, width: 640, height: 360, audioLevel }, { fontFamily: "Arial" });
                 const pixels = ctx.getImageData(0, 0, 640, 360).data;
                 let white = 0, lowerWhite = 0;
                 for (let index = 0; index < pixels.length; index += 4) {
@@ -221,7 +222,7 @@ try {
                 return { white, lowerWhite, corner: Array.from(pixels.slice(0, 3)) };
             }
             return Object.fromEntries(Object.entries(motionQualityCases).map(([key, fixture]) =>
-                [key, [inspect(fixture.scene), inspect(fixture.corrected)]]));
+                [key, fixture.corrected ? [inspect(fixture.scene), inspect(fixture.corrected)] : [inspect(fixture.scene, 0), inspect(fixture.scene, 1)]]));
         });
         assert.equal(checks.occludedLabel[0].white, 0);
         assert.ok(checks.occludedLabel[1].white > 0);
@@ -229,6 +230,7 @@ try {
         assert.equal(checks.missingCta[0].lowerWhite, 0);
         assert.ok(checks.missingCta[1].lowerWhite > 0);
         assert.deepEqual(checks.wrongComponent.map(({ corner }) => corner), [[255, 34, 0], [16, 16, 16]]);
+        assert.ok(checks.audioReactive[1].white > checks.audioReactive[0].white * 2);
         console.log("Browser fixtures reproduce covered labels, clipped copy, missing CTA and the wrong impact background.");
     }
     const runTool = async () => {
