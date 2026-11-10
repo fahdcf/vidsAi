@@ -9,6 +9,7 @@ export const motionAssetByteLimit: Record<MotionAssetKind, number> = {
     vectors: 2 * 1024 * 1024,
     audio: 10 * 1024 * 1024,
 };
+export const referenceAudioConversionVersion = 1;
 export const motionAssetProvenance = z.discriminatedUnion("kind", [
     z.object({ kind: z.literal("imported") }).strict(),
     z.object({ kind: z.literal("generated") }).strict(),
@@ -17,6 +18,9 @@ export const motionAssetProvenance = z.discriminatedUnion("kind", [
         sourceId: z.uuid(),
         startSeconds: z.number().min(0).max(30),
         endSeconds: z.number().min(0).max(30),
+        audioExtraction: z.object({ sourceSha256: z.string().regex(/^[a-f0-9]{64}$/), trackId: z.number().int().nonnegative(),
+            conversionVersion: z.literal(referenceAudioConversionVersion),
+        }).strict().optional(),
     }).strict().refine((value) => value.endSeconds > value.startSeconds),
 ]);
 const vectorFrame = z.object({

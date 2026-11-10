@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { db, insert, now } from "../database";
+import { db, insert, json, now } from "../database";
 import { mediaRoot, origin } from "../env";
 import { mediaDuration } from "../media";
 import { fail } from "../security";
@@ -41,6 +41,14 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
         const source = db.prepare("SELECT mime FROM project_assets WHERE id=? AND project_id=?")
             .get(provenance.sourceId, projectId) as { mime: string } | undefined;
         if (!source?.mime.startsWith("video/")) fail(422, "The source reference must be an owned video asset.");
+        if (provenance.audioExtraction) {
+            const bound = db.prepare("SELECT metadata FROM motion_references WHERE project_id=? AND asset_id=?")
+                .get(projectId, provenance.sourceId) as { metadata: string } | undefined;
+            const hash = bound ? json<{ sha256?: string }>(bound.metadata, {}).sha256 : null;
+            if (kind !== "audio" || provenance.audioExtraction.sourceSha256 !== hash) {
+                fail(422, "The audio extraction does not match the selected video reference.");
+            }
+        }
     }
     const mime = mimeType(kind, upload.buffer, upload.originalname);
     const id = randomUUID();

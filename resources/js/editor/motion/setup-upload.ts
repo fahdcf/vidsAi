@@ -2,7 +2,7 @@ import { api } from "../api";
 import type { MotionAudioSelection } from "./AudioPicker";
 import type { MotionReferenceSelection } from "./ReferencePicker";
 import { bindUploadedMotionReference, loadMotionReference, type SavedMotionReference } from "./reference-storage";
-import type { motionAssetProvenance } from "../../../../shared/motion/assets";
+import { referenceAudioConversionVersion, type motionAssetProvenance } from "../../../../shared/motion/assets";
 import type { z } from "zod";
 import { analyzeMotionAudio, extractReferenceAudio } from "./audio-analysis";
 
@@ -13,7 +13,7 @@ export type MotionUploadReceipts = {
     reference?: { selection: MotionReferenceSelection; saved: SavedMotionReference };
     logo?: { file: File; id: string };
     audio?: { file: File; id: string };
-    extracted?: { key: string; audio: Pick<MotionAudioSelection, "file" | "cues"> | null };
+    extracted?: { key: string; audio: (Pick<MotionAudioSelection, "file" | "cues"> & { trackId: number }) | null };
 };
 
 function upload<T>(url: string, form: FormData, signal: AbortSignal, progress: (fraction: number | null) => void) {
@@ -83,7 +83,7 @@ export async function uploadMotionSetup(
         else if (reference?.metadata.interval) {
             const { start, end } = reference.metadata.interval;
             const clippedEnd = Math.min(end, start + seconds, 30);
-            const key = JSON.stringify([reference.assetId, start, clippedEnd]);
+            const key = JSON.stringify([reference.assetId, reference.metadata.sha256, start, clippedEnd, referenceAudioConversionVersion]);
             if (receipts.extracted?.key !== key) {
                 progress({ name: "extracting reference audio", fraction: null });
                 let source: Blob | undefined = files.reference?.file;
@@ -92,13 +92,15 @@ export async function uploadMotionSetup(
                     if (!response.ok) throw new Error("The saved reference could not be loaded. Choose it again to resume.");
                     source = await response.blob();
                 }
-                const file = await extractReferenceAudio(source, { start, end: clippedEnd }, signal);
-                const extracted = file ? { file, ...await analyzeMotionAudio(file, seconds, signal) } : null;
+                const result = await extractReferenceAudio(source, { start, end: clippedEnd }, signal);
+                const extracted = result ? { ...result, ...await analyzeMotionAudio(result.file, seconds, signal) } : null;
                 receipts.extracted = { key, audio: extracted };
             }
-            selection = receipts.extracted.audio;
-            if (!selection) referenceAudio = "silent";
-            provenance = { kind: "reference_derived", sourceId: reference.assetId, startSeconds: start, endSeconds: clippedEnd };
+            const extracted = receipts.extracted.audio;
+            selection = extracted;
+            if (!extracted) referenceAudio = "silent";
+            else provenance = { kind: "reference_derived", sourceId: reference.assetId, startSeconds: start, endSeconds: clippedEnd,
+                audioExtraction: { sourceSha256: reference.metadata.sha256, trackId: extracted.trackId, conversionVersion: referenceAudioConversionVersion } };
         } else referenceAudio = "silent";
     }
     let audio = null;

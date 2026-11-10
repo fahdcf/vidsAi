@@ -85,9 +85,15 @@ try {
             await setupPage.waitForURL("**/projects/*/motion?run=*");
             return new URL(setupPage.url()).searchParams.get("run");
         }
-        await setupPage.route("**/projects/*/motion-assets", (route) => route.abort(), { times: 1 });
+        await setupPage.route("**/projects/*/motion-assets", async (route) => {
+            await route.fetch();
+            await route.abort();
+        }, { times: 1 });
         const audioRun = await createWithReference(source);
         await setupPage.getByRole("alert").getByText("The connection dropped during upload.").waitFor();
+        const derivedCount = () => db.prepare("SELECT COUNT(*) AS count FROM project_assets WHERE project_id=? AND mime='audio/wav'")
+            .get(motionRun(audioRun).project_id).count;
+        assert.equal(derivedCount(), 1);
         await setupPage.reload();
         await setupPage.getByRole("button", { name: "Resume setup" }).click();
         await setupPage.getByText("Audio from reference", { exact: true }).waitFor();
@@ -102,7 +108,12 @@ try {
         const derived = db.prepare(`SELECT a.path, a.duration_seconds, m.provenance FROM project_assets a
             JOIN motion_asset_metadata m ON m.asset_id=a.id WHERE a.id=?`).get(track.url.slice("asset:".length));
         assert.equal(derived.duration_seconds, 5);
-        assert.equal(JSON.parse(derived.provenance).startSeconds, 1.25);
+        const provenance = JSON.parse(derived.provenance);
+        assert.equal(provenance.startSeconds, 1.25);
+        assert.equal(provenance.audioExtraction.conversionVersion, 1);
+        assert.ok(Number.isInteger(provenance.audioExtraction.trackId));
+        assert.match(provenance.audioExtraction.sourceSha256, /^[a-f0-9]{64}$/);
+        assert.equal(derivedCount(), 1);
         const mutedRun = await createWithReference(source, true);
         await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
         const muted = document(project(motionRun(mutedRun).project_id));

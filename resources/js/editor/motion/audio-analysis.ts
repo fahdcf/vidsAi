@@ -28,7 +28,7 @@ export async function extractReferenceAudio(source: Blob, interval: { start: num
         await conversion.execute();
         signal.throwIfAborted();
         if (!target.buffer) throw new Error("The reference audio could not be extracted.");
-        return new File([target.buffer], "Reference audio.wav", { type: "audio/wav" });
+        return { file: new File([target.buffer], "Reference audio.wav", { type: "audio/wav" }), trackId: audio.id };
     } finally {
         signal.removeEventListener("abort", abort);
         input.dispose();

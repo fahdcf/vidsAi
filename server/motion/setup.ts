@@ -94,9 +94,11 @@ export function finalizeMotionSetup(runId: string, accountId: number, raw: unkno
             const provenance = motionAssetProvenance.parse(json(soundtrack.provenance, null));
             const fromReference = provenance.kind === "reference_derived";
             if (fromReference) {
-                const interval = ref ? referenceMetadata.parse(ref.metadata).interval : null;
+                const metadata = ref ? referenceMetadata.parse(ref.metadata) : null;
+                const interval = metadata?.interval;
                 if (required.referenceAudio !== "auto" || !interval || provenance.sourceId !== ref?.assetId ||
-                    provenance.startSeconds !== interval.start || provenance.endSeconds > interval.end) {
+                    provenance.startSeconds !== interval.start || provenance.endSeconds > interval.end ||
+                    (provenance.audioExtraction && provenance.audioExtraction.sourceSha256 !== metadata.sha256)) {
                     fail(422, "Use audio from the selected reference interval.");
                 }
             }
