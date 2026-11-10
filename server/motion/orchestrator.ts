@@ -12,6 +12,7 @@ import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, ev
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
+import { sceneReferenceEvidence } from "./reference-segments";
 import { motionSkillManifest } from "./prompts";
 import { pendingMotionSetup } from "./setup";
 import { motionReference, saveMotionReferenceAnalysis } from "./references";
@@ -281,7 +282,7 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             (await observeReferenceSheet(imageBytes(capture.images), capture.measured.timestamps, budget, signal, onProgress)).observations);
         const value = await runReferenceAnalyst(context, { ...metadata, measured: capture.measured, observations });
         return { value, summary: value.source === "measured_fallback"
-            ? "The scene outline model did not finish. Continuing with browser cut estimates and saved visual observations."
+            ? "The scene outline model did not finish. Continuing with browser cut estimates and sustained changes in the saved visual observations."
             : `Analyzed ${capture.measured.timestamps.length} reference samples.` };
     }
     if (step.name === "director") {
@@ -293,17 +294,20 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return { value, summary: value.value.decision };
     }
     if (step.name === "design") {
-        const value = await runMotionDesigner(context, storyboard());
+        const value = await runMotionDesigner(context, storyboard(), reference());
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("engineer:")) {
-        const target = storyboard().scenes.find(({ id }) => id === input.sceneId)!;
+        const plan = storyboard();
+        const target = plan.scenes.find(({ id }) => id === input.sceneId)!;
+        const analysis = plan.look === "reference" ? reference() : null;
+        const evidence = analysis ? sceneReferenceEvidence(analysis, target, context.document.total_frames) : null;
         const traceName = `trace:${target.id}`;
         const traced = motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
             ? traceResultSchema.parse(result(id, traceName)) : null;
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
-            agentResult(id, "design", motionDesignSchema), asset ? [asset] : []);
+            agentResult(id, "design", motionDesignSchema), asset ? [asset] : [], evidence);
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],

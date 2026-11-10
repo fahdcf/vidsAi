@@ -10,6 +10,7 @@ import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
 import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes } from "./graph-engineer";
 import { observeReferenceSheet } from "./reference-observer";
+import { observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
 
 const frame = z.number().int().nonnegative().max(7200);
 const storyboardScene = z.object({
@@ -118,8 +119,11 @@ function expandReferenceOutline(evidence: ReferenceEvidence,
         const { time, confidence, copy } = observation;
         const motionLandmarks = item.motion && timing && time >= timing.start && time <= timing.end
             ? [{ time, description: item.motion, confidence }] : [];
+        const samples = timing ? evidence.observations.filter(({ time }) => time >= timing.start && time < timing.end) : [];
+        const observed = [{ time, confidence }, ...samples.filter((sample) => sample.time !== time)]
+            .slice(0, 12).sort((a, b) => a.time - b.time).map(({ time, confidence }) => ({ time, confidence }));
         return { title: item.title, supportedType: item.type, timing, timingSource: timing ? "estimated" : "still_image",
-            evidence: [{ time, confidence }], copy, confidence, palette: item.palette, shapes: [],
+            evidence: observed, copy, confidence, palette: item.palette, shapes: [],
             motionLandmarks, easing: null, transition: null, approximation: item.approximation };
     });
     return referenceAnalysisSchema.parse({ ...evidence, scenes, unresolved: outline.unresolved });
@@ -132,6 +136,10 @@ export function measuredReferenceAnalysis(evidence: ReferenceEvidence): Referenc
         if (!interval || cuts.length === 9) break;
         if (time > interval.start && time < interval.end && cuts.every((cut) => Math.abs(time - cut) >= 0.25)) cuts.push(time);
     }
+    for (const time of observedSceneBoundaries(observations)) {
+        if (interval && cuts.length < 9 && time > interval.start && time < interval.end &&
+            cuts.every((cut) => Math.abs(cut - time) >= 0.5)) cuts.push(time);
+    }
     cuts.sort((a, b) => a - b);
     const segments = interval ? cuts.slice(0, -1).map((start, index) => ({ start, end: cuts[index + 1] })) : [null];
     return expandReferenceOutline(evidence, {
@@ -143,7 +151,7 @@ export function measuredReferenceAnalysis(evidence: ReferenceEvidence): Referenc
                 end: timing?.end ?? null, sample, palette: measured.palette.map(({ color }) => color), motion: null,
                 approximation: "Scene type was not confirmed. Use the sampled observations and the creative brief." };
         }),
-        unresolved: ["The scene outline model did not complete. Segment boundaries are estimates from browser samples."],
+        unresolved: ["The scene outline model did not complete. Segment boundaries are estimated from measured cuts and sustained changes in observed text."],
     });
 }
 
@@ -157,6 +165,7 @@ export async function runReferenceAnalyst(
             "referenceAnalyst", "AGENT_COMPLEX", {
             kind: evidence.kind, interval: evidence.interval,
             candidateCuts: evidence.measured.candidateCuts.map(({ time }) => Number(time.toFixed(3))),
+            observedBoundaries: observedSceneBoundaries(evidence.observations).map((time) => Number(time.toFixed(3))),
             observations: evidence.observations.map(({ time, copy, layout }, sample) => ({ sample, time: Number(time.toFixed(3)), copy, layout })),
             supportedTypes: motionComponentTypes,
         }, referenceOutlineSchema, {
@@ -228,9 +237,12 @@ function applyCopyParts(scene: MotionScene, parts: string[]) {
     }
 }
 
-export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard) {
+export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard, reference: ReferenceAnalysis | null = null) {
     const schema = motionDesignSchema.extend({ scenes: z.array(designScene.omit({ id: true })).length(storyboard.scenes.length) });
-    const result = await runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX", { storyboard }, schema);
+    const referenceScenes = reference && storyboard.look === "reference" ? storyboard.scenes.map((scene) => ({
+        id: scene.id, evidence: sceneReferenceEvidence(reference, scene, context.document.total_frames),
+    })) : undefined;
+    const result = await runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX", { storyboard, referenceScenes }, schema);
     const scenes = result.value.scenes.map((scene, index) => ({ ...scene, id: storyboard.scenes[index].id }));
     return { ...result, value: { ...result.value, scenes } };
 }
@@ -265,6 +277,7 @@ export async function runMotionEngineer(
     copy: MotionCopy,
     design: MotionDesign,
     assets: readonly MotionScene["assets"][number][] = [],
+    reference: ReturnType<typeof sceneReferenceEvidence> = null,
 ) {
     const approved = copy.scenes.find(({ id }) => id === target.id);
     const styling = design.scenes.find(({ id }) => id === target.id);
@@ -278,7 +291,7 @@ export async function runMotionEngineer(
         });
         try {
             const result = await runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
-                target, approvedCopy: wording, notes, palette: styling.palette,
+                target, approvedCopy: wording, notes, palette: styling.palette, reference,
                 layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Use only the palette role names for colors.",
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
@@ -308,7 +321,7 @@ export async function runMotionEngineer(
         return parts?.length ? motionSceneSchema.parse(applyCopyParts(scene, parts)) : scene;
     };
     const result = await runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
-        target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type),
+        target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
         audioCues: context.document.metadata.motion_cues ?? [],
     }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
         validate: ({ scene }) => { buildScene(scene); },

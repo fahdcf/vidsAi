@@ -56,10 +56,13 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 }) };
                 break;
             case "visual-designer":
+                assert.equal(artifact.referenceScenes.length, graphic.length);
+                assert.ok(artifact.referenceScenes.some(({ evidence }) => evidence?.observations.length));
                 value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }) => ({ palette, layout, font })) };
                 break;
             case "motion-engineer": {
                 assert.equal(typeof artifact.approvedCopy, "string");
+                assert.ok(artifact.reference?.observations.length);
                 if (artifact.target.type === "graph") {
                     assert.equal(artifact.approvedCopy, "Get transcript");
                     value = rejectGraphEngineer ? { layers: [{ kind: "group" }], decision: "Invalid scene", approximation: null }

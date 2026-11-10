@@ -53,6 +53,21 @@ test("reference fallback uses measured cuts and saved observations without asser
     assert.equal(analysis.unresolved.length, 1);
 });
 
+test("reference fallback separates sustained sections on a shared background", () => {
+    const observed = ["Intro logo", "Paste a video", "Paste a video. Get every word.", "Paste a video. Get every word.",
+        null, null, null, "Videos and channels", "Videos and channels", "Videos and channels",
+        "No captions? No problem.", "No captions? No problem.", "Clean transcripts", "Clean transcripts, ready for AI",
+        "Join today", "Join today for free"];
+    const observations = observed.map((copy, index) => ({ time: 0.25 + index * 0.5, copy,
+        layout: copy ? "Text on a dark background" : "Dark interface panel", confidence: copy ? 0.9 : 0.5 }));
+    const analysis = measuredReferenceAnalysis({ kind: "video", interval: { start: 0, end: 8 }, observations,
+        measured: { timestamps: observations.map(({ time }) => time), palette: [], candidateCuts: [] } });
+    assert.deepEqual(analysis.scenes.map(({ timing }) => timing?.end), [2, 3.5, 5, 6, 7, 8]);
+    assert.ok(analysis.scenes.every(({ evidence }) => evidence.length >= 2));
+    assert.equal(analysis.scenes[1].copy, null);
+    assert.ok(analysis.scenes.every(({ supportedType }) => supportedType === null));
+});
+
 test("copy recovery keeps quoted headlines, word punctuation and multi-word labels", () => {
     const brief = [
         'Reveal “I MAKE” above “THINGS MOVE.” Highlight “MOVE.”',
