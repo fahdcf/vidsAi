@@ -118,6 +118,24 @@ try {
         assert.ok(Number.isInteger(provenance.audioExtraction.trackId));
         assert.match(provenance.audioExtraction.sourceSha256, /^[a-f0-9]{64}$/);
         assert.equal(derivedCount(), 1);
+        await setupPage.addInitScript(() => {
+            if (sessionStorage.getItem("interrupt-audio-fixture") !== "armed") return;
+            const decode = AudioDecoder.prototype.decode;
+            AudioDecoder.prototype.decode = function (chunk) {
+                if (sessionStorage.getItem("interrupt-audio-fixture") === "armed") {
+                    sessionStorage.setItem("interrupt-audio-fixture", "interrupted");
+                    location.reload();
+                }
+                return decode.call(this, chunk);
+            };
+        });
+        await setupPage.evaluate(() => sessionStorage.setItem("interrupt-audio-fixture", "armed"));
+        const interruptedRun = await createWithReference(source);
+        await setupPage.getByRole("button", { name: "Resume setup" }).waitFor();
+        assert.equal(await setupPage.evaluate(() => sessionStorage.getItem("interrupt-audio-fixture")), "interrupted");
+        await setupPage.getByRole("button", { name: "Resume setup" }).click();
+        await setupPage.getByText("Audio from reference", { exact: true }).waitFor();
+        assert.equal(document(project(motionRun(interruptedRun).project_id)).metadata.motion_audio_source, "reference");
         const mutedRun = await createWithReference(source, true);
         await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
         const muted = document(project(motionRun(mutedRun).project_id));
@@ -130,6 +148,19 @@ try {
             const silent = document(project(motionRun(silentRun).project_id));
             assert.equal(silent.metadata.motion_audio_source, "silent");
             assert.equal(silent.tracks.audio.length, 0);
+        }
+        const unsupportedArg = process.argv.indexOf("--unsupported-reference-audio");
+        if (unsupportedArg >= 0) {
+            const unsupportedRun = await createWithReference(process.argv[unsupportedArg + 1]);
+            await setupPage.getByRole("alert").getByText(/reference audio could not be decoded/).waitFor();
+            await setupPage.getByRole("checkbox", { name: "Mute reference audio", exact: true }).check();
+            await setupPage.getByRole("button", { name: "Resume setup" }).click();
+            await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
+            const recovered = document(project(motionRun(unsupportedRun).project_id));
+            assert.equal(recovered.metadata.motion_audio_source, "muted");
+            assert.equal(recovered.tracks.audio.length, 0);
+            assert.ok(motionRun(unsupportedRun).reference_binding_id);
+            console.log("An unsupported reference audio codec recovered through the mute control.");
         }
         const replacementArg = process.argv.indexOf("--replacement-audio");
         if (replacementArg >= 0) {

@@ -2,7 +2,7 @@ import { BlobSource, Input, MP4, VideoSampleSink } from "mediabunny";
 import { inspectBrowserMedia } from "../browser-export/inspect-media";
 
 export async function inspectMotionReference(source: Blob, kind: "image" | "video", signal: AbortSignal) {
-    const metadata = await inspectBrowserMedia(source, kind, signal);
+    const metadata = await inspectBrowserMedia(source, kind, signal, { videoOnly: true });
     if (metadata.video) {
         const { duration } = metadata.video;
         if (!(duration > 0 && duration <= 30.001)) {

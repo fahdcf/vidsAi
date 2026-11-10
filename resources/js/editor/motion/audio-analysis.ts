@@ -41,6 +41,7 @@ export async function extractReferenceAudio(source: Blob, interval: { start: num
     try {
         const audio = await input.getPrimaryAudioTrack();
         if (!audio) return null;
+        if (!await audio.canDecode()) throw new Error("The reference audio could not be decoded. Retry, replace it, or mute it.");
         const video = await input.getPrimaryVideoTrack();
         if (!video) throw new Error("The reference video could not be read.");
         const origin = await video.getFirstTimestamp();

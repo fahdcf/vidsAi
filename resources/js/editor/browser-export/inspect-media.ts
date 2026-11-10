@@ -108,7 +108,7 @@ async function videoInfo(track: InputVideoTrack, signal: AbortSignal) {
     return { codec, width, height, displayWidth, displayHeight, rotation, fps: 1 / framePeriod, duration: videoEnd - videoStart };
 }
 
-export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, signal: AbortSignal) {
+export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, signal: AbortSignal, options: { videoOnly?: boolean } = {}) {
     signal.throwIfAborted();
     validateSourceSizes([source]);
     if (kind === "image") {
@@ -144,14 +144,16 @@ export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, 
             (kind === "audio" && audios.length !== 1) || tracks.length !== videos.length + audios.length) {
             throw new Error("Use a source with a single video track and at most one audio track, or an audio-only file.");
         }
-        const first = await input.getFirstTimestamp(tracks);
-        const end = await input.computeDuration(tracks, { metadataOnly: true });
+        const includeAudio = kind === "audio" || !options.videoOnly;
+        const inspectedTracks = includeAudio ? tracks : videos;
+        const first = await input.getFirstTimestamp(inspectedTracks);
+        const end = await input.computeDuration(inspectedTracks, { metadataOnly: true });
         const duration = end - first;
         if (!(duration > 0 && duration <= profile.maxSourceSeconds + 0.001)) {
             throw new Error("Use a source with a valid duration of 120 seconds or less.");
         }
         const video = videos.length ? await videoInfo(videos[0], signal) : null;
-        const audio = audios.length ? await audioInfo(audios[0]) : null;
+        const audio = includeAudio && audios.length ? await audioInfo(audios[0]) : null;
         if (videos[0]) {
             const track = videos[0];
             const frame = await track.canDecode() &&
@@ -160,7 +162,7 @@ export async function inspectBrowserMedia(source: Blob, kind: BrowserMediaKind, 
             frame.close();
         }
         signal.throwIfAborted();
-        if (audios[0]) {
+        if (includeAudio && audios[0]) {
             const track = audios[0];
             const sample = await track.canDecode() &&
                 await new AudioSampleSink(track).getSample(await track.getFirstTimestamp());
