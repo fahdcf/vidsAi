@@ -11,6 +11,8 @@ import { drawIdentity } from "./identity-scene";
 import { finishMotionFrame } from "./finish";
 import type { MotionVectors } from "./assets";
 import { drawGraphWidget } from "./widgets";
+import { sampleGraphAnimation } from "./graph-animation";
+import { partialMotionPath } from "./partial-path";
 
 export const motionFontFamilies = {
     archivo_black: '"VidsAI Archivo Black", Arial, sans-serif',
@@ -53,14 +55,26 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
     const { ctx, scene, width, height } = frame;
     const unit = Math.min(width, height);
     for (const node of nodes) {
-        const transform = animatedTransform(node, progress, root);
+        const { reveal = 1, draw = 1, textReveal, deform = 0, ...tracks } = sampleGraphAnimation(node.animation, progress);
+        const transform = { ...animatedTransform(node, progress, root), ...tracks };
         if (transform.opacity <= 0 || transform.scale <= 0) continue;
+        if (reveal <= 0) continue;
         ctx.save();
         try {
             ctx.translate(transform.x * width, transform.y * height);
             ctx.rotate(transform.rotation * Math.PI / 180);
             ctx.scale(transform.scale, transform.scale);
             ctx.globalAlpha *= transform.opacity;
+            if (reveal < 1) {
+                const span = node.kind === "text" ? node.maxWidth * width : "width" in node ? node.width * unit : width;
+                ctx.beginPath();
+                ctx.rect(-span / 2, -3 * height, span * reveal, 6 * height);
+                ctx.clip();
+            }
+            if (deform) {
+                const squash = deform * Math.sin(progress * Math.PI * 4);
+                ctx.scale(1 + squash, 1 - squash);
+            }
             if (node.kind === "group") {
                 if (node.mask) {
                     drawMotionPath(ctx, node.mask, width, height);
@@ -121,13 +135,13 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
                     const h = (style?.boxHeight ?? node.size * 2.5) * unit;
                     const box = { x: -w / 2, y: -h / 2, width: w, height: h, maxSize: node.size * unit,
                         align: style?.align, maxLines: style?.maxLines };
-                    if (style || node.spans || node.gradient || outline) {
+                    if (style || node.spans || node.gradient || outline || textReveal !== undefined) {
                         const runs = (node.spans ?? [{ text: node.text }]).map((span) => {
                             const { family, weight, style: face, color, text } = { ...style, ...span };
                             return { text, family: family ? motionFontFamilies[family] : assets.fontFamily,
                                 weight, style: face, color: color ? resolve(color) : fill };
                         });
-                        drawStyledMotionText(ctx, runs, box, style?.lineHeight ?? 1.17, outline);
+                        drawStyledMotionText(ctx, runs, box, style?.lineHeight ?? 1.17, outline, textReveal);
                     } else drawMotionText(ctx, node.text, assets.fontFamily, resolve(node.color), box);
                     continue;
                 }
@@ -141,9 +155,10 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
                     ctx.ellipse(0, 0, node.width * unit / 2, node.height * unit / 2, 0, 0, Math.PI * 2);
                     break;
                 case "path":
-                    drawMotionPath(ctx, node.commands, width, height);
-                    if (node.stroke) {
-                        ctx.lineWidth = outline?.width ?? node.stroke * unit;
+                    if (draw <= 0) continue;
+                    drawMotionPath(ctx, partialMotionPath(node.commands, draw), width, height);
+                    if (node.stroke || (outline && draw < 1)) {
+                        ctx.lineWidth = outline?.width ?? (node.stroke ?? 0) * unit;
                         ctx.strokeStyle = outline?.color ?? fill;
                         ctx.stroke();
                         continue;

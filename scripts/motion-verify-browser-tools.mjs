@@ -300,6 +300,49 @@ try {
         assert.deepEqual(painted.fonts, ["italic 400", "italic 700", "normal 700", "normal normal"]);
         console.log("Canvas rendered a gradient, outline, glow and mixed styled spans with the bundled font faces and semantic status color.");
     }
+    if (process.argv.includes("--graph-animation")) {
+        const inspected = await page.evaluate(async () => {
+            const { motionSceneSchema } = await import("/shared/motion/schema.ts");
+            const { drawMotionFrame } = await import("/shared/motion/render.ts");
+            const track = (property, from = 0, to = 1) => ({ property, start: 0.2, end: 0.8, from, to });
+            const scene = motionSceneSchema.parse({ id: "timeline", type: "graph", componentVersion: 1, start_frame: 0, end_frame: 101,
+                finish: { grain: 0, vignette: 0 }, params: { version: 1, layers: [
+                    { id: "line", kind: "path", color: "#ff0000", stroke: 0.02, transform: { x: 0.2, y: 0.15 },
+                        commands: [{ op: "M", x: 0, y: 0 }, { op: "L", x: 0.6, y: 0 }], animation: [track("draw")] },
+                    { id: "clip", kind: "rect", color: "#00ff00", width: 0.6, height: 0.16, transform: { x: 0.5, y: 0.35 },
+                        animation: [track("reveal"), track("deform", 0.18, 0.18)] },
+                    { id: "typing", kind: "text", text: "ONE TWO", color: "#ffffff", size: 0.15, maxWidth: 0.8,
+                        transform: { x: 0.5, y: 0.6 }, animation: [track("textReveal")] },
+                    { id: "wave", kind: "widget", variant: "waveform", color: "#ff00ff", width: 0.55, height: 0.15,
+                        waveformCycles: 3, waveformSeed: 45, transform: { x: 0.5, y: 0.85 } },
+                ] } });
+            const ctx = new OffscreenCanvas(360, 360).getContext("2d");
+            const frames = [];
+            for (const frame of [50, 10, 90, 50]) {
+                drawMotionFrame({ ctx, scene, frame, fps: 30, width: 360, height: 360 }, { fontFamily: "Arial" });
+                const pixel = (x, y) => [...ctx.getImageData(x, y, 1, 1).data].slice(0, 3);
+                const data = ctx.getImageData(0, 0, 360, 360).data;
+                const digest = async (bytes) => [...new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))].join(",");
+                let white = 0;
+                for (let i = 0; i < data.length; i += 4) if (data[i] > 230 && data[i + 1] > 230 && data[i + 2] > 230) white++;
+                frames.push({ whole: await digest(data), wave: await digest(ctx.getImageData(0, 280, 360, 70).data), white,
+                    line: [pixel(125, 54), pixel(245, 54)], clip: [pixel(140, 126), pixel(235, 126)] });
+            }
+            return frames;
+        });
+        const [middle, early, late, again] = inspected;
+        assert.deepEqual(middle, again);
+        assert.notEqual(early.wave, late.wave);
+        assert.equal(early.white, 0);
+        assert.ok(middle.white > 0 && middle.white < late.white);
+        assert.deepEqual(middle.line[0], [255, 0, 0]);
+        assert.notDeepEqual(middle.line[1], middle.line[0]);
+        assert.deepEqual(late.line[1], middle.line[0]);
+        assert.deepEqual(middle.clip[0], [0, 255, 0]);
+        assert.notDeepEqual(middle.clip[1], middle.clip[0]);
+        assert.deepEqual(late.clip[1], middle.clip[0]);
+        console.log("Explicit intervals revealed strokes, masks and text while a silent waveform animated. Seeking reproduced the same pixels.");
+    }
     const runTool = async () => {
         const [submitted, result] = await Promise.all([
             page.waitForRequest((req) => req.method() === "PUT" && req.url().includes(url), { timeout: 45_000 }),

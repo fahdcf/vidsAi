@@ -4,9 +4,11 @@ import { motionTextDirection, type TextBox } from "./text";
 type Run = { text: string; family: string; weight?: number; style?: string; color: string | CanvasGradient };
 type MeasuredRun = Run & { width: number };
 type Line = { runs: MeasuredRun[]; width: number };
+const segmenter = typeof Intl.Segmenter === "function" ? new Intl.Segmenter(undefined, { granularity: "grapheme" }) : null;
+const graphemes = (text: string) => segmenter ? Array.from(segmenter.segment(text), ({ segment }) => segment) : Array.from(text);
 
 export function drawStyledMotionText(ctx: MotionDrawingContext, runs: readonly Run[], box: TextBox,
-    lineHeight: number, outline?: { color: string; width: number }) {
+    lineHeight: number, outline?: { color: string; width: number }, reveal = 1) {
     const tokens: { kind: "word" | "space" | "break"; runs: Run[] }[] = [];
     for (const run of runs) for (const text of run.text.match(/\r?\n|[^\S\r\n]+|\S+/gu) ?? []) {
         const kind = text.includes("\n") ? "break" : text.trim() ? "word" : "space";
@@ -59,19 +61,29 @@ export function drawStyledMotionText(ctx: MotionDrawingContext, runs: readonly R
         if (low < 1) return;
         const spacing = low * lineHeight;
         const top = box.y + (box.height - lines.length * spacing) / 2;
+        let remaining = reveal >= 1 ? Infinity : Math.floor(reveal * lines.reduce((sum, line) => sum +
+            line.runs.reduce((count, run) => count + graphemes(run.text).length, 0), 0));
         for (const [index, line] of lines.entries()) {
             let x = box.x + (box.align === "left" ? 0 : box.align === "right" ? box.width - line.width : (box.width - line.width) / 2);
             const y = top + (index + 0.5) * spacing;
-            const ordered = ctx.direction === "rtl" ? [...line.runs].reverse() : line.runs;
+            const ordered = line.runs.map((run) => {
+                if (remaining === Infinity) return run;
+                const characters = graphemes(run.text);
+                const text = characters.slice(0, remaining).join("");
+                remaining = Math.max(0, remaining - characters.length);
+                return { ...run, text };
+            });
+            if (ctx.direction === "rtl") ordered.reverse();
             for (const run of ordered) {
                 setFont(run, low);
+                const drawX = ctx.direction === "rtl" ? x + run.width - ctx.measureText(run.text).width : x;
                 if (outline) {
                     ctx.strokeStyle = outline.color;
                     ctx.lineWidth = outline.width;
-                    ctx.strokeText(run.text, x, y);
+                    ctx.strokeText(run.text, drawX, y);
                 }
                 ctx.fillStyle = run.color;
-                ctx.fillText(run.text, x, y);
+                ctx.fillText(run.text, drawX, y);
                 x += run.width;
             }
         }

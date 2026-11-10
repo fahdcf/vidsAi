@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { graphColor, graphPaintFields, graphTextFields } from "./graph-style";
+import { graphAnimation } from "./graph-animation";
 
 const coordinate = z.number().min(-2).max(3);
 const opacity = z.number().min(0).max(1);
@@ -34,6 +35,7 @@ const common = {
     id: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/),
     transform: transform.default({}),
     keyframes: keyframes.default([]),
+    animation: graphAnimation.optional(),
 };
 const assetFields = { ...common, assetId: z.uuid(), width: size, height: size };
 const leafSchema = z.discriminatedUnion("kind", [
@@ -50,7 +52,8 @@ const leafSchema = z.discriminatedUnion("kind", [
     z.object({ ...common, ...graphPaintFields, kind: z.literal("widget"),
         variant: z.enum(["button", "card", "play-icon", "text-row", "waveform"]), width: size, height: size,
         color: graphColor, label: z.string().trim().max(120).default(""), labelColor: graphColor.default("foreground"),
-        bars: z.number().int().min(5).max(32).default(15) }).strict(),
+        bars: z.number().int().min(5).max(32).default(15),
+        waveformCycles: z.number().min(0).max(12).optional(), waveformSeed: z.number().int().min(0).max(0xffffffff).optional() }).strict(),
 ]);
 
 export type MotionGraphNode = z.infer<typeof leafSchema> | {
@@ -58,6 +61,7 @@ export type MotionGraphNode = z.infer<typeof leafSchema> | {
     id: string;
     transform: z.infer<typeof transform>;
     keyframes: z.infer<typeof keyframes>;
+    animation?: z.infer<typeof graphAnimation>;
     children: MotionGraphNode[];
     mask?: z.infer<typeof vectorPath>;
 };
@@ -94,6 +98,13 @@ export const graphLayers = z.unknown().superRefine((value, ctx) => {
                 return;
             }
             ids.add(node.id);
+            if (Array.isArray(node.animation) && node.animation.some((track: unknown) => track && typeof track === "object" && "property" in track && (
+                (track.property === "draw" && (node.kind !== "path" || (!node.stroke && !node.outline))) ||
+                (track.property === "textReveal" && node.kind !== "text") ||
+                (track.property === "deform" && !["path", "rect", "ellipse"].includes(node.kind))))) {
+                ctx.addIssue({ code: "custom", message: "The layer does not support the animated property." });
+                return;
+            }
             if (node.kind === "group" && Array.isArray(node.children)) stack.push({ nodes: node.children, depth: depth + 1 });
             if (Array.isArray(node.mask)) commands += node.mask.length;
             if (Array.isArray(node.commands)) commands += node.commands.length;

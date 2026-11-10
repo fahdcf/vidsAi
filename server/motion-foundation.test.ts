@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { compileMotionPlan } from "../shared/motion/compile";
 import { graphAuthoring, graphComposition, motionGraphVersion } from "../shared/motion/graph";
+import { graphAnimation, sampleGraphAnimation } from "../shared/motion/graph-animation";
+import { partialMotionPath } from "../shared/motion/partial-path";
 import { motionComponentTypes, describeMotionComponent, motionSceneCost } from "../shared/motion/registry";
 import { motionSceneSchema } from "../shared/motion/schema";
 import { applyOperations } from "../shared/editing-core";
@@ -71,4 +73,21 @@ test("flat graph records compile in paint order with local transforms and group 
             { parentId: "button", order: 3, node: { id: "another", kind: "group" } }],
         [{ parentId: null, order: 0, node: group }],
     ]) assert.equal(graphAuthoring.safeParse({ version: motionGraphVersion, nodes: invalid }).success, false);
+});
+
+test("graph intervals hold at boundaries, permit independent overlap and keep spring values bounded", () => {
+    const spec = [
+        { property: "x", start: 0.25, end: 0.5, from: 0, to: 1 },
+        { property: "opacity", start: 0.4, end: 0.6, from: 0, to: 1, ease: "spring" },
+        { property: "x", start: 0.75, end: 1, from: 1, to: 0 },
+    ];
+    const animation = graphAnimation.parse(spec);
+    assert.deepEqual(sampleGraphAnimation(animation, 0), { x: 0, opacity: 0 });
+    assert.equal(sampleGraphAnimation(animation, 0.375).x, 0.5);
+    assert.deepEqual(sampleGraphAnimation(animation, 0.625), { x: 1, opacity: 1 });
+    assert.deepEqual(sampleGraphAnimation(animation, 0.875), { x: 0.5, opacity: 1 });
+    assert.equal(graphAnimation.safeParse([...spec, { ...spec[0], start: 0.9, end: 1 }]).success, false);
+    assert.equal(graphAnimation.safeParse([{ ...spec[1], to: 1.01 }]).success, false);
+    assert.deepEqual(partialMotionPath([{ op: "M", x: 0, y: 0 }, { op: "Q", cx: 0.5, cy: 1, x: 1, y: 0 }], 0.5),
+        [{ op: "M", x: 0, y: 0 }, { op: "Q", cx: 0.25, cy: 0.5, x: 0.5, y: 0.5 }]);
 });

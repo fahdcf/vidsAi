@@ -9,7 +9,7 @@ export function drawGraphWidget(ctx: MotionDrawingContext, node: Extract<MotionG
     if (node.variant === "waveform") {
         const step = width / node.bars;
         for (let index = 0; index < node.bars; index++) {
-            const phase = seededNoise(31, index) * Math.PI * 2 + progress * 15;
+            const phase = seededNoise(node.waveformSeed ?? 31, index) * Math.PI * 2 + progress * (node.waveformCycles === undefined ? 15 : node.waveformCycles * Math.PI * 2);
             const amplitude = (0.25 + Math.abs(Math.sin(phase)) * 0.75) * (audioLevel === undefined ? 1 : 0.15 + 0.85 * clamp(audioLevel));
             const barHeight = height * amplitude;
             ctx.roundRect(-width / 2 + index * step + step * 0.2, -barHeight / 2, step * 0.6, barHeight, step * 0.2);
