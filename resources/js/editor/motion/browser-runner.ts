@@ -1,5 +1,5 @@
 import type { BrowserMotionInput, BrowserMotionReference, BrowserMotionTask } from "../../../../shared/motion/browser-tools";
-import { motionEvidenceFramesPerSheet, motionPreviewFramesPerSheet } from "../../../../shared/motion/browser-tools";
+import { isFollowupSourceTime, motionEvidenceFramesPerSheet, motionPreviewFramesPerSheet } from "../../../../shared/motion/browser-tools";
 import type { Document } from "../../../../shared/contracts";
 import { prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
 import { drawMotionFrame } from "../../../../shared/motion/render";
@@ -103,6 +103,40 @@ async function referenceFile(reference: BrowserMotionReference, signal: AbortSig
     return new Blob([bytes]);
 }
 
+async function captureFollowups(input: Extract<BrowserMotionInput, { tool: "reference_followup" }>, signal: AbortSignal) {
+    const { reference, requests } = input;
+    const source = await referenceFile(reference, signal);
+    const followups = [];
+    const images = [];
+    for (const { sceneId, time, bounds, interval } of requests) {
+        try {
+            let image: Blob;
+            let sourceTime = 0;
+            if (reference.metadata.kind === "video") {
+                const [frame] = await sampleMotionReference(source, [time], signal, { crop: bounds, maxEdge: bounds ? 640 : 960 });
+                ({ image, sourceTime } = frame);
+            } else {
+                if (!bounds) continue;
+                const bitmap = await createImageBitmap(source);
+                try {
+                    const width = bitmap.width * bounds.width, height = bitmap.height * bounds.height;
+                    const canvas = referenceCropCanvas(width, height);
+                    const context = canvas.getContext("2d");
+                    if (!context) continue;
+                    context.drawImage(bitmap, bitmap.width * bounds.left, bitmap.height * bounds.top, width, height, 0, 0, canvas.width, canvas.height);
+                    image = await canvas.convertToBlob({ type: "image/jpeg", quality: 0.82 });
+                } finally { bitmap.close(); }
+            }
+            if (!isFollowupSourceTime(sourceTime, time, interval)) continue;
+            images.push(await encodeEvidence(image, 300_000, signal));
+            followups.push({ sceneId, time, bounds, sourceTime });
+        } catch {
+            signal.throwIfAborted();
+        }
+    }
+    return { bindingId: reference.bindingId, followups, images };
+}
+
 async function captureReference(reference: BrowserMotionReference, signal: AbortSignal) {
     const source = await referenceFile(reference, signal);
     const { interval } = reference.metadata;
@@ -200,6 +234,7 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
 export async function runMotionBrowserInput(input: BrowserMotionInput, signal: AbortSignal) {
     if (input.tool === "reference_capture") return captureReference(input.reference, signal);
     if (input.tool === "reference_detail") return captureDetails(input, signal);
+    if (input.tool === "reference_followup") return captureFollowups(input, signal);
     if (input.tool === "preview") return renderPreview(input.document, signal);
     const { reference, interval, colors } = input;
     const source = await referenceFile(reference, signal);

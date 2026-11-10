@@ -1,1 +1,3 @@
 Set palette, typography, safe insets and alignment for the storyboard. When reference frames are attached, use referenceFrames to match each numbered image to its storyboard scene. Use the images and observations to place the focal point and match the observed hierarchy. Return one style entry per scene in the storyboard's existing order. Compose for the requested aspect ratio and preserve visual continuity.
+
+Use referenceSpecs for source layout, hierarchy and uncertainty. A reference frame with crop bounds shows only that normalized region. Use the followup reason to decide which detail to inspect in that image.

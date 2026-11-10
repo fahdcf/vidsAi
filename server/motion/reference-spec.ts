@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { motionEvidenceFramesPerSheet } from "../../shared/motion/browser-tools";
+import { motionEvidenceFramesPerSheet, referenceFollowupProposals } from "../../shared/motion/browser-tools";
 import type { ReferenceAnalysis } from "../../shared/motion/reference";
 import { referenceSceneProposalSchema, referenceSceneSpecSchema, type ReferenceSceneSpec } from "../../shared/motion/reference-spec";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
@@ -23,7 +23,8 @@ export async function runReferenceSpec(context: MotionAgentContext, storyboard: 
             .map(({ id, time }) => ({ id, time })) : [];
         return { sceneId: scene.id, sourceInterval, sourceSceneIndex: notes?.sourceSceneIndex ?? null, requiredCopy: scene.copy, evidence, notes };
     });
-    const schema = z.object({ scenes: z.array(referenceSceneProposalSchema).length(inputs.length) }).strict();
+    const schema = z.object({ scenes: z.array(referenceSceneProposalSchema).length(inputs.length),
+        requests: referenceFollowupProposals.catch([]).optional() }).strict();
     const expand = (proposals: z.infer<typeof schema>["scenes"]): ReferenceSceneSpec[] => {
         const byId = new Map(proposals.map((proposal) => [proposal.sceneId, proposal]));
         if (byId.size !== inputs.length) throw new Error("A reference specification needs one proposal per scene.");
@@ -40,7 +41,18 @@ export async function runReferenceSpec(context: MotionAgentContext, storyboard: 
             images: [...sheets, ...details.map(({ image }) => image)], requestTimeoutMs: 45_000,
             validate: ({ scenes }) => { expand(scenes); },
         });
-        return { specs: expand(result.value.scenes), source: "vision" as const };
+        const seen = new Set<string>();
+        const requests = (result.value.requests ?? []).flatMap((request) => {
+            const scene = inputs.find(({ sceneId }) => sceneId === request.sceneId);
+            if (!scene?.notes || seen.has(request.sceneId)) return [];
+            const interval = scene.sourceInterval;
+            if (reference.kind === "video" ? !interval || request.time < interval.start || request.time >= interval.end : request.time !== 0) return [];
+            if (!request.bounds && (reference.kind === "image" || detailFrames.some(({ sceneId, time }) =>
+                sceneId === request.sceneId && Math.abs(time - request.time) < 0.04))) return [];
+            seen.add(request.sceneId);
+            return [{ ...request, interval }];
+        });
+        return { specs: expand(result.value.scenes), source: "vision" as const, requests };
     } catch (error) {
         context.signal.throwIfAborted();
         if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;

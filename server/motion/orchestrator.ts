@@ -10,7 +10,7 @@ import { referenceSceneSpecSchema } from "../../shared/motion/reference-spec";
 import { referenceClock, referenceTimeAt } from "../../shared/motion/time-map";
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
-import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceDetailRequest, referenceDetailResult, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
+import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceDetailRequest, referenceDetailResult, referenceFollowupRequest, referenceFollowupResult, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
@@ -133,7 +133,6 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
                 add({ name: "reference_spec", lane: "provider", dependencies: ["reference_detail"] });
             }
         }
-        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_spec"] : [])] });
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
         let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
@@ -152,6 +151,13 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         }
         const traceName = liquid && trace ? `trace:${liquid.id}` : null;
         if (traceName) add({ name: traceName, lane: "browser", dependencies: ["director"], input: trace });
+        if (useDetails && !done("reference_spec")) return;
+        const alreadyScheduled = steps.some(({ name }) => name === "design");
+        const requests = useDetails && (!alreadyScheduled || steps.some(({ name }) => name === "reference_followup"))
+            ? referenceFollowupRequest.parse(result<{ requests?: unknown }>(id, "reference_spec").requests ?? []) : [];
+        if (requests.length) add({ name: "reference_followup", lane: "browser", dependencies: ["reference_spec"], input: requests });
+        add({ name: "design", lane: "provider", dependencies: ["director", ...(useDetails ? ["reference_spec"] : []),
+            ...(requests.length ? ["reference_followup"] : [])] });
         const engineers = storyboard.scenes.map((target) => {
             const name = `engineer:${target.id}`;
             const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
@@ -202,7 +208,7 @@ export function readyMotionSteps(runId: string) {
 }
 
 export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMotionInput {
-    if (step.name === "reference_capture" || step.name === "reference_detail" || step.name.startsWith("trace:")) {
+    if (step.name === "reference_capture" || step.name === "reference_detail" || step.name === "reference_followup" || step.name.startsWith("trace:")) {
         const reference = motionReference(run.project_id);
         if (reference?.bindingId !== run.reference_binding_id) throw new Error("The reference was replaced.");
         if (!reference?.available) throw new Error("Relink the reference file.");
@@ -211,6 +217,8 @@ export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMot
         if (step.name === "reference_capture") return { tool: "reference_capture", reference: selected };
         if (step.name === "reference_detail") return { tool: "reference_detail", reference: selected,
             samples: referenceDetailRequest.parse(json(step.input, null)) };
+        if (step.name === "reference_followup") return { tool: "reference_followup", reference: selected,
+            requests: referenceFollowupRequest.parse(json(step.input, null)) };
         return { tool: "trace", reference: selected, ...traceRequestSchema.parse(json(step.input, null)) };
     }
     const { round = 1 } = json<{ round?: number }>(step.input, {});
@@ -313,10 +321,16 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
     };
     const storyboard = () => agentResult(id, "director", motionStoryboardSchema);
     const details = () => {
-        if (!motionSteps(id).some(({ name, status }) => name === "reference_detail" && status === "done")) return [];
+        const steps = motionSteps(id);
+        if (!steps.some(({ name, status }) => name === "reference_detail" && status === "done")) return [];
         const detail = referenceDetailResult.parse(result(id, "reference_detail"));
+        const followupStep = steps.find(({ name, status }) => name === "reference_followup" && status === "done");
+        const extra = followupStep ? referenceFollowupResult.parse(result(id, "reference_followup")) : null;
+        const requests = followupStep ? referenceFollowupRequest.parse(json(followupStep.input, null)) : [];
         return [...detail.samples.map((sample, index) => ({ ...sample, image: imageBytes([detail.images[index]])[0], crop: undefined })),
-            ...(detail.crops ?? []).map(({ sceneId, time, bounds, image }) => ({ sceneId, time, crop: bounds, image: imageBytes([image])[0] }))];
+            ...(detail.crops ?? []).map(({ sceneId, time, bounds, image }) => ({ sceneId, time, crop: bounds, image: imageBytes([image])[0] })),
+            ...(extra?.followups ?? []).map(({ sceneId, sourceTime, bounds }, index) => ({ sceneId, time: sourceTime, crop: bounds,
+                followup: requests.find((request) => request.sceneId === sceneId)?.reason, image: imageBytes([extra!.images[index]])[0] }))];
     };
     const referenceSpecs = () => motionSteps(id).some(({ name, status }) => name === "reference_spec" && status === "done")
         ? z.array(referenceSceneSpecSchema).max(8).parse(result<{ specs: unknown }>(id, "reference_spec").specs) : [];
@@ -357,7 +371,12 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return { value, summary: value.value.decision };
     }
     if (step.name === "design") {
-        const value = await runMotionDesigner(context, storyboard(), reference(), details().filter(({ crop }) => !crop), referenceSpecs());
+        const frames = details();
+        const followups = frames.filter((frame) => "followup" in frame);
+        const full = frames.filter((frame) => !("followup" in frame) && !frame.crop);
+        const uncovered = full.filter(({ sceneId }) => !followups.some((frame) => frame.sceneId === sceneId));
+        const covered = full.filter((frame) => !uncovered.includes(frame));
+        const value = await runMotionDesigner(context, storyboard(), reference(), [...uncovered, ...followups, ...covered].slice(0, 8), referenceSpecs());
         return { value, summary: value.value.decision };
     }
     if (step.name.startsWith("engineer:")) {

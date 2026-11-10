@@ -250,7 +250,7 @@ function applyCopyParts(scene: MotionScene, parts: string[]) {
     }
 }
 
-type ReferenceFrame = { sceneId: string; time: number; image: MotionVisionImage; crop?: ReferenceCropBounds };
+type ReferenceFrame = { sceneId: string; time: number; image: MotionVisionImage; crop?: ReferenceCropBounds; followup?: string };
 
 async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request: (frames: readonly ReferenceFrame[]) => Promise<T>) {
     try {
@@ -262,8 +262,8 @@ async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request
     }
 }
 
-const describeReferenceFrames = (frames: readonly ReferenceFrame[]) => frames.map(({ sceneId, time, crop }, index) =>
-    ({ sceneId, time, crop, imageNumber: index + 1 }));
+const describeReferenceFrames = (frames: readonly ReferenceFrame[]) => frames.map(({ sceneId, time, crop, followup }, index) =>
+    ({ sceneId, time, crop, followup, imageNumber: index + 1 }));
 
 export async function runMotionDesigner(context: MotionAgentContext, storyboard: MotionStoryboard, reference: ReferenceAnalysis | null = null,
     frames: readonly ReferenceFrame[] = [], referenceSpecs: readonly ReferenceSceneSpec[] = []) {

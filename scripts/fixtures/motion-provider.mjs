@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false } = {}) {
     const stages = [];
     const reasoning = "INTERNAL_MOCK_REASONING";
     const originalFetch = globalThis.fetch;
@@ -73,14 +73,27 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                         events: sourceInterval && first && next ? [{ kind: "hold", objectId: "primary-shape", description: "Shape holds",
                             confidence: 0.8, evidenceIds: [first.id, next.id] }] : [], uncertainties: [] };
                 }) };
+                if (referenceFollowup) {
+                    const [first, second] = artifact.scenes;
+                    const { start, end } = second.sourceInterval;
+                    value.requests = [
+                        { sceneId: first.sceneId, time: end, reason: "This request is outside the assigned scene." },
+                        { sceneId: first.sceneId, time: (first.sourceInterval.start + first.sourceInterval.end) / 2,
+                            bounds: { left: 0.125, top: 0.25, width: 0.625, height: 0.5 }, reason: "Read the control label." },
+                        { sceneId: second.sceneId, time: start + (end - start) * 0.7, reason: "Check the later layout." },
+                    ];
+                }
                 break;
             case "visual-designer":
                 assert.equal(artifact.referenceScenes.length, graphic.length);
                 assert.ok(artifact.referenceScenes.some(({ evidence }) => evidence?.observations.length));
                 assert.deepEqual(artifact.referenceSpecs.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
+                assert.ok(artifact.referenceSpecs.every(({ objects, events, uncertainties }) => rejectSpec
+                    ? uncertainties.length > 0 : objects.length > 0 && events.length > 0));
                 if (artifact.referenceFrames.length) {
-                    assert.deepEqual(artifact.referenceFrames.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
-                    assert.equal(message.length, graphic.length + 1);
+                    assert.deepEqual(artifact.referenceFrames.filter(({ followup }) => !followup).map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
+                    assert.equal(artifact.referenceFrames.filter(({ followup }) => followup).length, referenceFollowup ? 2 : 0);
+                    assert.equal(message.length, artifact.referenceFrames.length + 1);
                     if (rejectDetailVision) { value = null; break; }
                 } else assert.ok(rejectDetailVision);
                 value = { decision: "Kept the warm palette.", scenes: graphic.map(({ palette, layout, font }) => ({ palette, layout, font })) };
@@ -89,11 +102,16 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.equal(typeof artifact.approvedCopy, "string");
                 assert.ok(artifact.reference?.observations.length);
                 assert.equal(artifact.referenceSpec.sceneId, artifact.target.id);
+                assert.ok(rejectSpec ? artifact.referenceSpec.uncertainties.length : artifact.referenceSpec.objects.length);
                 if (artifact.referenceFrames.length) {
                     assert.ok(artifact.referenceFrames.every(({ sceneId }) => sceneId === artifact.target.id));
                     assert.equal(message.length, artifact.referenceFrames.length + 1);
                     assert.ok(!artifact.referenceFrames[0].crop);
-                    if (artifact.referenceFrames.length === 2) assert.equal(artifact.referenceFrames[1].crop.width, 0.5);
+                    const extra = artifact.referenceFrames.find(({ followup }) => followup);
+                    if (referenceFollowup) assert.equal(extra?.followup, artifact.target.id === graphic[0].id ? "Read the control label." : "Check the later layout.");
+                    else assert.equal(extra, undefined);
+                    const initialCrop = artifact.referenceFrames.find(({ crop, followup }) => crop && !followup);
+                    if (initialCrop) assert.equal(initialCrop.crop.width, 0.5);
                     if (rejectDetailVision) { value = null; break; }
                 } else assert.ok(rejectDetailVision || (rejectGraphEngineer && artifact.target.type === "graph"));
                 if (artifact.target.type === "graph") {

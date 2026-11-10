@@ -450,7 +450,20 @@ try {
     const rejectDetailVision = process.argv.includes("--detail-vision-fallback");
     const rejectSpec = process.argv.includes("--reference-spec-fallback");
     const referenceMapping = process.argv.includes("--reference-mapping");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping });
+    const referenceFollowup = process.argv.includes("--reference-followup");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup });
+    let rejectedFollowup = false;
+    if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
+        if (route.request().method() === "PUT") {
+            const payload = route.request().postDataJSON();
+            if (payload.result.followups?.length) {
+                payload.result.followups[0].bounds.left = 0;
+                const rejected = await route.fetch({ postData: payload });
+                rejectedFollowup = rejected.status() === 422;
+            }
+        }
+        await route.continue();
+    });
     try {
         const graph = new MotionOrchestrator();
         for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
@@ -477,6 +490,23 @@ try {
     const detail = JSON.parse(motionArtifact(graphRun.id, detailStep.result_id).body.toString());
     assert.deepEqual(detail.samples.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
     assert.equal(new Set(detail.samples.map(({ time }) => time)).size, graphic.length);
+    const followupStep = motionSteps(graphRun.id).find(({ name }) => name === "reference_followup");
+    if (referenceFollowup) {
+        assert.ok(rejectedFollowup);
+        assert.equal(stages.filter((stage) => stage === "reference-spec").length, 1);
+        assert.deepEqual(specification.requests.map(({ reason }) => reason), ["Read the control label.", "Check the later layout."]);
+        const followup = JSON.parse(motionArtifact(graphRun.id, followupStep.result_id).body.toString());
+        assert.equal(followup.bindingId, graphRef.bindingId);
+        assert.deepEqual(followup.followups.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
+        assert.deepEqual(followup.followups[0].bounds, { left: 0.125, top: 0.25, width: 0.625, height: 0.5 });
+        assert.equal(followup.followups[1].bounds, undefined);
+        assert.ok(Math.abs(followup.followups[1].sourceTime - detail.samples[1].time) > 0.04);
+        assert.deepEqual(await graphPage.evaluate(async (images) => Promise.all(images.map(async ({ base64 }) => {
+            const bitmap = await createImageBitmap(await (await fetch(`data:image/jpeg;base64,${base64}`)).blob());
+            try { return Math.max(bitmap.width, bitmap.height); } finally { bitmap.close(); }
+        })), followup.images), [640, 960]);
+        console.log("Follow-up crop and full frame reached the assigned routes. An out-of-scene request and tampered crop were rejected.");
+    } else assert.equal(followupStep, undefined);
     if (referenceMapping) {
         const director = motionSteps(graphRun.id).find(({ name }) => name === "director");
         const { value: plan } = JSON.parse(motionArtifact(graphRun.id, director.result_id).body.toString());

@@ -30,6 +30,19 @@ export const referenceDetailResult = z.object({
         image: evidenceImage.extend({ base64: z.base64().min(4).max(100_000) }),
     })).max(8).optional(),
 }).strict().refine(({ samples, images }) => samples.length === images.length);
+const followupSample = detailSample.extend({ bounds: referenceCropBounds.optional() });
+export const referenceFollowupProposals = z.array(followupSample.extend({ reason: z.string().trim().min(1).max(160) })).max(3);
+export const referenceFollowupRequest = z.array(referenceFollowupProposals.element.extend({ interval: referenceIntervalSchema.nullable() })).max(3);
+export const referenceFollowupResult = z.object({
+    bindingId: z.uuid(),
+    followups: z.array(followupSample.extend({ sourceTime: detailSample.shape.time })).max(3),
+    images: z.array(referenceDetailResult.shape.images.element).max(3),
+}).strict().refine(({ followups, images }) => followups.length === images.length);
+
+export function isFollowupSourceTime(sourceTime: number, time: number, interval: z.infer<typeof referenceIntervalSchema> | null) {
+    return interval ? sourceTime >= interval.start && sourceTime < interval.end &&
+        sourceTime >= time - 0.2 && sourceTime <= time + 0.001 : sourceTime === 0 && time === 0;
+}
 export const previewSchema = z.object({
     frames: z.array(z.number().int().nonnegative().max(7199)).min(1).max(32),
     framesPerSheet: z.literal(motionPreviewFramesPerSheet).optional(),
@@ -58,6 +71,10 @@ export type BrowserMotionInput = {
     tool: "reference_detail";
     reference: BrowserMotionReference;
     samples: z.infer<typeof referenceDetailRequest>;
+} | {
+    tool: "reference_followup";
+    reference: BrowserMotionReference;
+    requests: z.infer<typeof referenceFollowupRequest>;
 } | ({
     tool: "trace";
     reference: BrowserMotionReference;

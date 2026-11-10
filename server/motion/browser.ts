@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { captureSchema, previewSchema, referenceDetailResult, traceResultSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
+import { captureSchema, isFollowupSourceTime, previewSchema, referenceDetailResult, referenceFollowupResult, traceResultSchema, type BrowserMotionTask } from "../../shared/motion/browser-tools";
 import { motionAssetProvenance } from "../../shared/motion/assets";
 import { db, json, project } from "../database";
 import { document } from "../document";
@@ -94,6 +94,7 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         }
         const value = step.name === "reference_capture" ? captureSchema.parse(result)
             : step.name === "reference_detail" ? referenceDetailResult.parse(result)
+            : step.name === "reference_followup" ? referenceFollowupResult.parse(result)
             : step.name.startsWith("trace:") ? traceResultSchema.parse(result) : previewSchema.parse(result);
         if (step.status === "done" && step.result_id) {
             const prior = motionArtifact(runId, step.result_id);
@@ -141,6 +142,15 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
                 JSON.stringify(value.samples) !== JSON.stringify(input.samples)))) {
             fail(422, "The detailed frames do not match the assigned reference scenes.");
         }
+        if (input.tool === "reference_followup" && "followups" in value) {
+            if (value.bindingId !== input.reference.bindingId) fail(409, "The reference was replaced.");
+            if (new Set(value.followups.map(({ sceneId }) => sceneId)).size !== value.followups.length ||
+                value.followups.some(({ sceneId, time, bounds, sourceTime }) => {
+                    const request = input.requests.find((request) => request.sceneId === sceneId);
+                    return !request || time !== request.time || JSON.stringify(bounds) !== JSON.stringify(request.bounds) ||
+                        !isFollowupSourceTime(sourceTime, time, request.interval);
+                })) fail(422, "The follow-up frames do not match the assigned reference samples.");
+        }
         const crops = "crops" in value ? value.crops ?? [] : [];
         if ("samples" in value && (new Set(crops.map(({ sceneId }) => sceneId)).size !== crops.length ||
             crops.some((crop) => !value.samples.some(({ sceneId, time }) => sceneId === crop.sceneId && time === crop.time)))) {
@@ -158,6 +168,8 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
             ? `The browser sampled ${value.measured.timestamps.length} reference frames.`
             : "samples" in value ? value.samples.length ? `The browser captured ${value.samples.length} detailed scene frames.`
                 : "Detailed reference frames were unavailable. Continuing with the saved visual observations."
+                : "followups" in value ? value.followups.length ? `The browser captured ${value.followups.length} follow-up reference samples.`
+                    : "Follow-up samples were unavailable. Continuing with the saved evidence."
                 : `The browser rendered ${value.frames.length} preview frames for review.`;
         if (!finishMotionStep(run, step, { value, summary })) fail(409, "The browser task lease expired.");
         return { duplicate: false };
