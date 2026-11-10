@@ -16,6 +16,7 @@ export type MotionCreateInput = {
     reference: MotionReferenceSelection | null;
     audio: MotionAudioSelection | null;
     logo: File | null;
+    muteReferenceAudio?: boolean;
 };
 
 export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput) => Promise<void> }) {
@@ -26,6 +27,7 @@ export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput
     const [mode, setMode] = useState<"prompt" | "reference">("prompt");
     const [reference, setReference] = useState<MotionReferenceSelection | null>(null);
     const [audio, setAudio] = useState<MotionAudioSelection | null>(null);
+    const [muteReferenceAudio, setMuteReferenceAudio] = useState(false);
     const [logo, setLogo] = useState<File | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState("");
@@ -40,7 +42,7 @@ export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput
         }
         setBusy(true);
         try {
-            await submit({ name: name.trim(), prompt: prompt.trim(), format, seconds, reference: mode === "reference" ? reference : null, audio, logo });
+            await submit({ name: name.trim(), prompt: prompt.trim(), format, seconds, reference: mode === "reference" ? reference : null, audio, logo, muteReferenceAudio });
         } catch (error) {
             setError(error instanceof Error ? error.message : "The motion project could not be started.");
         } finally {
@@ -83,6 +85,10 @@ export function MotionCreateForm({ submit }: { submit: (input: MotionCreateInput
                             onChange={() => setMode("reference")} /> Match a reference</label>
                     </fieldset>
                     {mode === "reference" && <ReferencePicker onChange={setReference} disabled={busy} />}
+                    {mode === "reference" && reference?.kind === "video" && !audio && <label>
+                        <input type="checkbox" checked={muteReferenceAudio} onChange={(event) => setMuteReferenceAudio(event.currentTarget.checked)} /> Mute reference audio
+                        <span className="muted">Use the video’s audio automatically when no soundtrack is supplied.</span>
+                    </label>}
                     <details className="motion-attachments">
                         <summary>Logo and soundtrack <span className="muted">Optional</span></summary>
                         <label>Logo<input type="file" accept=".png,.jpg,.jpeg"
@@ -115,7 +121,8 @@ export default function MotionCreate() {
         seconds={opened.input.seconds} pendingSetup={opened.pendingSetup} initialAttachments={opened.input} />;
     return <MotionCreateForm submit={async (input) => {
         const { name, prompt, format, seconds, reference, audio, logo } = input;
-        const attachments = { reference: Boolean(reference), audio: Boolean(audio), logo: Boolean(logo) };
+        const attachments: MotionSetupRequirements = { reference: Boolean(reference), audio: Boolean(audio), logo: Boolean(logo) };
+        if (reference?.kind === "video" && !audio) attachments.referenceAudio = input.muteReferenceAudio ? "muted" : "auto";
         const key = JSON.stringify({ name, prompt, format, seconds, attachments });
         if (request.current?.key !== key) request.current = { key, id: crypto.randomUUID() };
         const result = await api<{ projectId: number; id: string; name: string; pendingSetup: MotionSetupRequirements | null; redirect: string }>(

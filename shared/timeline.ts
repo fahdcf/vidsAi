@@ -133,6 +133,7 @@ export interface EditStateTracks {
 export interface EditStateMetadata {
   workflow?: ProjectWorkflow;
   motion_cues?: MotionCue[];
+  motion_audio_source?: "reference" | "uploaded" | "silent" | "muted";
   motion_generation?: MotionGeneration;
   platform: Platform;
   language: string;

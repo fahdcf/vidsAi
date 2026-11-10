@@ -19,7 +19,7 @@ process.env.NODE_MEDIA_ROOT = path.join(directory, "media");
 const { app } = await import("../server/app.ts");
 const { db, insert, project } = await import("../server/database.ts");
 const { hash } = await import("../server/security.ts");
-const { document } = await import("../server/document.ts");
+const { commit, document } = await import("../server/document.ts");
 const { createMotionProject } = await import("../server/motion/projects.ts");
 const { bindMotionReference } = await import("../server/motion/references.ts");
 const { addMotionStep, createMotionRun, motionArtifact, motionEvents, motionRun, motionSteps } = await import("../server/motion/store.ts");
@@ -63,6 +63,86 @@ try {
     browser = await chromium.launch({ channel: process.env.MOTION_TEST_BROWSER || "chrome", headless: true });
     const context = await browser.newContext();
     await context.addCookies([{ name: "vidsai_session", value: a.token, url: base }]);
+    if (process.argv.includes("--reference-audio")) {
+        await context.addCookies([{ name: "vidsai_session", value: a.token, url: target }]);
+        const setupPage = await context.newPage();
+        async function createWithReference(file, muted = false, replacement = null) {
+            await setupPage.goto(target + "/create/motion-graphics");
+            await setupPage.getByLabel("Project name").fill("Reference audio verification");
+            await setupPage.getByLabel("Video brief").fill("Animate the reference with its original timing.");
+            await setupPage.getByLabel("Duration").selectOption("5");
+            await setupPage.getByRole("radio", { name: "Match a reference" }).check();
+            await setupPage.getByLabel("Reference video or image").setInputFiles(file);
+            await setupPage.getByRole("spinbutton", { name: "Start (seconds)" }).fill("1.25");
+            await setupPage.getByRole("spinbutton", { name: "End (seconds)" }).fill("6.25");
+            if (muted) await setupPage.getByRole("checkbox", { name: /Mute reference audio/ }).check();
+            if (replacement) {
+                await setupPage.getByText("Logo and soundtrack").click();
+                await setupPage.getByLabel("Soundtrack (optional)").setInputFiles(replacement);
+                await setupPage.getByLabel("Soundtrack preview").waitFor();
+            }
+            await setupPage.getByRole("button", { name: "Start creating" }).click();
+            await setupPage.waitForURL("**/projects/*/motion?run=*");
+            return new URL(setupPage.url()).searchParams.get("run");
+        }
+        await setupPage.route("**/projects/*/motion-assets", (route) => route.abort(), { times: 1 });
+        const audioRun = await createWithReference(source);
+        await setupPage.getByRole("alert").getByText("The connection dropped during upload.").waitFor();
+        await setupPage.reload();
+        await setupPage.getByRole("button", { name: "Resume setup" }).click();
+        await setupPage.getByText("Audio from reference", { exact: true }).waitFor();
+        const saved = document(project(motionRun(audioRun).project_id));
+        assert.equal(saved.metadata.motion_audio_source, "reference");
+        assert.ok(saved.metadata.motion_cues.length > 0);
+        const [track] = saved.tracks.audio;
+        assert.equal(track.start_frame, 0);
+        assert.equal(track.end_frame, 150);
+        assert.equal(track.volume, 1);
+        assert.equal(track.fade_in_frames + track.fade_out_frames, 0);
+        const derived = db.prepare(`SELECT a.path, a.duration_seconds, m.provenance FROM project_assets a
+            JOIN motion_asset_metadata m ON m.asset_id=a.id WHERE a.id=?`).get(track.url.slice("asset:".length));
+        assert.equal(derived.duration_seconds, 5);
+        assert.equal(JSON.parse(derived.provenance).startSeconds, 1.25);
+        const mutedRun = await createWithReference(source, true);
+        await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
+        const muted = document(project(motionRun(mutedRun).project_id));
+        assert.equal(muted.metadata.motion_audio_source, "muted");
+        assert.equal(muted.tracks.audio.length, 0);
+        const silentArg = process.argv.indexOf("--silent-reference");
+        if (silentArg >= 0) {
+            const silentRun = await createWithReference(process.argv[silentArg + 1]);
+            await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
+            const silent = document(project(motionRun(silentRun).project_id));
+            assert.equal(silent.metadata.motion_audio_source, "silent");
+            assert.equal(silent.tracks.audio.length, 0);
+        }
+        const replacementArg = process.argv.indexOf("--replacement-audio");
+        if (replacementArg >= 0) {
+            const replacedRun = await createWithReference(source, false, process.argv[replacementArg + 1]);
+            await setupPage.getByRole("heading", { name: "Preparing your project" }).waitFor({ state: "hidden" });
+            const replaced = document(project(motionRun(replacedRun).project_id));
+            assert.equal(replaced.metadata.motion_audio_source, "uploaded");
+            assert.equal(replaced.tracks.audio.length, 1);
+        }
+        if (process.argv.includes("--audio-export")) {
+            const projectId = motionRun(audioRun).project_id;
+            const [scene] = motionBenchmark().tracks.motion_graphics;
+            commit(project(projectId), { commandId: randomUUID(), expectedRevision: saved.revision, operations: [
+                { tool: "replace_motion_plan", params: { title: "Reference audio export", scenes: [{ ...scene, end_frame: 150 }] } },
+            ] });
+            await setupPage.goto(target + `/projects/${projectId}/editor`);
+            await setupPage.getByRole("button", { name: "Export video" }).click();
+            await setupPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 90_000 });
+            const [file] = await Promise.all([
+                setupPage.waitForEvent("download"), setupPage.getByRole("link", { name: "Download MP4" }).click(),
+            ]);
+            const exported = path.join(directory, "reference-audio-export.mp4");
+            await file.saveAs(exported);
+            console.log("Browser export with reference audio:", exported);
+        }
+        console.log("Reference audio extraction, trim, setup recovery, and mute passed. Extracted WAV:", path.join(process.env.NODE_MEDIA_ROOT, "private", derived.path));
+        await setupPage.close();
+    }
     const page = await context.newPage();
     await page.route(base + "/__motion_tool", (r) => r.fulfill({ contentType: "text/html",
         body: '<!doctype html><meta name="csrf-token" content="' + a.csrf + '"><title>Motion tools</title>' }));

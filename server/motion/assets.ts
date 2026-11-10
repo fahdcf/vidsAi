@@ -49,20 +49,30 @@ export async function saveMotionAsset(projectId: number, upload: { buffer: Buffe
     await fs.mkdir(path.dirname(filename), { recursive: true });
     await fs.writeFile(filename, upload.buffer, { flag: "wx" });
     const sha256 = createHash("sha256").update(upload.buffer).digest("hex");
+    const provenanceJson = JSON.stringify(provenance);
+    let savedId: string;
     try {
         const duration = kind === "audio" ? await mediaDuration(filename, mime) : null;
-        db.transaction(() => {
+        savedId = db.transaction(() => {
+            if (kind === "audio" && provenance.kind === "reference_derived") {
+                const existing = db.prepare(`SELECT a.id FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
+                    WHERE a.project_id=? AND m.kind=? AND m.sha256=? AND m.provenance=? LIMIT 1`)
+                    .get(projectId, kind, sha256, provenanceJson) as { id: string } | undefined;
+                if (existing) return existing.id;
+            }
             insert("project_assets", {
                 id, project_id: projectId, path: storedPath, name: upload.originalname.slice(0, 255),
                 mime, size: upload.buffer.length, duration_seconds: duration, created_at: now(), updated_at: now(),
             });
-            insert("motion_asset_metadata", { asset_id: id, kind, sha256, provenance: JSON.stringify(provenance) });
-        })();
+            insert("motion_asset_metadata", { asset_id: id, kind, sha256, provenance: provenanceJson });
+            return id;
+        }).immediate();
     } catch (error) {
         await fs.unlink(filename);
         throw error;
     }
-    return { id, kind, sha256, provenance, url: `${origin}/projects/${projectId}/assets/${id}` };
+    if (savedId !== id) await fs.unlink(filename);
+    return { id: savedId, kind, sha256, provenance, url: `${origin}/projects/${projectId}/assets/${savedId}` };
 }
 
 export function validateMotionAssetOwnership(projectId: number, document: Document) {

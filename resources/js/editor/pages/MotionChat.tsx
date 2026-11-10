@@ -20,6 +20,7 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
     const [setup, setSetup] = useState(pendingSetup);
     const [reference, setReference] = useState<MotionReferenceSelection | null>(initialAttachments?.reference ?? null);
     const [audio, setAudio] = useState<MotionAudioSelection | null>(initialAttachments?.audio ?? null);
+    const [muteReferenceAudio, setMuteReferenceAudio] = useState(initialAttachments?.muteReferenceAudio ?? false);
     const [logo, setLogo] = useState<File | null>(initialAttachments?.logo ?? null);
     const [relinkSelection, setRelinkSelection] = useState<MotionReferenceSelection | null>(null);
     const [progress, setProgress] = useState<MotionUploadProgress | null>(null);
@@ -58,7 +59,7 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
 
     async function attach(files: MotionSetupFiles) {
         if (!setup || !runId || operation.current) return;
-        if ((setup.reference && !files.reference) || (setup.audio && !files.audio) || (setup.logo && !files.logo)) {
+        if ((setup.audio && !files.audio) || (setup.logo && !files.logo)) {
             setError("Choose all the attachments for this project.");
             return;
         }
@@ -66,7 +67,7 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
         operation.current = controller;
         setError("");
         try {
-            await uploadMotionSetup(projectId, runId, files, controller.signal, setProgress, receipts.current);
+            await uploadMotionSetup(projectId, runId, files, controller.signal, setProgress, receipts.current, setup, seconds);
             if (!controller.signal.aborted) setSetup(null);
         } catch (error) {
             if (!controller.signal.aborted) setError(error instanceof Error ? error.message : "Project setup could not finish.");
@@ -288,18 +289,21 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
         {setup && <section className="panel motion-chat-setup">
             <h2>Preparing your project</h2>
             {progress && <div role="status">
-                <p>{progress.name === "project setup" ? "Saving project attachments…" : `Uploading ${progress.name}…`}</p>
+                <p>{progress.name === "extracting reference audio" ? "Extracting reference audio…"
+                    : progress.name === "project setup" ? "Saving project attachments…" : `Uploading ${progress.name}…`}</p>
                 <progress max={1} value={progress.fraction ?? undefined} aria-label={`Upload ${progress.name}`} />
             </div>}
             {error && <p className="notice warning" role="alert">{error}</p>}
             {setup && !progress && (error || !initialAttachments) && <form onSubmit={(event) => {
                 event.preventDefault();
-                void attach({ reference, logo, audio });
+                void attach({ reference, logo, audio, muteReferenceAudio });
             }}>
                 {setup.reference && <><ReferencePicker onChange={setReference} />{reference && <p>{reference.file.name}</p>}</>}
                 {setup.logo && <label>Logo<input type="file" accept=".png,.jpg,.jpeg"
                     onChange={(event) => setLogo(event.currentTarget.files?.[0] ?? null)} />{logo?.name}</label>}
-                {setup.audio && <><AudioPicker seconds={seconds} onChange={setAudio} />{audio && <p>{audio.file.name}</p>}</>}
+                {(setup.audio || setup.referenceAudio === "auto") && <><AudioPicker seconds={seconds} onChange={setAudio} />{audio && <p>{audio.file.name}</p>}</>}
+                {setup.referenceAudio === "auto" && <label><input type="checkbox" checked={muteReferenceAudio}
+                    onChange={(event) => setMuteReferenceAudio(event.currentTarget.checked)} /> Mute reference audio</label>}
                 <button type="submit" className="primary">Resume setup</button>
             </form>}
             <p className="muted">The configured AI service analyzes reference samples. The browser renders the final video on this device.</p>
@@ -316,7 +320,8 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
                 {(run?.attachments.reference || reference) && <span><Icon name="film" size={14} />
                     {run?.attachments.reference?.name ?? reference?.file.name}</span>}
                 {(run?.attachments.logo || logo) && <span><Icon name="image" size={14} /> Logo</span>}
-                {(run?.attachments.audio || audio) && <span><Icon name="music" size={14} /> Soundtrack</span>}
+                {(run?.attachments.audio || audio) && <span><Icon name="music" size={14} />
+                    {run?.attachments.audioSource === "reference" ? "Audio from reference" : "Soundtrack"}</span>}
             </div>
             {runError && <p role="alert" className="notice warning">{runError}</p>}
             {sessionExpired && <a href="/login" className="button ghost">Sign in to resume</a>}

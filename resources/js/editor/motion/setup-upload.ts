@@ -1,15 +1,19 @@
 import { api } from "../api";
 import type { MotionAudioSelection } from "./AudioPicker";
 import type { MotionReferenceSelection } from "./ReferencePicker";
-import { bindUploadedMotionReference } from "./reference-storage";
+import { bindUploadedMotionReference, loadMotionReference, type SavedMotionReference } from "./reference-storage";
+import type { motionAssetProvenance } from "../../../../shared/motion/assets";
+import type { z } from "zod";
+import { analyzeMotionAudio, extractReferenceAudio } from "./audio-analysis";
 
-export type MotionSetupRequirements = { reference: boolean; audio: boolean; logo: boolean };
-export type MotionSetupFiles = { reference: MotionReferenceSelection | null; audio: MotionAudioSelection | null; logo: File | null };
+export type MotionSetupRequirements = { reference: boolean; audio: boolean; logo: boolean; referenceAudio?: "auto" | "muted" };
+export type MotionSetupFiles = { reference: MotionReferenceSelection | null; audio: MotionAudioSelection | null; logo: File | null; muteReferenceAudio?: boolean };
 export type MotionUploadProgress = { name: string; fraction: number | null };
 export type MotionUploadReceipts = {
-    reference?: { selection: MotionReferenceSelection; id: string };
+    reference?: { selection: MotionReferenceSelection; saved: SavedMotionReference };
     logo?: { file: File; id: string };
     audio?: { file: File; id: string };
+    extracted?: { key: string; audio: Pick<MotionAudioSelection, "file" | "cues"> | null };
 };
 
 function upload<T>(url: string, form: FormData, signal: AbortSignal, progress: (fraction: number | null) => void) {
@@ -37,27 +41,30 @@ function upload<T>(url: string, form: FormData, signal: AbortSignal, progress: (
 
 export async function uploadMotionSetup(
     projectId: number, runId: string, files: MotionSetupFiles, signal: AbortSignal, progress: (value: MotionUploadProgress) => void,
-    receipts: MotionUploadReceipts,
+    receipts: MotionUploadReceipts, requirements: MotionSetupRequirements, seconds: number,
 ) {
     const base = `/projects/${projectId}`;
-    async function add<T>(name: string, file: File, kind?: "image" | "audio") {
+    async function add<T>(name: string, file: File, kind?: "image" | "audio", provenance: z.infer<typeof motionAssetProvenance> = { kind: "imported" }) {
         const form = new FormData();
         form.append("file", file);
         if (kind) {
             form.append("kind", kind);
-            form.append("provenance", JSON.stringify({ kind: "imported" }));
+            form.append("provenance", JSON.stringify(provenance));
         }
         progress({ name, fraction: 0 });
         return upload<T>(base + (kind ? "/motion-assets" : "/assets"), form, signal, (fraction) => progress({ name, fraction }));
     }
-    let referenceBindingId = null;
+    let reference: SavedMotionReference | null = null;
     if (files.reference) {
-        if (receipts.reference?.selection === files.reference) referenceBindingId = receipts.reference.id;
+        if (receipts.reference?.selection === files.reference) reference = receipts.reference.saved;
         else {
             const { asset_id } = await add<{ asset_id: string }>("reference", files.reference.file);
-            referenceBindingId = (await bindUploadedMotionReference(projectId, asset_id, files.reference, signal))?.bindingId ?? null;
-            if (referenceBindingId) receipts.reference = { selection: files.reference, id: referenceBindingId };
+            reference = await bindUploadedMotionReference(projectId, asset_id, files.reference, signal);
+            receipts.reference = { selection: files.reference, saved: reference };
         }
+    } else if (requirements.reference) {
+        reference = await loadMotionReference(projectId, signal);
+        if (!reference?.available) throw new Error("Choose the reference file to resume setup.");
     }
     let logoId = null;
     if (files.logo) {
@@ -68,15 +75,41 @@ export async function uploadMotionSetup(
         }
         logoId = receipts.logo.id;
     }
+    let selection: Pick<MotionAudioSelection, "file" | "cues"> | null = files.audio;
+    let provenance: z.infer<typeof motionAssetProvenance> = { kind: "imported" };
+    let referenceAudio: "silent" | "muted" | undefined;
+    if (requirements.referenceAudio && !selection) {
+        if (files.muteReferenceAudio || requirements.referenceAudio === "muted") referenceAudio = "muted";
+        else if (reference?.metadata.interval) {
+            const { start, end } = reference.metadata.interval;
+            const clippedEnd = Math.min(end, start + seconds, 30);
+            const key = JSON.stringify([reference.assetId, start, clippedEnd]);
+            if (receipts.extracted?.key !== key) {
+                progress({ name: "extracting reference audio", fraction: null });
+                let source: Blob | undefined = files.reference?.file;
+                if (!source) {
+                    const response = await fetch(reference.url, { signal });
+                    if (!response.ok) throw new Error("The saved reference could not be loaded. Choose it again to resume.");
+                    source = await response.blob();
+                }
+                const file = await extractReferenceAudio(source, { start, end: clippedEnd }, signal);
+                const extracted = file ? { file, ...await analyzeMotionAudio(file, seconds, signal) } : null;
+                receipts.extracted = { key, audio: extracted };
+            }
+            selection = receipts.extracted.audio;
+            if (!selection) referenceAudio = "silent";
+            provenance = { kind: "reference_derived", sourceId: reference.assetId, startSeconds: start, endSeconds: clippedEnd };
+        } else referenceAudio = "silent";
+    }
     let audio = null;
-    if (files.audio) {
-        if (receipts.audio?.file !== files.audio.file) {
-            receipts.audio = { file: files.audio.file, ...(await add<{ id: string }>("soundtrack", files.audio.file, "audio")) };
+    if (selection) {
+        if (receipts.audio?.file !== selection.file) {
+            receipts.audio = { file: selection.file, ...(await add<{ id: string }>("soundtrack", selection.file, "audio", provenance)) };
         }
-        const cues = [...new Map(files.audio.cues.map(({ seconds, confidence, source }) =>
+        const cues = [...new Map(selection.cues.map(({ seconds, confidence, source }) =>
             [Math.floor(seconds * 30), { frame: Math.floor(seconds * 30), confidence, source }])).values()];
         audio = { id: receipts.audio.id, cues };
     }
     progress({ name: "project setup", fraction: null });
-    await api(`/motion-runs/${runId}/setup`, { referenceBindingId, logoId, audio }, "POST", signal);
+    await api(`/motion-runs/${runId}/setup`, { referenceBindingId: reference?.bindingId ?? null, logoId, audio, referenceAudio }, "POST", signal);
 }

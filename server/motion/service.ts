@@ -45,6 +45,7 @@ export function motionRunView(run: MotionRun, after = 0) {
             reference: reference ? { name: reference.name, bindingId: reference.bindingId, available: reference.available } : null,
             logo: snapshot.tracks.overlays.some(({ id }) => id === "motion-logo"),
             audio: snapshot.tracks.audio.some(({ id }) => id === "motion-soundtrack"),
+            audioSource: snapshot.metadata.motion_audio_source,
         },
         createdAt: run.created_at,
         updatedAt: run.updated_at,

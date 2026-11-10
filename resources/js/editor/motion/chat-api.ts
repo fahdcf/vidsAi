@@ -22,7 +22,8 @@ export type MotionRunView = {
     stages: { name: string; lane: "provider" | "browser" | "local"; status: "pending" | "running" | "done" | "failed" | "cancelled";
         startedAt: number | null; error: string | null;
         activity: { state: string; mode: string; model: string } | null }[];
-    attachments: { reference: { name: string; bindingId: string; available: boolean } | null; logo: boolean; audio: boolean };
+    attachments: { reference: { name: string; bindingId: string; available: boolean } | null; logo: boolean; audio: boolean;
+        audioSource?: "reference" | "uploaded" | "silent" | "muted" };
     messages: { id: number; role: "user" | "assistant" | "system"; text: string; created_at: number; run_id: string }[];
     events: MotionEvent[];
 };

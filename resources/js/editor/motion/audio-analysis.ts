@@ -1,6 +1,39 @@
-import { ADTS, AudioSampleSink, BlobSource, Input, MP3, MP4, WAVE } from "mediabunny";
+import { ADTS, AudioSampleSink, BlobSource, BufferTarget, Conversion, Input, MP3, MP4, Output, WAVE, WavOutputFormat } from "mediabunny";
 
 export type AudioCue = { seconds: number; confidence: number; source: "detected" | "manual" };
+
+export async function extractReferenceAudio(source: Blob, interval: { start: number; end: number }, signal: AbortSignal) {
+    signal.throwIfAborted();
+    const input = new Input({ source: new BlobSource(source, { maxCacheSize: 1024 * 1024 }), formats: [MP4] });
+    let conversion: Conversion | undefined;
+    const abort = () => { void conversion?.cancel().catch(() => {}); input.dispose(); };
+    signal.addEventListener("abort", abort, { once: true });
+    try {
+        const audio = await input.getPrimaryAudioTrack();
+        if (!audio) return null;
+        const video = await input.getPrimaryVideoTrack();
+        if (!video) throw new Error("The reference video could not be read.");
+        const origin = await video.getFirstTimestamp();
+        const start = origin + interval.start;
+        const end = origin + interval.end;
+        if (await audio.getFirstTimestamp() >= end || await audio.computeDuration() <= start) return null;
+        const target = new BufferTarget();
+        conversion = await Conversion.init({
+            input, output: new Output({ format: new WavOutputFormat(), target }), tracks: "primary",
+            video: { discard: true }, trim: { start, end }, showWarnings: false, tags: {},
+            audio: { codec: "pcm-s16", sampleRate: 48000, numberOfChannels: Math.min(2, await audio.getNumberOfChannels()) },
+        });
+        signal.throwIfAborted();
+        if (!conversion.isValid) throw new Error("The reference audio could not be decoded. Retry, replace it, or mute it.");
+        await conversion.execute();
+        signal.throwIfAborted();
+        if (!target.buffer) throw new Error("The reference audio could not be extracted.");
+        return new File([target.buffer], "Reference audio.wav", { type: "audio/wav" });
+    } finally {
+        signal.removeEventListener("abort", abort);
+        input.dispose();
+    }
+}
 
 export async function analyzeMotionAudio(source: Blob, seconds: number, signal: AbortSignal) {
     if (!(seconds > 0 && seconds <= 30) || !source.size || source.size > 10 * 1024 * 1024) {

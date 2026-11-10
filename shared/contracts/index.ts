@@ -125,6 +125,7 @@ export const documentSchema = z
       .object({
         workflow: z.enum(["video_from_scratch", "motion_graphics"]).default("video_from_scratch"),
         motion_cues: motionCuesSchema.optional(),
+        motion_audio_source: z.enum(["reference", "uploaded", "silent", "muted"]).optional(),
         motion_generation: motionGenerationSchema.optional(),
         language: z.string(),
         platform: z.string().nullable(),

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { normalizeDocument } from "../../shared/contracts";
 import { motionCuesSchema } from "../../shared/motion/schema";
+import { motionAssetProvenance } from "../../shared/motion/assets";
+import { referenceMetadata } from "../../shared/motion/browser-tools";
 import { db, insert, json, project, update } from "../database";
 import { document } from "../document";
 import { fail, hash } from "../security";
@@ -8,12 +10,15 @@ import { createMotionProject, motionProjectInput } from "./projects";
 import { motionReference } from "./references";
 import { appendMotionEvent, createMotionRun, motionRun, ownedMotionRun } from "./store";
 
-const requirements = z.object({ reference: z.boolean(), audio: z.boolean(), logo: z.boolean() }).strict();
+const requirements = z.object({ reference: z.boolean(), audio: z.boolean(), logo: z.boolean(),
+    referenceAudio: z.enum(["auto", "muted"]).optional(),
+}).strict().refine((value) => !value.referenceAudio || (value.reference && !value.audio));
 const createInput = motionProjectInput.extend({ attachments: requirements });
 const finishInput = z.object({
     referenceBindingId: z.uuid().nullable(),
     logoId: z.uuid().nullable(),
     audio: z.object({ id: z.uuid(), cues: motionCuesSchema }).strict().nullable(),
+    referenceAudio: z.enum(["silent", "muted"]).optional(),
 }).strict();
 type SetupRow = { requirements: string; setup_hash: string; finished_hash: string | null };
 
@@ -62,15 +67,18 @@ export function finalizeMotionSetup(runId: string, accountId: number, raw: unkno
         const snapshot = document(p);
         if (snapshot.revision !== run.starting_revision) fail(409, "This motion project changed during setup.");
         const required = requirements.parse(json(setup.requirements, null));
+        const audioMatches = required.referenceAudio === "auto" ? Boolean(input.audio) !== Boolean(input.referenceAudio)
+            : required.referenceAudio === "muted" ? !input.audio && input.referenceAudio === "muted"
+                : required.audio === Boolean(input.audio) && !input.referenceAudio;
         if (required.reference !== Boolean(input.referenceBindingId) || required.logo !== Boolean(input.logoId) ||
-            required.audio !== Boolean(input.audio)) fail(422, "Complete the attachments selected for this project.");
+            !audioMatches) fail(422, "Complete the attachments selected for this project.");
+        const ref = input.referenceBindingId ? motionReference(run.project_id) : null;
         if (input.referenceBindingId) {
-            const ref = motionReference(run.project_id);
             if (!ref?.available || ref.bindingId !== input.referenceBindingId) fail(409, "Relink the current reference.");
         }
         const asset = (id: string, kind: string) => {
-            const row = db.prepare(`SELECT a.duration_seconds FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
-                WHERE a.id=? AND a.project_id=? AND m.kind=?`).get(id, p.id, kind) as { duration_seconds: number | null } | undefined;
+            const row = db.prepare(`SELECT a.duration_seconds,m.provenance FROM project_assets a JOIN motion_asset_metadata m ON m.asset_id=a.id
+                WHERE a.id=? AND a.project_id=? AND m.kind=?`).get(id, p.id, kind) as { duration_seconds: number | null; provenance: string } | undefined;
             if (!row) fail(422, "An attachment is unavailable for this project.");
             return row;
         };
@@ -83,12 +91,24 @@ export function finalizeMotionSetup(runId: string, accountId: number, raw: unkno
         }
         if (input.audio) {
             const soundtrack = asset(input.audio.id, "audio");
-            const end = Math.min(snapshot.total_frames, Math.floor((soundtrack.duration_seconds ?? 0) * snapshot.fps));
+            const provenance = motionAssetProvenance.parse(json(soundtrack.provenance, null));
+            const fromReference = provenance.kind === "reference_derived";
+            if (fromReference) {
+                const interval = ref ? referenceMetadata.parse(ref.metadata).interval : null;
+                if (required.referenceAudio !== "auto" || !interval || provenance.sourceId !== ref?.assetId ||
+                    provenance.startSeconds !== interval.start || provenance.endSeconds > interval.end) {
+                    fail(422, "Use audio from the selected reference interval.");
+                }
+            }
+            const end = Math.min(snapshot.total_frames, Math.floor((soundtrack.duration_seconds ?? 0) * snapshot.fps + 1e-6));
             if (end < 1) fail(422, "The soundtrack has no playable audio.");
             snapshot.tracks.audio.push({ id: "motion-soundtrack", url: `asset:${input.audio.id}`, type: "music",
-                start_frame: 0, end_frame: end, volume: 0.65, fade_in_frames: Math.min(4, end), fade_out_frames: Math.min(12, end) });
+                start_frame: 0, end_frame: end, volume: fromReference ? 1 : 0.65,
+                fade_in_frames: fromReference ? 0 : Math.min(4, end), fade_out_frames: fromReference ? 0 : Math.min(12, end) });
             snapshot.metadata.motion_cues = input.audio.cues.filter(({ frame }) => frame < end);
+            snapshot.metadata.motion_audio_source = fromReference ? "reference" : "uploaded";
         }
+        if (input.referenceAudio) snapshot.metadata.motion_audio_source = input.referenceAudio;
         const ready = normalizeDocument(snapshot);
         update("projects", p.id, { edit_state: JSON.stringify(ready) });
         db.prepare("UPDATE motion_runs SET reference_binding_id=?,snapshot=?,updated_at=? WHERE id=?")
