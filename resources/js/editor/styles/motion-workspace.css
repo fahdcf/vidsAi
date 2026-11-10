@@ -74,6 +74,10 @@ main:has(> .motion-chat) > .page-heading { width: min(100%, 1020px); margin-inli
 .motion-review-panel label, .motion-scene-controls label { display: grid; gap: 6px; }
 .motion-scene-controls fieldset { min-width: 0; border: 0; margin: 0; padding: 0; display: grid; gap: 13px; }
 .motion-scene-controls button[type=submit] { justify-self: start; }
+.graph-layer-controls { display: grid; gap: 12px; padding-top: 16px; margin-top: 16px; border-top: 1px solid var(--line, #ffffff20); }
+.graph-layer-controls .motion-fields { gap: 8px; }
+.graph-layer-controls input, .graph-layer-controls select { min-width: 0; width: 100%; }
+.graph-layer-controls details > fieldset { padding: 8px 0; }
 .motion-palette-fields { display: flex; flex-wrap: wrap; gap: 8px; }
 .motion-palette-fields label { text-transform: capitalize; min-width: 70px; font-size: 12px; }
 .motion-palette-fields input { min-height: 36px; padding: 3px; width: 100%; }

@@ -42,7 +42,7 @@ export default function MotionSceneControls({ scene, scenes, mode, busy, save }:
     const index = scenes.findIndex(({ id }) => id === scene.id);
     const next = scenes.find(({ start_frame }) => start_frame === scene.end_frame);
     const draftCopy = motionSceneCopy(scene);
-    const text = scene.type === "graph" ? graphText(scene.params.layers) : draftCopy ? [{ id: "", text: draftCopy }] : [];
+    const text = scene.type === "graph" ? mode === "editor" ? [] : graphText(scene.params.layers) : draftCopy ? [{ id: "", text: draftCopy }] : [];
     const review = mode !== "style";
     const style = mode !== "review";
     const colors = Object.entries(scene.palette);

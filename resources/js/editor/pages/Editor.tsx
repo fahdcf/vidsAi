@@ -29,6 +29,7 @@ import { api } from "../api";
 
 import MusicLibrary from "../MusicLibrary";
 import MotionSceneControls from "../motion/MotionSceneControls";
+import GraphLayerControls from "../motion/GraphLayerControls";
 import "../styles/motion-workspace.css";
 import { useBrowserExport } from "../browser-export/useBrowserExport";
 import { browserExportCanvas, browserExportQualities, browserRenderProfile, supportsHighMotionQuality,
@@ -77,6 +78,7 @@ export default function Editor({
     }
 
     const [selected, setSelected] = useState(doc.tracks.motion_graphics[0]?.id || doc.tracks.video[0]?.id || "");
+    const [graphSelection, setGraphSelection] = useState<{ scene: string; layer: string }>();
 
     const [tab, setTab] = useState("Scene");
 
@@ -933,6 +935,9 @@ export default function Editor({
                         >
                             {tab === "Scene" && motionScene && <MotionSceneControls key={doc.revision} scene={motionScene}
                                 scenes={doc.tracks.motion_graphics} mode="editor" busy={busy} save={(operations) => void edit(operations)} />}
+                            {tab === "Scene" && motionScene?.type === "graph" && <GraphLayerControls key={`layers-${doc.revision}`}
+                                scene={motionScene} selected={graphSelection?.scene === motionScene.id ? graphSelection.layer : undefined}
+                                select={(layer) => setGraphSelection({ scene: motionScene.id, layer })} busy={busy} save={(operations) => void edit(operations)} />}
                             {tab === "Scene" && clip && !motionScene && (
                                 <form
                                     onSubmit={(e) => {

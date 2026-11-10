@@ -35,7 +35,8 @@ const server = await createServer({
     configLoader: "native",
     cacheDir: "node_modules/.cache/motion-tools-test",
     server: { host: "127.0.0.1", port: 0, hmr: false },
-    optimizeDeps: { noDiscovery: true, include: ["mediabunny", "zod"] },
+    optimizeDeps: { noDiscovery: true, include: ["mediabunny", "zod", ...(process.argv.includes("--graph-editor")
+        ? ["react", "react-dom", "react-dom/client", "remotion", "@remotion/web-renderer"] : [])] },
 });
 let browser;
 try {
@@ -750,6 +751,62 @@ try {
         assert.notDeepEqual(pixels[1], pixels[0]);
         assert.deepEqual(pixels[2], [36, 88, 255]);
         console.log("A generated graph rendered an owned PNG inside its group mask and an imported SVG as normalized vector data.");
+    }
+    if (process.argv.includes("--graph-editor")) {
+        assert.ok(componentCompatibility, "Use --component-compatibility with --graph-editor.");
+        graphPage.setDefaultTimeout(10_000);
+        await graphPage.goto(`${target}/projects/${graphProject}/editor`);
+        const tools = graphPage.getByRole("button", { name: "Tools", exact: true });
+        if (await tools.getAttribute("aria-pressed") === "false") await tools.click();
+        await graphPage.getByRole("region", { name: "Composition layers" }).waitFor({ timeout: 8_000 }).catch(async (error) => {
+            throw new Error(await graphPage.locator("body").innerText(), { cause: error });
+        });
+        await graphPage.getByLabel("Composition layer", { exact: true }).selectOption("layer-2");
+        await graphPage.getByLabel("Layer text", { exact: true }).fill("EDITED OPENING");
+        await graphPage.getByLabel("Layer X", { exact: true }).fill("0.65");
+        await graphPage.getByLabel("Layer paint", { exact: true }).selectOption("success");
+        await graphPage.getByLabel("Layer font", { exact: true }).selectOption("space_mono");
+        await graphPage.getByLabel("Font weight", { exact: true }).selectOption("700");
+        await graphPage.getByText("Animation intervals", { exact: true }).click();
+        await graphPage.getByRole("button", { name: "Add interval", exact: true }).click();
+        await graphPage.getByRole("group", { name: "Interval 1" }).getByLabel("end", { exact: true }).fill("0.5");
+        const save = async (button, endpoint = "commands") => {
+            const [response] = await Promise.all([
+                graphPage.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith(`/${endpoint}`)),
+                graphPage.getByRole("button", { name: button, exact: true }).click(),
+            ]);
+            assert.ok(response.ok(), await response.text());
+        };
+        await save("Save layer");
+        const saved = document(project(graphProject));
+        const changed = saved.tracks.motion_graphics[0].params.layers[1];
+        assert.equal(changed.text, "EDITED OPENING");
+        assert.equal(changed.transform.x, 0.65);
+        assert.equal(changed.color, "success");
+        assert.deepEqual(changed.typography, { family: "space_mono", weight: 700 });
+        assert.equal(changed.animation[0].end, 0.5);
+        await save("Send backward");
+        assert.deepEqual(document(project(graphProject)).tracks.motion_graphics[0].params.layers.map(({ id }) => id), ["layer-2", "layer-1"]);
+        await save("Undo", "restore-revision");
+        assert.deepEqual(document(project(graphProject)).tracks.motion_graphics[0].params.layers.map(({ id }) => id), ["layer-1", "layer-2"]);
+        await save("Undo", "restore-revision");
+        assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.layers[1].text, "Get transcript");
+        await graphPage.goto(base + "/__motion_graph");
+        const exported = await graphPage.evaluate(async ({ saved, accountId }) => {
+            const { runBrowserExport, loadBrowserExport } = await import("/resources/js/editor/browser-export/jobs.ts");
+            const snapshot = { ...saved, width: 640, height: 360, total_frames: 30,
+                tracks: { ...saved.tracks, motion_graphics: [{ ...saved.tracks.motion_graphics[0], end_frame: 30 }] } };
+            const scope = { projectId: snapshot.project_id, accountId };
+            const exportJob = runBrowserExport(scope, snapshot, {}, AbortSignal.timeout(60_000), () => {});
+            snapshot.tracks.motion_graphics[0].params.layers[1].text = "Later edit";
+            await exportJob;
+            const job = await loadBrowserExport(scope);
+            return { savedText: job.snapshot.tracks.motion_graphics[0].params.layers[1].text, state: job.state, size: job.output?.size };
+        }, { saved, accountId: String(a.owner) });
+        assert.equal(exported.savedText, "EDITED OPENING");
+        assert.equal(exported.state, "succeeded");
+        assert.ok(exported.size > 1_000);
+        console.log("Editor layer changes, sibling reorder and undo passed. The exported MP4 used its immutable layer snapshot.");
     }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {
