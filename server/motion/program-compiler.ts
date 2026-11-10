@@ -4,6 +4,7 @@ import ts from "typescript";
 import { motionCompilerVersion, motionSdkModule, sceneProgram, sceneProgramInput, type SceneProgramDiagnostic,
     type SceneProgramInput, type SceneProgram } from "../../shared/motion/scene-program";
 import { motionRendererVersion } from "../../shared/motion/registry";
+import { motionSdkHelpers } from "../../shared/motion/scene-sdk";
 
 const filename = "/scene.ts";
 const sdkFile = "/motion-sdk.d.ts";
@@ -12,15 +13,18 @@ const sdkTypes = `declare module "${motionSdkModule}" {
         properties: Readonly<Record<string, string | number | boolean>>; assetHandles: readonly string[] }>;
     export type MotionPoint = Readonly<{op: "M" | "L"; x: number; y: number} | {op: "Q"; cx: number; cy: number; x: number; y: number}
         | {op: "C"; c1x: number; c1y: number; c2x: number; c2y: number; x: number; y: number} | {op: "Z"}>;
+    export type MotionGradient = Readonly<{ x0: number; y0: number; x1: number; y1: number;
+        stops: readonly Readonly<{ at: number; color: string }>[] }>;
     export type MotionCommand = Readonly<{ id: string; kind: "rect"; x: number; y: number; width: number; height: number; color: string }>
         | Readonly<{ id: string; kind: "asset"; handle: string; x: number; y: number; width: number; height: number }>
         | Readonly<{ id: string; kind: "text"; x: number; y: number; text: string; size: number; maxWidth: number; color: string }>
         | Readonly<{ id: string; kind: "path"; x: number; y: number; points: readonly MotionPoint[]; color: string }>;
     export type MotionSceneSdk = Readonly<{ math: Readonly<Pick<Math, "sin" | "cos" | "PI">>;
-        rect(id: string, x: number, y: number, width: number, height: number, color: string): MotionCommand;
-        asset(id: string, handle: string, x: number, y: number, width: number, height: number): MotionCommand;
-        text(id: string, text: string, x: number, y: number, size: number, maxWidth: number, color: string): MotionCommand;
-        path(id: string, points: readonly MotionPoint[], x: number, y: number, color: string): MotionCommand }>;
+        rect(id: string, x: number, y: number, width: number, height: number, color: string): Extract<MotionCommand, { kind: "rect" }>;
+        asset(id: string, handle: string, x: number, y: number, width: number, height: number): Extract<MotionCommand, { kind: "asset" }>;
+        text(id: string, text: string, x: number, y: number, size: number, maxWidth: number, color: string): Extract<MotionCommand, { kind: "text" }>;
+        path(id: string, points: readonly MotionPoint[], x: number, y: number, color: string): Extract<MotionCommand, { kind: "path" }>;
+        ${Object.values(motionSdkHelpers).map(({ signature }) => signature).join(";\n        ")} }>;
 }`;
 
 export type ProgramCompilation = { program: SceneProgram; diagnostics: [] } | { program: null; diagnostics: SceneProgramDiagnostic[] };

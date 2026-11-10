@@ -7,9 +7,10 @@ import { build, preview } from "vite";
 import { tsImport } from "tsx/esm/api";
 
 const outDir = await mkdtemp(path.join(tmpdir(), "vidsai-runtime-"));
+const sdk = process.argv.includes("--sdk");
 const config = { configFile: false, publicDir: false, worker: { format: "es" }, build: {
-    outDir, rollupOptions: { input: "shared/motion/runtime/probe.ts", preserveEntrySignatures: "strict",
-        output: { entryFileNames: "probe.js" } },
+    outDir, rollupOptions: { input: { probe: "shared/motion/runtime/probe.ts", ...(sdk ? { "sdk-browser": "scripts/fixtures/motion-sdk-browser.ts" } : {}) },
+        preserveEntrySignatures: "strict", output: { entryFileNames: "[name].js" } },
 } };
 await build(config);
 await writeFile(path.join(outDir, "index.html"), "<!doctype html><title>Motion runtime verification</title>");
@@ -85,6 +86,29 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
     assert.equal(failure.diagnostic?.file, "scene.ts");
     assert.equal(failure.diagnostic?.line, 3, JSON.stringify(failure));
     console.log("The bundled worker evaluated a compiled TypeScript module and mapped a runtime exception back to its authored line.");
+    if (sdk) {
+        const { motionProgramExamples, motionProgramAuthoringGuide } = await tsImport("../server/motion/program-examples.ts", import.meta.url);
+        const guide = motionProgramAuthoringGuide();
+        for (const [index, example] of guide.examples.entries()) {
+            const authored = compileSceneProgram({ ...input, source: example.source });
+            assert.ok(authored.program, `${example.id} ${JSON.stringify(authored.diagnostics)}`);
+            const inspect = (program) => page.evaluate(async (program) => {
+                const { inspectMotionSdkExample } = await import("/sdk-browser.js");
+                return inspectMotionSdkExample(program);
+            }, program);
+            const rendered = await inspect(authored.program);
+            assert.ok(rendered.painted > 15, example.expected);
+            assert.equal(rendered.commands.length, motionProgramExamples[index].commands);
+            if (example.id === "type-reveal") assert.equal(rendered.commands[0].text, "FRA");
+            if (example.id === "mask") assert.ok(rendered.center[0] > 230 && rendered.nearEdge[0] < 40);
+            if (example.id === "gradient") assert.ok(rendered.center[0] > 120 && rendered.center[2] > 120);
+            if (example.id === "chart") assert.ok(rendered.commands[0].height < rendered.commands[1].height && rendered.commands[1].height < rendered.commands[2].height);
+            const broken = compileSceneProgram({ ...input, source: example.failingSource });
+            if (broken.program) await assert.rejects(inspect(broken.program), /scene worker rejected/i, example.failure);
+            else assert.ok(broken.diagnostics.length, example.failure);
+        }
+        console.log(`Verified all ${guide.examples.length} authored SDK examples and their failing variants against the compiler, worker and Canvas renderer.`);
+    }
 } finally {
     await browser?.close();
     await new Promise((resolve) => server.httpServer.close(resolve));

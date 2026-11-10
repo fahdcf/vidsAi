@@ -818,6 +818,10 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
         const input = { version: 1, source, assets: [], properties: [{ id: "accent", label: "Accent", kind: "color", default: "#ffaa11" }] };
         const request = { commandId: randomUUID(), expectedRevision: snapshot.revision, sceneId: scenes[0].id, input };
         const url = `${target}/projects/${graphProject}/motion-program`;
+        const guide = await (await fetch(url, { headers: a.headers })).json();
+        assert.equal(guide.module, "@vidsai/motion-sdk");
+        assert.equal(guide.examples.length, 11);
+        assert.ok(guide.helpers.some((signature) => signature.startsWith("waveform(")));
         const submit = (body, headers = a.headers) => fetch(url, { method: "POST", headers, body: JSON.stringify(body) });
         assert.equal((await submit(request, b.headers)).status, 404);
         assert.equal((await submit({ ...request, expectedRevision: snapshot.revision - 1 })).status, 409);

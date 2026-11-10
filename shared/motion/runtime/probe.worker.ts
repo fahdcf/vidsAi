@@ -3,11 +3,13 @@ import wasmLocation from "@jitl/quickjs-wasmfile-release-sync/wasm?url";
 import { newQuickJSWASMModuleFromVariant, newVariant } from "quickjs-emscripten-core";
 import { originalPositionFor, TraceMap } from "@jridgewell/trace-mapping";
 import { programCommands } from "../program-commands";
+import { motionSdkHelpers } from "../scene-sdk";
 import { probeLimits, probeRequest, type ProbeResult } from "./probe-contract";
 
 const heapPages = 256;
 const encoder = new TextEncoder();
 let loading: Promise<Awaited<ReturnType<typeof newQuickJSWASMModuleFromVariant>>> | undefined;
+const sdkFields = Object.entries(motionSdkHelpers).map(([name, helper]) => `${name}: ${helper.implementation}`).join(",\n");
 
 function runtimeDiagnostic(stack: string, sourceMap: string, offset: number): ProbeResult {
     const match = /scene\.js:(\d+)(?::(\d+))?/.exec(stack);
@@ -55,11 +57,13 @@ async function evaluate(raw: unknown): Promise<ProbeResult> {
                     const stringify = JSON.stringify;
                     delete Math.random;
                     const math = Object.freeze({ sin: Math.sin, cos: Math.cos, PI: Math.PI });
-                    const sdk = Object.freeze({ math,
-                        rect: ${program ? '(id, x, y, width, height, color) => ({ kind: "rect", id, x, y, width, height, color })' : '(x, y, width, height, color) => ({ kind: "rect", x, y, width, height, color })'},
-                        asset: ${program ? '(id, handle, x, y, width, height) => ({ kind: "asset", id, handle, x, y, width, height })' : '(handle, x, y, width, height) => ({ kind: "asset", handle, x, y, width, height })'},
-                        text: (id, text, x, y, size, maxWidth, color) => ({ kind: "text", id, text, x, y, size, maxWidth, color }),
+                    const clamp = (t) => Math.min(1, Math.max(0, t));
+                    const rect = ${program ? '(id, x, y, width, height, color) => ({ kind: "rect", id, x, y, width, height, color })' : '(x, y, width, height, color) => ({ kind: "rect", x, y, width, height, color })'};
+                    const asset = ${program ? '(id, handle, x, y, width, height) => ({ kind: "asset", id, handle, x, y, width, height })' : '(handle, x, y, width, height) => ({ kind: "asset", handle, x, y, width, height })'};
+                    const text = (id, text, x, y, size, maxWidth, color) => ({ kind: "text", id, text, x, y, size, maxWidth, color });
+                    const sdk = Object.freeze({ math, rect, asset, text,
                         path: (id, points, x, y, color) => ({ kind: "path", id, points, x, y, color }),
+                        ${program ? sdkFields : ""}
                     });
                     const input = ${input};
                     Object.freeze(input.assetHandles);

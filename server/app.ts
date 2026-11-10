@@ -25,6 +25,7 @@ import { mediaDuration } from "./media";
 import { reserveProviderRequest } from "./provider-budget";
 import { saveMotionAsset } from "./motion/assets";
 import { saveMotionProgram } from "./motion/programs";
+import { motionProgramAuthoringGuide } from "./motion/program-examples";
 import { bindMotionReference, motionReference, saveMotionReferenceAnalysis } from "./motion/references";
 import { createMotionRun, motionSnapshot, ownedMotionRun } from "./motion/store";
 import { motionCursor, motionOrchestrator, motionRunView, streamMotionEvents } from "./motion/service";
@@ -790,6 +791,10 @@ function ownMotionProject(req: express.Request) {
 app.post("/projects/:id/motion-program", async (req, res) => {
     const result = await saveMotionProgram(ownMotionProject(req), req.body);
     res.status(result.program ? 200 : 422).json(result);
+});
+app.get("/projects/:id/motion-program", (req, res) => {
+    ownMotionProject(req);
+    res.json(motionProgramAuthoringGuide());
 });
 
 app.get("/projects/:id/motion-reference", (req, res) => {

@@ -50,7 +50,7 @@ export function fitMotionText(ctx: MotionDrawingContext, value: string, family: 
     return { size: lower, lines, height: lower * 1.17 * lines.length };
 }
 
-export function drawMotionText(ctx: MotionDrawingContext, value: string, family: string, color: string, box: TextBox) {
+export function drawMotionText(ctx: MotionDrawingContext, value: string, family: string, color: string | CanvasGradient, box: TextBox) {
     if (!value) return;
     ctx.save();
     try {

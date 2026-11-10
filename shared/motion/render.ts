@@ -1,5 +1,5 @@
 import { alpha, appendMotionPath, clamp, drawMotionPath, easeOut, lerp, smooth } from "./draw";
-import type { MotionGraphNode } from "./graph";
+import type { MotionGraphNode, MotionPath } from "./graph";
 import type { MotionFrame } from "./registry";
 import { drawImpact, drawKineticWords } from "./typography-scenes";
 import { drawMotionText } from "./text";
@@ -50,6 +50,18 @@ function drawGraphAsset({ ctx, scene }: MotionFrame, assets: ReadyMotionAssets, 
     }
 }
 
+function programPathGeometry(program: BrowserMotionProgram, points: MotionPath) {
+    const key = JSON.stringify(points);
+    let geometry = program.geometry.get(key);
+    if (!geometry) {
+        geometry = new Path2D();
+        appendMotionPath(geometry, points, 1, 1);
+        if (program.geometry.size >= 32) program.geometry.delete(program.geometry.keys().next().value!);
+        program.geometry.set(key, geometry);
+    }
+    return geometry;
+}
+
 function drawProgram(frame: MotionFrame, assets: ReadyMotionAssets, progress: number) {
     const { ctx, width, height } = frame;
     const { program } = assets;
@@ -59,28 +71,34 @@ function drawProgram(frame: MotionFrame, assets: ReadyMotionAssets, progress: nu
         ctx.save();
         try {
             ctx.translate(command.x * width, command.y * height);
+            if (command.mask) {
+                const transform = ctx.getTransform();
+                ctx.scale(width, height);
+                ctx.clip(programPathGeometry(program, command.mask));
+                ctx.setTransform(transform);
+            }
             if (command.kind === "asset") {
                 const asset = program.handles.get(command.handle);
                 if (asset) drawGraphAsset(frame, assets, asset.id, asset.kind, command.width * unit, command.height * unit, progress);
-            } else if (command.kind === "text") {
+                continue;
+            }
+            let paint: string | CanvasGradient = command.color;
+            if (command.gradient) {
+                const { x0, y0, x1, y1, stops } = command.gradient;
+                paint = ctx.createLinearGradient(x0 * unit, y0 * unit, x1 * unit, y1 * unit);
+                for (const { at, color } of stops) paint.addColorStop(at, color);
+            }
+            if (command.kind === "text") {
                 const w = command.maxWidth * width, h = command.size * unit * 2.5;
-                drawMotionText(ctx, command.text, assets.fontFamily, command.color,
+                drawMotionText(ctx, command.text, assets.fontFamily, paint,
                     { x: -w / 2, y: -h / 2, width: w, height: h, maxSize: command.size * unit });
             } else if (command.kind === "path") {
-                const key = JSON.stringify(command.points);
-                let geometry = program.geometry.get(key);
-                if (!geometry) {
-                    geometry = new Path2D();
-                    appendMotionPath(geometry, command.points, 1, 1);
-                    if (program.geometry.size >= 32) program.geometry.delete(program.geometry.keys().next().value!);
-                    program.geometry.set(key, geometry);
-                }
                 ctx.scale(width, height);
-                ctx.fillStyle = command.color;
-                ctx.fill(geometry);
+                ctx.fillStyle = paint;
+                ctx.fill(programPathGeometry(program, command.points));
             } else {
                 const w = command.width * unit, h = command.height * unit;
-                ctx.fillStyle = command.color;
+                ctx.fillStyle = paint;
                 ctx.fillRect(-w / 2, -h / 2, w, h);
             }
         } finally { ctx.restore(); }
