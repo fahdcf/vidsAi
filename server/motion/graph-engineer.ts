@@ -21,9 +21,11 @@ const decision = {
     decision: z.string().trim().min(1).max(280),
     approximation: z.string().trim().min(1).max(240).nullable(),
 };
+export const authoredModuleProposal = z.object({ moduleBuild: z.string().regex(/^[a-f0-9]{64}$/), ...decision }).strict();
 export const graphEngineerSchema = z.union([
     z.object({ layers: z.array(layer).min(1).max(20), ...decision }).strict(),
     z.object({ composition: graphAuthoringInput, ...decision }).strict(),
+    authoredModuleProposal,
 ]);
 export type GraphEngineerProposal = z.infer<typeof graphEngineerSchema>;
 

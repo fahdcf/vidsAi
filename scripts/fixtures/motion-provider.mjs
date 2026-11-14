@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false, rejectRepair = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false, rejectRepair = false, workspaceModule = false } = {}) {
     const stages = [];
     let replacementAttempts = 0;
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
@@ -126,6 +126,32 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 })) };
                 break;
             case "motion-engineer": {
+                if (workspaceModule && artifact.target.id === graphic[1].id) {
+                    const { revision } = JSON.parse(prompt).context;
+                    const sceneId = artifact.target.id;
+                    if (!toolResults.length) {
+                        value = { toolRequest: { name: "write_module", args: { sceneId, expectedRevision: revision, program: {
+                            version: 1, assets: [], properties: [{ id: "copy", label: "Title", kind: "text", default: artifact.approvedCopy }],
+                            source: 'import type { MotionFrameInput, MotionSceneSdk } from "@vidsai/motion-sdk";\n' +
+                                'export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {\n' +
+                                'return [sdk.text("caption", String(input.properties.copy), 0.5, 0.7, 0.06, 0.8, "#ffffff"), ' +
+                                'sdk.rect("pulse", 0.5, 0.3, "invalid", 0.08, "#19db83")];\n}',
+                        } } } };
+                    } else if (toolResults.length === 1) {
+                        assert.ok(toolResults[0].result.diagnostics.some(({ code }) => code === "TS2345"));
+                        value = { toolRequest: { name: "patch_module", args: { sceneId, expectedRevision: revision,
+                            find: '"invalid"', replace: '0.1 + 0.15 * (1 + sdk.math.sin(input.frame / 5))' } } };
+                    } else if (toolResults.length === 2) {
+                        assert.match(toolResults[1].result.buildHash, /^[0-9a-f]{64}$/);
+                        value = { toolRequest: { name: "render_scene", args: { sceneId,
+                            frames: [artifact.target.start_frame, artifact.target.start_frame + 10] } } };
+                    } else {
+                        assert.equal(toolResults[2].result.buildHash, toolResults[1].result.buildHash);
+                        assert.ok(toolResults[2].result.layout.some(({ elements }) => elements.some(({ id }) => id === "pulse")));
+                        value = { moduleBuild: toolResults[1].result.buildHash, decision: "Compiled and rendered a novel editable pulse.", approximation: null };
+                    }
+                    break;
+                }
                 if (agentTools && artifact.target.id === graphic[0].id) {
                     if (!toolResults.length) {
                         value = { toolRequest: { name: "measure_layout", args: { sceneId: artifact.target.id } } };

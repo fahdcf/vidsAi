@@ -6,6 +6,7 @@ import { compileMotionPlan, motionPlanSchema, motionSceneExceedsBudget } from ".
 import { motionRendererVersion } from "../../shared/motion/registry";
 import { motionQualitySchema, motionSceneSchema, type MotionQuality } from "../../shared/motion/schema";
 import { applyMotionEdit } from "../../shared/motion/edit";
+import { sceneProgramInput } from "../../shared/motion/scene-program";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { referenceSceneSpecSchema } from "../../shared/motion/reference-spec";
 import { referenceClock, referenceTimeAt } from "../../shared/motion/time-map";
@@ -16,7 +17,8 @@ import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budge
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
 import { agentToolLimit, agentToolStageLimit, MotionToolYield, parseAgentToolRequest, type AgentToolSession } from "./agent-tools";
-import { validateMotionAssetOwnership } from "./assets";
+import { motionGraphAssets, validateMotionAssetOwnership } from "./assets";
+import { compileMotionProgram } from "./programs";
 import { sceneReferenceEvidence } from "./reference-segments";
 import { runReferenceSpec } from "./reference-spec";
 import { createMotionLayoutDraft, layoutForScene } from "./layout-draft";
@@ -390,7 +392,8 @@ function agentTools(run: MotionRun, step: MotionStep): AgentToolSession {
             return [{ request, result: { followups }, images: images.map((image) => imageBytes([image])[0]) }];
         }
         const { frames, layout, images } = previewSchema.parse(value);
-        return [{ request, result: { frames, layout }, images: imageBytes(images) }];
+        const scene = motionSceneSchema.safeParse(stored.payload).data;
+        return [{ request, result: { frames, layout, buildHash: scene?.type === "graph" ? scene.params.program?.buildHash : undefined }, images: imageBytes(images) }];
     });
     return {
         available: calls.length < agentToolLimit,
@@ -405,7 +408,9 @@ function agentTools(run: MotionRun, step: MotionStep): AgentToolSession {
             }
             if ((expectedSceneId ?? stageSceneId ?? run.target_scene_id) &&
                 sceneId !== (expectedSceneId ?? stageSceneId ?? run.target_scene_id)) throw new Error("The tool must target the assigned scene.");
-            const patched = history(role).reverse().find(({ request }) => request.name === "patch_scene" && request.args.sceneId === sceneId);
+            const ownHistory = history(role).filter((item) => item.request.args.sceneId === sceneId).reverse();
+            const patched = ownHistory.find(({ result }) => typeof result === "object" && result !== null && "candidate" in result &&
+                Boolean(result.candidate));
             const scene = patched ? motionSceneSchema.parse((patched.result as { candidate: unknown }).candidate)
                 : done(stepNames(round).assemble)
                 ? result<BuildArtifact>(run.id, stepNames(round).assemble).plan.scenes.find(({ id }) => id === sceneId)
@@ -436,11 +441,45 @@ function agentTools(run: MotionRun, step: MotionStep): AgentToolSession {
             } else if (request.name === "render_scene" && request.args.frames.some((frame) => frame < scene.start_frame || frame >= scene.end_frame)) {
                 throw new Error("The requested frames are outside the assigned scene.");
             } else if (request.name === "patch_scene") {
+                if (request.args.patch.params && ("program" in request.args.patch.params || "programValues" in request.args.patch.params)) {
+                    throw new Error("Use the scene module tools to update procedural code.");
+                }
                 const draft = { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [scene] } };
                 applyMotionEdit(draft, { tool: "update_motion_scene", params: { id: sceneId, patch: request.args.patch } });
                 validateMotionAssetOwnership(run.project_id, draft);
                 if (motionSceneExceedsBudget(draft.tracks.motion_graphics[0])) throw new Error("The patched candidate exceeds the scene budget.");
                 payload = { candidate: draft.tracks.motion_graphics[0] };
+            } else if (request.name === "read_workspace") {
+                payload = { revision: run.starting_revision, scene, reference: done("reference_spec")
+                    ? result<{ specs: z.infer<typeof referenceSceneSpecSchema>[] }>(run.id, "reference_spec").specs.find((item) => item.sceneId === sceneId)
+                    : undefined };
+            } else if (request.name === "compare_evidence") {
+                const name = round > 1 ? stepNames(round).compare : null;
+                const layout = done(`layout_check:${sceneId}`) ? layoutForScene(previewSchema.parse(result(run.id, `layout_check:${sceneId}`)), sceneId) : null;
+                const preview = [stepNames(round).preview, `motion_check:${sceneId}`].find(done);
+                const measured = preview && previewSchema.parse(result(run.id, preview)).layout?.filter((item) => item.sceneId === sceneId);
+                payload = { sourceLayout: layout, measured, comparison: name && done(name) ? result(run.id, name) : undefined };
+            } else if (request.name === "write_module" || request.name === "patch_module") {
+                const p = project(run.project_id);
+                if (request.args.expectedRevision !== run.starting_revision || !p || document(p).revision !== run.starting_revision ||
+                    scene.type !== "graph") throw new Error("The module needs the current revision of an assigned custom scene.");
+                const previousModule = ownHistory.find(({ result }) => typeof result === "object" && result !== null && "input" in result);
+                let input = sceneProgramInput.parse(request.name === "write_module" ? request.args.program
+                    : (previousModule?.result as { input?: unknown } | undefined)?.input ?? (scene.params.program && {
+                        version: scene.params.program.version, source: scene.params.program.source,
+                        properties: scene.params.program.properties, assets: scene.params.program.assets,
+                    }));
+                if (request.name === "patch_module") {
+                    const index = input.source.indexOf(request.args.find);
+                    if (index < 0 || input.source.indexOf(request.args.find, index + 1) >= 0) throw new Error("The patch needs exactly one matching source occurrence.");
+                    input = sceneProgramInput.parse({ ...input, source: input.source.slice(0, index) + request.args.replace +
+                        input.source.slice(index + request.args.find.length) });
+                }
+                const owned = motionGraphAssets(String(run.project_id));
+                if (input.assets.some(({ id, kind }) => !owned.some((item) => item.id === id && item.kind === kind))) {
+                    throw new Error("The scene module requested an unavailable project asset.");
+                }
+                payload = { scene, input };
             }
             if (JSON.stringify({ role, request, payload }).length > 80_000) throw new Error("The tool input exceeds the motion artifact allowance.");
             throw new MotionToolYield(role, request, payload);
@@ -460,7 +499,24 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
     const speechTiming = snapshot.metadata.motion_speech_requested && motionSteps(id).some(({ name, status }) => name === "audio_speech" && status === "done")
         ? result<{ spans: SpeechSpan[] }>(id, "audio_speech").spans : undefined;
     if (step.name.startsWith("agent_tool:")) {
-        const { payload } = json<SavedAgentTool>(step.input, {} as never);
+        const { request, payload } = json<SavedAgentTool>(step.input, {} as never);
+        if (request.name === "write_module" || request.name === "patch_module") {
+            const parsed = z.object({ scene: motionSceneSchema, input: sceneProgramInput }).parse(payload);
+            const { input, scene } = parsed;
+            if (scene.type !== "graph") throw new Error("A custom scene is required.");
+            const { program, diagnostics } = await compileMotionProgram(input);
+            signal.throwIfAborted();
+            if (!program) return { value: { input, diagnostics }, summary: `The scene compiler returned ${diagnostics.length} diagnostic(s).` };
+            const current = project(run.project_id);
+            if (!current || document(current).revision !== request.args.expectedRevision) {
+                return { value: { input, diagnostics: [{ phase: "compiler", code: "stale_revision", file: "scene.ts", line: 1,
+                    column: 1, message: "The project changed before the module could be saved." }] } };
+            }
+            const assets = [...new Map([...scene.assets, ...program.assets.map(({ id, kind }) => ({ id, kind }))].map((ref) => [ref.id, ref])).values()];
+            const candidate = motionSceneSchema.parse({ ...scene, assets, params: { ...scene.params, program, programValues: {} } });
+            if (motionSceneExceedsBudget(candidate)) throw new Error("The compiled scene exceeds its resource budget.");
+            return { value: { input, candidate, diagnostics, buildHash: program.buildHash }, summary: "Compiled the editable scene module." };
+        }
         return { value: payload };
     }
     const context = { brief: run.brief, document: snapshot, budget, signal, onProgress, speechTiming, tools: agentTools(run, step) };

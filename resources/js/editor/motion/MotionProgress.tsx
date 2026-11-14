@@ -25,6 +25,10 @@ export function motionStageName(name: string) {
                 case "patch_scene": return "Check scene patch";
                 case "sample_reference": return "Sample reference frame";
                 case "render_scene": return "Render scene samples";
+                case "read_workspace": return "Read scene workspace";
+                case "write_module": return "Compile scene module";
+                case "patch_module": return "Compile module patch";
+                case "compare_evidence": return "Compare scene evidence";
                 default: return "Motion tool";
             }
         }

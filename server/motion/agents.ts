@@ -13,11 +13,12 @@ import { resolveSceneProgramValues } from "../../shared/motion/scene-program";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
-import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes, type GraphEngineerProposal } from "./graph-engineer";
+import { authoredModuleProposal, compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes, type GraphEngineerProposal } from "./graph-engineer";
 import { motionGraphAssets, validateMotionAssetOwnership } from "./assets";
 import { motionThreeCost } from "../../shared/motion/three-scene";
 import { observeReferenceSheet } from "./reference-observer";
 import { mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
+import { motionProgramAuthoringGuide } from "./program-examples";
 
 const frame = z.number().int().nonnegative().max(7200);
 const storyboardScene = z.object({
@@ -354,6 +355,17 @@ function protectedCopy(scene: MotionScene) {
         .map((part) => part.normalize("NFC")).sort();
 }
 
+function compiledWorkspaceScene(context: MotionAgentContext, role: "motionEngineer" | "repair", sceneId: string, hash: string) {
+    const events = context.tools?.history(role, sceneId) ?? [];
+    const compiled = events.find(({ request, result }) =>
+        (request.name === "write_module" || request.name === "patch_module") &&
+        (result as { buildHash?: string }).buildHash === hash);
+    const rendered = events.find(({ request, result }) => request.name === "render_scene" &&
+        (result as { buildHash?: string }).buildHash === hash);
+    if (!compiled || !rendered) throw new Error("The referenced scene module must be compiled and rendered through this scene's tools.");
+    return motionSceneSchema.parse((compiled.result as { candidate: unknown }).candidate);
+}
+
 function requireSceneSpan(scene: MotionScene, expected: MotionStoryboard["scenes"][number]) {
     if (scene.id !== expected.id || scene.start_frame !== expected.start_frame || scene.end_frame !== expected.end_frame) {
         throw new Error("The scene ID or frame span changed.");
@@ -391,6 +403,14 @@ export async function runMotionEngineer(
                 end_frame: target.end_frame, componentVersion: 1, assets: [...used.values()], params });
         };
         const compile = (proposal: GraphEngineerProposal) => {
+            if ("moduleBuild" in proposal) {
+                const scene = compiledWorkspaceScene(context, "motionEngineer", target.id, proposal.moduleBuild);
+                const required = wording.replace(/\s+/g, " ").trim();
+                if (required && !editableSceneCopy(scene).join(" ").replace(/\s+/g, " ").includes(required)) {
+                    throw new Error("The module changed the approved copy.");
+                }
+                return scene;
+            }
             if (!("composition" in proposal)) return makeScene(compileEngineerGraph(proposal.layers, timing));
             const params = graphAuthoring.parse(proposal.composition);
             const required = wording.replace(/\s+/g, " ").trim();
@@ -405,6 +425,7 @@ export async function runMotionEngineer(
                 requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
                 availableAssets,
                 layoutReview,
+                moduleAuthoring: context.tools?.available ? { ...motionProgramAuthoringGuide(), examples: undefined } : undefined,
                 referenceSpec,
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
@@ -667,26 +688,38 @@ export function applyMotionRepairCut(document: Document, scenes: MotionScene[], 
     return compileMotionPlan(plan, candidate).tracks.motion_graphics;
 }
 
-export function runMotionRepair(context: MotionAgentContext, scene: MotionScene, issues: readonly MotionCritique["issues"][number][],
+export async function runMotionRepair(context: MotionAgentContext, scene: MotionScene, issues: readonly MotionCritique["issues"][number][],
     timeline?: { scenes: MotionScene[]; allowCuts: boolean }) {
     const relevant = issues.filter(({ sceneId }) => sceneId === scene.id);
     if (!relevant.length || relevant.length > 8) throw new Error("A repair needs a bounded issue for this scene.");
     const text = protectedCopy(scene);
     const nextScene = timeline?.allowCuts ? timeline.scenes.find(({ start_frame }) => start_frame === scene.end_frame) : undefined;
-    return runMotionAgent(context, "repair", "AGENT_COMPLEX", {
+    const schema = z.union([nextScene ? motionRepairSchema : motionBuildSchema, authoredModuleProposal]);
+    const resolve = (value: z.infer<typeof schema>): z.infer<typeof motionRepairSchema> => {
+        if (!("moduleBuild" in value)) return value;
+        const { moduleBuild, ...rest } = value;
+        return { ...rest, scene: compiledWorkspaceScene(context, "repair", scene.id, moduleBuild) };
+    };
+    const result = await runMotionAgent(context, "repair", "AGENT_COMPLEX", {
         scene, issues: relevant, protectedCopy: text, component: describeMotionComponent(scene.type),
         replacementComponents: describeMotionComponent("graph"),
         availableCut: nextScene && { id: scene.id, current: scene.end_frame, first: scene.start_frame + 1, last: nextScene.end_frame - 1 },
-    }, nextScene ? motionRepairSchema : motionBuildSchema, {
+    }, schema, {
         constrainedOutput: false,
         sceneId: scene.id,
-        validate: ({ scene: next, cut }: z.infer<typeof motionRepairSchema>) => {
+        validate: (proposal) => {
+            const { scene: next, cut } = resolve(proposal);
             if ((next.type !== scene.type && next.type !== "graph") || next.id !== scene.id ||
                 next.layer !== scene.layer ||
                 next.start_frame !== scene.start_frame || next.end_frame !== scene.end_frame ||
                 JSON.stringify(next.assets) !== JSON.stringify(scene.assets) ||
                 JSON.stringify(protectedCopy(next)) !== JSON.stringify(text)) {
                 throw new Error("The repair changed protected scene content.");
+            }
+            const priorProgram = scene.type === "graph" ? scene.params.program : undefined;
+            const nextProgram = next.type === "graph" ? next.params.program : undefined;
+            if (!("moduleBuild" in proposal) && JSON.stringify(priorProgram) !== JSON.stringify(nextProgram)) {
+                throw new Error("Use a compiled and browser-tested workspace module to change procedural code.");
             }
             if (timeline) {
                 const scenes = timeline.scenes.map((item) => item.id === next.id ? next : item);
@@ -697,4 +730,5 @@ export function runMotionRepair(context: MotionAgentContext, scene: MotionScene,
                 { ...context.document, tracks: { ...context.document.tracks, motion_graphics: [next] } });
         },
     });
+    return { ...result, value: resolve(result.value) };
 }

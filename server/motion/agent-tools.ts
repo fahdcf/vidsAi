@@ -1,25 +1,31 @@
 import { z } from "zod";
 import { motionEditParameters } from "../../shared/motion/edit";
 import { motionSceneId } from "../../shared/motion/schema";
+import { sceneProgramInput } from "../../shared/motion/scene-program";
 import type { MotionVisionImage } from "./agent-call";
 import type { MotionPromptRole } from "./prompts";
 
 const target = z.object({ sceneId: motionSceneId }).strict();
 const frame = z.number().int().min(0).max(7199);
+const revision = z.number().int().nonnegative();
 const tools = {
     sample_reference: target.extend({ time: z.number().min(0).max(3600) }),
     measure_layout: target,
     render_scene: target.extend({ frames: z.array(frame).min(1).max(4) }),
     patch_scene: target.extend({ patch: motionEditParameters.update_motion_scene.shape.patch }),
+    read_workspace: target,
+    write_module: target.extend({ expectedRevision: revision, program: sceneProgramInput }),
+    patch_module: target.extend({ expectedRevision: revision, find: z.string().min(1).max(2_000), replace: z.string().max(4_000) }),
+    compare_evidence: target,
 };
 type Name = keyof typeof tools;
 type Request = { [K in Name]: { name: K; args: z.infer<(typeof tools)[K]> } }[Name];
 export type AgentToolRequest = Request;
 const roles: Partial<Record<MotionPromptRole, readonly Name[]>> = {
-    visualDesigner: ["sample_reference", "measure_layout", "render_scene"],
-    motionEngineer: ["sample_reference", "measure_layout", "render_scene", "patch_scene"],
-    visualCritic: ["sample_reference", "measure_layout", "render_scene"],
-    repair: ["sample_reference", "measure_layout", "render_scene", "patch_scene"],
+    visualDesigner: ["sample_reference", "measure_layout", "render_scene", "read_workspace"],
+    motionEngineer: ["sample_reference", "measure_layout", "render_scene", "patch_scene", "read_workspace", "write_module", "patch_module"],
+    visualCritic: ["sample_reference", "measure_layout", "render_scene", "read_workspace", "compare_evidence"],
+    repair: ["sample_reference", "measure_layout", "render_scene", "patch_scene", "read_workspace", "write_module", "patch_module", "compare_evidence"],
 };
 
 export type AgentToolResult = { request: Request; result: unknown; images?: MotionVisionImage[] };
@@ -29,7 +35,7 @@ export type AgentToolSession = {
     request: (role: MotionPromptRole, request: Request, sceneId?: string) => never;
 };
 export const agentToolLimit = 8;
-export const agentToolStageLimit = 2;
+export const agentToolStageLimit = 3;
 
 export function agentToolSchemas(role: MotionPromptRole) {
     return (roles[role] ?? []).map((name) => z.object({

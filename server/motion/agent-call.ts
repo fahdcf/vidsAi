@@ -63,7 +63,10 @@ export async function runMotionAgent<T>(
     const toolResults = history.map(({ request, result, images }) => {
         const count = Math.max(0, Math.min(images?.length ?? 0, originalImages.length + toolImages.length + 1 - imageIndex));
         const attachedImages = Array.from({ length: count }, () => imageIndex++);
-        return { request, result, attachedImages };
+        const summary = (request.name === "write_module" || request.name === "patch_module") && result && typeof result === "object"
+            ? { ...result, candidate: undefined } : result;
+        const { name, args: { sceneId } } = request;
+        return { request: { name, args: { sceneId } }, result: summary, attachedImages };
     });
     const prompt = buildMotionPrompt(role, {
         brief, revision: document.revision, width: document.width, height: document.height,

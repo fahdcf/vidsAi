@@ -57,7 +57,8 @@ const server = await createServer({
     configLoader: "native",
     cacheDir: "node_modules/.cache/motion-tools-test",
     server: { host: "127.0.0.1", port: 0, hmr: false },
-    optimizeDeps: { noDiscovery: true, include: ["mediabunny", "zod", ...(process.argv.includes("--graph-editor")
+    optimizeDeps: { noDiscovery: true, include: ["mediabunny", "zod", ...(process.argv.includes("--workspace-module")
+        ? ["@jitl/quickjs-wasmfile-release-sync", "quickjs-emscripten-core", "@jridgewell/trace-mapping"] : []), ...(process.argv.includes("--graph-editor")
         ? ["react", "react-dom", "react-dom/client", "remotion", "@remotion/web-renderer"] : [])] },
 });
 let browser;
@@ -648,7 +649,8 @@ try {
     const regressedRepair = process.argv.includes("--regressed-repair");
     const rejectRepair = process.argv.includes("--repair-unavailable");
     const rejectedRepair = ineffectiveRepair || regressedRepair || rejectRepair;
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene, ineffectiveRepair, regressedRepair, rejectRepair });
+    const workspaceModule = process.argv.includes("--workspace-module");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene, ineffectiveRepair, regressedRepair, rejectRepair, workspaceModule });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -690,6 +692,10 @@ try {
         }
         assert.ok(checkedBeforeRetry);
         const steps = motionSteps(graphRun.id);
+        if (workspaceModule) {
+            assert.deepEqual(steps.filter(({ name }) => name.startsWith("agent_tool:")).map(({ name, status }) => [name.split(":")[1], status]),
+                [["write_module", "done"], ["patch_module", "done"], ["render_scene", "done"]]);
+        }
         if (agentTools) {
             assert.ok(retriedTool);
             const expected = ["sample_reference", "measure_layout", "render_scene", ...(rejectCritic ? [] : ["patch_scene"])];
@@ -843,6 +849,12 @@ try {
         assert.deepEqual(scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]),
             proposal.scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]));
         for (const [index, scene] of scenes.entries()) {
+            if (workspaceModule && index === 1) {
+                assert.match(scene.params.program.source, /sdk.math.sin\(input.frame/);
+                assert.equal(scene.params.program.properties[0].default, "Try it now");
+                assert.deepEqual(scene.params.programValues, {});
+                continue;
+            }
             if (graphAssets && index === 1) continue;
             assert.ok(scene.params.layers.some(({ kind, animation }) => kind === "rect" && animation?.length));
             assert.ok(scene.params.layers.some(({ kind, text }) => kind === "text" && text === ["Get transcript", "Try it now"][index]));
