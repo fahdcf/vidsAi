@@ -92,6 +92,12 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 }
                 break;
             case "visual-designer":
+                if (artifact.task?.startsWith("Compare each static layout")) {
+                    assert.ok(artifact.layout.length && artifact.contactSheetFrames.length);
+                    assert.equal(artifact.contactSheetFrames.length, graphic.length);
+                    value = { suggestions: [{ sceneId: graphic[0].id, revision: "Keep opening headline hierarchy aligned to the source." }] };
+                    break;
+                }
                 assert.equal(artifact.referenceScenes.length, graphic.length);
                 assert.ok(artifact.referenceScenes.some(({ evidence }) => evidence?.observations.length));
                 assert.deepEqual(artifact.referenceSpecs.map(({ sceneId }) => sceneId), graphic.map(({ id }) => id));
@@ -112,6 +118,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.equal(typeof artifact.approvedCopy, "string");
                 assert.ok(artifact.reference?.observations.length);
                 assert.equal(artifact.referenceSpec.sceneId, artifact.target.id);
+                if (artifact.layoutReview) {
+                    assert.equal(artifact.layoutReview.measurements.sceneId, artifact.target.id);
+                    if (artifact.target.id === graphic[0].id) assert.match(artifact.layoutReview.revision, /headline hierarchy/);
+                }
                 assert.ok(rejectSpec ? artifact.referenceSpec.uncertainties.length : artifact.referenceSpec.objects.length);
                 if (artifact.referenceFrames.length) {
                     assert.ok(artifact.referenceFrames.every(({ sceneId }) => sceneId === artifact.target.id));

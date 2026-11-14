@@ -16,6 +16,7 @@ import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
 import { sceneReferenceEvidence } from "./reference-segments";
 import { runReferenceSpec } from "./reference-spec";
+import { createMotionLayoutDraft, layoutForScene } from "./layout-draft";
 import { motionSpeechTiming, type SpeechSpan } from "./speech";
 import { motionSkillManifest } from "./prompts";
 import { pendingMotionSetup } from "./setup";
@@ -24,6 +25,7 @@ import { observeReferenceSheet, referenceObservationsSchema } from "./reference-
 import {
     integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionDraftBlockers, motionStoryboardSchema,
     motionCritiqueSchema, resolveMotionStoryboard, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
+    reviewMotionLayout,
     runMotionRepair, runMotionRevision, runReferenceAnalyst, type MotionBuild, type MotionCritique,
 } from "./agents";
 import {
@@ -142,6 +144,11 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         add({ name: "copy", lane: "provider", dependencies: ["design"] });
         if (!done("design")) return;
         const storyboard = resolveMotionStoryboard(proposed, agentResult(id, "design", motionDesignSchema));
+        const useLayout = useDetails && !steps.some(({ name }) => name.startsWith("engineer:") && !steps.some((item) => item.name === "layout"));
+        if (useLayout) {
+            add({ name: "layout", lane: "browser", dependencies: ["design", "reference_spec"] });
+            add({ name: "layout_review", lane: "provider", dependencies: ["layout"] });
+        }
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
         let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
@@ -163,7 +170,8 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         const engineers = storyboard.scenes.map((target) => {
             const name = `engineer:${target.id}`;
             const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
-            add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency, ...(useDetails ? ["reference_detail"] : [])], input: { sceneId: target.id } });
+            add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency, ...(useDetails ? ["reference_detail"] : []),
+                ...(useLayout ? ["layout_review"] : [])], input: { sceneId: target.id } });
             return name;
         });
         add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
@@ -210,6 +218,12 @@ export function readyMotionSteps(runId: string) {
 }
 
 export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMotionInput {
+    if (step.name === "layout") {
+        const design = agentResult(run.id, "design", motionDesignSchema);
+        const spec = z.array(referenceSceneSpecSchema).parse(result<{ specs: unknown }>(run.id, "reference_spec").specs);
+        const storyboard = resolveMotionStoryboard(agentResult(run.id, "director", motionStoryboardSchema), design);
+        return { tool: "preview", staticLayout: true, document: createMotionLayoutDraft(motionSnapshot(run), storyboard, design, spec) };
+    }
     if (step.name === "reference_capture" || step.name === "reference_detail" || step.name === "reference_followup" || step.name.startsWith("trace:")) {
         const reference = motionReference(run.project_id);
         if (reference?.bindingId !== run.reference_binding_id) throw new Error("The reference was replaced.");
@@ -386,6 +400,11 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const customCount = resolveMotionStoryboard(plan, value.value).scenes.filter(({ type }, index) => type !== plan.scenes[index].type).length;
         return { value, summary: customCount ? `Selected custom composition for ${customCount} incompatible scene${customCount === 1 ? "" : "s"}.` : value.value.decision };
     }
+    if (step.name === "layout_review") {
+        const preview = previewSchema.parse(result(id, "layout"));
+        return reviewMotionLayout(context, storyboard(), referenceSpecs(), preview, imageBytes(preview.images),
+            details().filter(({ crop }) => !crop).slice(0, 6));
+    }
     if (step.name.startsWith("engineer:")) {
         const plan = storyboard();
         const target = plan.scenes.find(({ id }) => id === input.sceneId)!;
@@ -395,9 +414,13 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const traced = target.type === "liquid" && motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
             ? traceResultSchema.parse(result(id, traceName)) : null;
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
+        const hasLayout = motionSteps(id).some(({ name, status }) => name === "layout_review" && status === "done");
+        const layout = hasLayout ? layoutForScene(previewSchema.parse(result(id, "layout")), target.id) : undefined;
+        const suggestions = hasLayout ? result<{ suggestions: { sceneId: string; revision: string }[] }>(id, "layout_review").suggestions.find(({ sceneId }) => sceneId === target.id) : undefined;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
             design(), asset ? [asset] : [], evidence,
-            details().filter(({ sceneId }) => sceneId === target.id), referenceSpecs().find(({ sceneId }) => sceneId === target.id));
+            details().filter(({ sceneId }) => sceneId === target.id), referenceSpecs().find(({ sceneId }) => sceneId === target.id),
+            layout ? { measurements: layout, revision: suggestions?.revision } : undefined);
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],

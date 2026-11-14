@@ -296,6 +296,31 @@ export function resolveMotionStoryboard(storyboard: MotionStoryboard, design: Mo
     return { ...storyboard, scenes: storyboard.scenes.map((scene) => incompatible.has(scene.id) ? { ...scene, type: "graph" } : scene) };
 }
 
+export async function reviewMotionLayout(context: MotionAgentContext, storyboard: MotionStoryboard, specs: ReferenceSceneSpec[],
+    preview: MotionPreview, rendered: MotionVisionImage[], references: readonly ReferenceFrame[]) {
+    const schema = z.object({ suggestions: z.array(z.object({ sceneId: motionSceneId, revision: z.string().trim().min(1).max(220) })
+        .strict()).max(8) }).strict();
+    try {
+        const value = await withReferenceFrames(references, (frames) => runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX", {
+            task: "Compare each static layout to the matching reference. Report only material changes to hierarchy, spacing, color or required content. The rectangles representing unknown objects are layout placeholders.",
+            storyboard, specs, contactSheetFrames: preview.frames, samplesPerSheet: preview.framesPerSheet,
+            layout: preview.layout, referenceFrames: describeReferenceFrames(frames).map((frame) => ({ ...frame, imageNumber: frame.imageNumber + rendered.length })),
+        }, schema, {
+            images: frames.length ? [...rendered, ...frames.map(({ image }) => image)].slice(0, 8) : undefined,
+            requestTimeoutMs: 20_000,
+            validate: ({ suggestions }) => {
+                if (new Set(suggestions.map(({ sceneId }) => sceneId)).size !== suggestions.length ||
+                    suggestions.some(({ sceneId }) => !storyboard.scenes.some(({ id }) => id === sceneId))) throw new Error("The layout review referenced an unknown scene.");
+            },
+        }));
+        return { value: value.value, summary: value.value.suggestions.length ? "Measured layout revisions are ready for motion authoring." : "Reviewed the representative layouts." };
+    } catch (error) {
+        context.signal.throwIfAborted();
+        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
+        return { value: { suggestions: [] }, summary: "Layout review could not finish. Motion authoring uses the measured layout evidence." };
+    }
+}
+
 function sceneCopy(scene: MotionScene): string | null {
     switch (scene.type) {
         case "impact": return scene.params.headline;
@@ -330,6 +355,7 @@ export async function runMotionEngineer(
     reference: ReturnType<typeof sceneReferenceEvidence> = null,
     frames: readonly ReferenceFrame[] = [],
     referenceSpec?: ReferenceSceneSpec,
+    layoutReview?: { measurements: NonNullable<MotionPreview["layout"]>[number]; revision?: string },
 ) {
     const approved = copy.scenes.find(({ id }) => id === target.id);
     const styling = design.scenes.find(({ id }) => id === target.id);
@@ -364,6 +390,7 @@ export async function runMotionEngineer(
                 target, approvedCopy: wording, notes, palette: styling.palette, reference,
                 requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
                 availableAssets,
+                layoutReview,
                 referenceSpec,
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
@@ -400,6 +427,7 @@ export async function runMotionEngineer(
     const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
         target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
         referenceSpec,
+        layoutReview,
         referenceFrames: describeReferenceFrames(details),
         audioCues,
         speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),

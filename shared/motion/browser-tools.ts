@@ -91,6 +91,7 @@ export type BrowserMotionInput = {
 } & z.infer<typeof traceRequestSchema>) | {
     tool: "preview";
     document: Document;
+    staticLayout?: boolean;
 };
 export type BrowserMotionTask = {
     id: string;
