@@ -43,6 +43,7 @@ export type MotionProvider = {
     adapter?: "nvidia" | "openrouter" | "gemini";
     mediaAllowed?: boolean;
     capabilities?: readonly MotionCapability[];
+    providerSlug?: string;
 };
 
 const optionalRoutes = z.array(z.object({
@@ -51,14 +52,15 @@ const optionalRoutes = z.array(z.object({
     model: z.string().regex(/^[a-z0-9][a-z0-9_./:-]{1,120}$/i),
     capabilities: z.array(z.enum(["text", "image", "thinking", "stream", "audio", "structured", "tools"])).max(7),
     mediaAllowed: z.boolean().default(false),
+    providerSlug: z.string().regex(/^[a-z0-9][a-z0-9_/-]{0,95}$/i).optional(),
 }).strict()).max(12);
 
 export function optionalMotionProviders(env: NodeJS.ProcessEnv = process.env): MotionProvider[] {
     if (!env.MOTION_OPTIONAL_PROVIDER_ROUTES) return [];
     const entries = optionalRoutes.parse(JSON.parse(env.MOTION_OPTIONAL_PROVIDER_ROUTES));
     if (new Set(entries.map(({ alias }) => alias)).size !== entries.length) throw new Error("Optional provider aliases must be unique.");
-    return entries.map(({ adapter, alias, model, capabilities, mediaAllowed }) => ({
-        adapter, alias, id: model, model, capabilities, mediaAllowed, family: "chat", functionId: null,
+    return entries.map(({ adapter, alias, model, capabilities, mediaAllowed, providerSlug }) => ({
+        adapter, alias, id: model, model, capabilities, mediaAllowed, providerSlug, family: "chat", functionId: null,
         endpoint: adapter === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions"
             : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
         credential: env[adapter === "openrouter" ? "OPENROUTER_API_KEY" : "GEMINI_API_KEY"]?.trim(),

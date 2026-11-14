@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { MotionProvider } from "./inventory";
+import { freeProviderRouting } from "./free-policy";
 
 const models: Record<string, { images: boolean; thinking: boolean }> = {
     "nvidia/nemotron-3.5-super-vl-120b-a12b": { images: true, thinking: true },
@@ -135,6 +136,10 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
     if (adapter !== "nvidia" && (provider.endpoint !== fixedEndpoint ||
         (request.stream && !supported.includes("stream")))) throw new MotionProviderError("unsupported", "Optional provider capability is unavailable.");
+    const routing = await freeProviderRouting(provider, request.signal).catch(() => {
+        request.signal.throwIfAborted();
+        throw new MotionProviderError("unsupported", "An optional route needs verified zero-price model and endpoint access.");
+    });
     const images = request.images ?? [];
     if (images.length > 8 || images.reduce((total, image) => total + image.bytes.byteLength, 0) > 4 * 1024 * 1024) {
         throw new MotionProviderError("unsupported", "Reference images exceeded the provider request limit.");
@@ -169,6 +174,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
             signal,
             headers: { Authorization: `Bearer ${provider.credential}`, "Content-Type": "application/json" },
             body: JSON.stringify({
+                ...routing,
                 model: provider.model,
                 messages: [{ role: "system", content: request.instruction }, { role: "user", content: prompt }],
                 max_tokens: request.maxTokens,

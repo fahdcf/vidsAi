@@ -4,6 +4,7 @@ import { z } from "zod";
 import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, motionStoryboardSchema } from "./motion/agents";
 import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
+import { optionalMotionProviders } from "./motion/providers/inventory";
 import { validateMotionResources } from "./motion/resource-check";
 import { motionProgramAuthoringGuide } from "./motion/program-examples";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
@@ -170,4 +171,40 @@ test("the structured route keeps thinking enabled and classifies an incomplete r
         assert.doesNotMatch(error.message, /private reasoning/);
         return true;
     });
+});
+
+test("optional chat requires zero prices for the exact model and endpoint before sending a prompt", async (t) => {
+    const model = "sample/model:free", providerSlug = "sample-provider";
+    const [provider, gemini] = optionalMotionProviders({
+        OPENROUTER_API_KEY: "test-only", GEMINI_API_KEY: "test-only", MOTION_OPTIONAL_PROVIDER_ROUTES: JSON.stringify([
+            { adapter: "openrouter", alias: "openrouter_sample", model, providerSlug, capabilities: ["text"] },
+            { adapter: "gemini", alias: "gemini_sample", model: "gemini-test", capabilities: ["text"] },
+        ]),
+    });
+    const current = process.env.MOTION_OPENROUTER_FREE_ALLOWLIST;
+    process.env.MOTION_OPENROUTER_FREE_ALLOWLIST = JSON.stringify([{ model, providerSlug }]);
+    t.after(() => {
+        if (current === undefined) delete process.env.MOTION_OPENROUTER_FREE_ALLOWLIST;
+        else process.env.MOTION_OPENROUTER_FREE_ALLOWLIST = current;
+    });
+    let completionPrice = "0.01";
+    let sent = 0;
+    t.mock.method(globalThis, "fetch", async (url: string | URL, init: RequestInit) => {
+        if (String(url).endsWith("/endpoints")) return Response.json({ data: { id: model,
+            endpoints: [{ tag: providerSlug, pricing: { prompt: "0", completion: completionPrice } }] } });
+        if (String(url).endsWith("/models")) return Response.json({ data: [{ id: model, pricing: { prompt: "0", completion: "0" } }] });
+        sent++;
+        const body = JSON.parse(String(init.body));
+        assert.deepEqual(body.provider, { only: [providerSlug], allow_fallbacks: false,
+            max_price: { prompt: 0, completion: 0, image: 0, request: 0 } });
+        return Response.json({ choices: [{ message: { content: '{"value":"ok"}' }, finish_reason: "stop" }] });
+    });
+    const request = { instruction: "Return JSON", prompt: "Synthetic test", mode: "off" as const, maxTokens: 100,
+        timeoutMs: 1000, signal: AbortSignal.timeout(3_000), schema: z.object({ value: z.string() }) };
+    await assert.rejects(requestMotionJson(provider, request), /verified zero-price/);
+    await assert.rejects(requestMotionJson(gemini, request), /verified zero-price/);
+    assert.equal(sent, 0);
+    completionPrice = "0.000";
+    assert.equal((await requestMotionJson(provider, request)).value.value, "ok");
+    assert.equal(sent, 1);
 });
