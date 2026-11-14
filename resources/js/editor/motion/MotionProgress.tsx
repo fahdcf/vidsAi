@@ -18,6 +18,8 @@ export function motionStageName(name: string) {
         case "layout_review": return "Reference layout review";
         case "layout_proposal": return "Scene layout proposal";
         case "layout_check": return "Browser layout check";
+        case "styleframe_alt": return "Render alternate styleframe";
+        case "styleframe_select": return "Select a styleframe";
         case "motion_check": return "Browser motion check";
         case "agent_tool": {
             switch (name.split(":")[1]) {

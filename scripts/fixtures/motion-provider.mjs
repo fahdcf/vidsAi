@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 
 export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false, rejectRepair = false, workspaceModule = false } = {}) {
+    const styleframe = process.argv.includes("--styleframe-study");
     const stages = [];
     let replacementAttempts = 0;
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
@@ -50,6 +51,8 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
             case "director":
                 assert.ok(artifact.reference.observations.length);
                 value = { title: "Motion study", summary: "A staged motion study.", look: "reference",
+                    ...(styleframe ? { artDirection: { identity: "Warm typography", continuity: "Keep controls centered",
+                        rhythm: "Hold the closing label", uncertainSceneId: graphic[0].id } } : {}),
                     ...(referenceMapping ? { referenceIntent: "match", timingMode: "source" } : {}),
                     scenes: graphic.map(({ id, type, start_frame, end_frame }, index) => ({ id, type, start_frame, end_frame,
                         ...(referenceMapping ? { referenceSceneIndex: index } : {}),
@@ -94,6 +97,13 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 }
                 break;
             case "visual-designer":
+                if (artifact.task?.startsWith("Choose the styleframe")) {
+                    assert.ok(styleframe);
+                    assert.equal(message.length, 4);
+                    assert.notDeepEqual(artifact.baseline[0].elements, artifact.alternate[0].elements);
+                    value = { selected: "alternate", decision: "Use the alternate opening placement." };
+                    break;
+                }
                 if (artifact.task?.startsWith("Compare each static layout")) {
                     assert.ok(artifact.layout.length && artifact.contactSheetFrames.length);
                     assert.equal(artifact.contactSheetFrames.length, graphic.length);
@@ -170,7 +180,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.equal(artifact.referenceSpec.sceneId, artifact.target.id);
                 if (artifact.layoutReview) {
                     assert.equal(artifact.layoutReview.measurements.sceneId, artifact.target.id);
-                    if (artifact.target.id === graphic[0].id) assert.match(artifact.layoutReview.revision, /headline hierarchy/);
+                    if (artifact.target.id === graphic[0].id) {
+                        assert.match(artifact.layoutReview.revision, styleframe ? /alternate opening/ : /headline hierarchy/);
+                        if (styleframe) assert.equal(artifact.artDirection.continuity, "Keep controls centered");
+                    }
                 }
                 assert.ok(rejectSpec ? artifact.referenceSpec.uncertainties.length : artifact.referenceSpec.objects.length);
                 if (artifact.referenceFrames.length) {

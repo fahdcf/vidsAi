@@ -692,6 +692,13 @@ try {
         }
         assert.ok(checkedBeforeRetry);
         const steps = motionSteps(graphRun.id);
+        if (process.argv.includes("--styleframe-study")) {
+            const study = steps.find(({ name }) => name === `styleframe_select:${graphic[0].id}`);
+            const selection = JSON.parse(motionArtifact(graphRun.id, study.result_id).body.toString());
+            assert.equal(selection.value.selected, "alternate");
+            assert.equal(selection.usage.total_tokens, 600);
+            assert.equal(steps.filter(({ name }) => name.startsWith("styleframe_alt:")).length, 1);
+        }
         if (workspaceModule) {
             assert.deepEqual(steps.filter(({ name }) => name.startsWith("agent_tool:")).map(({ name, status }) => [name.split(":")[1], status]),
                 [["write_module", "done"], ["patch_module", "done"], ["render_scene", "done"]]);

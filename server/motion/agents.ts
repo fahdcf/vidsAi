@@ -37,6 +37,12 @@ export const motionStoryboardSchema = z.object({
     look: z.enum(["reference", "studio"]),
     referenceIntent: z.enum(["match", "inspired"]).optional(),
     timingMode: z.enum(["source", "custom"]).optional(),
+    artDirection: z.object({
+        identity: z.string().trim().min(1).max(200),
+        continuity: z.string().trim().min(1).max(200),
+        rhythm: z.string().trim().min(1).max(200),
+        uncertainSceneId: motionSceneId.optional(),
+    }).strict().optional(),
     scenes: z.array(storyboardScene).min(1).max(8),
 }).strict().superRefine(({ scenes }, ctx) => {
     const ids = new Set<string>();
@@ -208,8 +214,11 @@ export async function runMotionDirector(context: MotionAgentContext, reference: 
         soundtrackSilence: context.document.metadata.motion_audio_analysis?.silence,
         speechTiming: context.speechTiming,
     }, motionStoryboardSchema, {
-        validate: ({ scenes }) => {
+        validate: ({ scenes, artDirection }) => {
             if (scenes.at(-1)?.end_frame !== context.document.total_frames) throw new Error("Storyboard duration is incorrect.");
+            if (artDirection?.uncertainSceneId && !scenes.some(({ id }) => id === artDirection.uncertainSceneId)) {
+                throw new Error("The styleframe study must target a scene in this storyboard.");
+            }
             if (scenes.some(({ referenceSceneIndex }) => typeof referenceSceneIndex === "number" &&
                 (!reference || referenceSceneIndex >= reference.scenes.length))) throw new Error("Storyboard points to a missing reference scene.");
         },
@@ -382,6 +391,7 @@ export async function runMotionEngineer(
     frames: readonly ReferenceFrame[] = [],
     referenceSpec?: ReferenceSceneSpec,
     layoutReview?: { measurements: NonNullable<MotionPreview["layout"]>[number]; revision?: string },
+    artDirection?: MotionStoryboard["artDirection"],
 ) {
     const approved = copy.scenes.find(({ id }) => id === target.id);
     const styling = design.scenes.find(({ id }) => id === target.id);
@@ -421,7 +431,7 @@ export async function runMotionEngineer(
         };
         try {
             const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
-                target, approvedCopy: wording, notes, palette: styling.palette, reference,
+                target, approvedCopy: wording, notes, palette: styling.palette, reference, artDirection,
                 requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
                 availableAssets,
                 layoutReview,
@@ -461,7 +471,7 @@ export async function runMotionEngineer(
         return parts?.length ? motionSceneSchema.parse(applyCopyParts(scene, parts)) : scene;
     };
     const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
-        target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference,
+        target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference, artDirection,
         referenceSpec,
         layoutReview,
         referenceFrames: describeReferenceFrames(details),

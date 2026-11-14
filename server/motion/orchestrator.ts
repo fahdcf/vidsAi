@@ -15,7 +15,7 @@ import type { Document } from "../../shared/contracts";
 import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, evidenceImages, referenceDetailRequest, referenceDetailResult, referenceFollowupRequest, referenceFollowupResult, referenceMetadata, type BrowserMotionInput } from "../../shared/motion/browser-tools";
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
-import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
+import { MotionAgentUnavailable, runMotionAgent, type MotionAgentProgress } from "./agent-call";
 import { agentToolLimit, agentToolStageLimit, MotionToolYield, parseAgentToolRequest, type AgentToolSession } from "./agent-tools";
 import { motionGraphAssets, validateMotionAssetOwnership } from "./assets";
 import { compileMotionProgram } from "./programs";
@@ -162,6 +162,14 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             });
             if (useDetails) add({ name: "layout_review", lane: "provider", dependencies: checks });
         }
+        const studyId = storyboard.artDirection?.uncertainSceneId;
+        const study = studyId && (steps.some(({ name }) => name === `styleframe_select:${studyId}`) ||
+            (sceneChecks && !steps.some(({ name }) => name === `engineer:${studyId}`)));
+        if (study) {
+            add({ name: `styleframe_alt:${studyId}`, lane: "browser", dependencies: [`layout_proposal:${studyId}`], input: { sceneId: studyId } });
+            add({ name: `styleframe_select:${studyId}`, lane: "provider",
+                dependencies: [`layout_check:${studyId}`, `styleframe_alt:${studyId}`], input: { sceneId: studyId } });
+        }
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
         let trace = evidence?.timing ? { interval: evidence.timing, colors: evidence.palette } : null;
@@ -185,7 +193,8 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
             const hasReview = sceneChecks ? useDetails : steps.some((item) => item.name === "layout_review");
             add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency, ...(useDetails ? ["reference_detail"] : []),
-                ...(sceneChecks ? [`layout_check:${target.id}`] : []), ...(hasReview ? ["layout_review"] : [])], input: { sceneId: target.id } });
+                ...(sceneChecks ? [`layout_check:${target.id}`] : []), ...(hasReview ? ["layout_review"] : []),
+                ...(study && target.id === studyId ? [`styleframe_select:${studyId}`] : [])], input: { sceneId: target.id } });
             if (!sceneChecks) return name;
             const check = `motion_check:${target.id}`;
             add({ name: check, lane: "browser", dependencies: [name], input: { sceneId: target.id } });
@@ -271,11 +280,18 @@ export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMot
         return { tool: "preview", sampleFrames: [...new Set(request.args.frames)].sort((a, b) => a - b),
             document: { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [scene] } } };
     }
-    if (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:")) {
+    if (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:") || step.name.startsWith("styleframe_alt:")) {
         const sceneId = step.name.split(":")[1];
-        const staticLayout = step.name.startsWith("layout_check:");
-        const scene = staticLayout ? motionSceneSchema.parse(result(run.id, `layout_proposal:${sceneId}`))
+        const alternate = step.name.startsWith("styleframe_alt:");
+        const staticLayout = alternate || step.name.startsWith("layout_check:");
+        const original = staticLayout ? motionSceneSchema.parse(result(run.id, `layout_proposal:${sceneId}`))
             : agentResult(run.id, `engineer:${sceneId}`, motionBuildSchema).scene;
+        const scene = alternate && original.type === "graph" ? motionSceneSchema.parse({
+            ...original, params: { ...original.params, layers: original.params.layers.map((layer) => ({
+                ...layer, transform: { ...layer.transform, x: 0.5 + (layer.transform.x - 0.5) * 0.82,
+                    y: Math.max(0.07, Math.min(0.93, 0.42 + (layer.transform.y - 0.5) * 0.82)) },
+            })) },
+        }) : original;
         const snapshot = motionSnapshot(run);
         return { tool: "preview", staticLayout, document: { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [scene] } } };
     }
@@ -622,6 +638,25 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         return reviewMotionLayout(context, plan, referenceSpecs(), preview,
             imageBytes(pictured.flatMap(({ images }) => images)), paired);
     }
+    if (step.name.startsWith("styleframe_select:")) {
+        const sceneId = input.sceneId!;
+        const baseline = previewSchema.parse(result(id, `layout_check:${sceneId}`));
+        const alternate = previewSchema.parse(result(id, `styleframe_alt:${sceneId}`));
+        const source = details().find((item) => item.sceneId === sceneId && !item.crop);
+        const schema = z.object({ selected: z.enum(["baseline", "alternate"]), decision: z.string().trim().min(1).max(240) }).strict();
+        try {
+            const value = await runMotionAgent(context, "visualDesigner", "MEDIA_UNDERSTANDING", {
+                task: "Choose the styleframe that best serves the brief and whole-film art direction. Image 1 is baseline, image 2 is alternate and image 3 is the source if present.",
+                sceneId, artDirection: storyboard().artDirection, baseline: baseline.layout, alternate: alternate.layout,
+            }, schema, { images: [...imageBytes([...baseline.images, ...alternate.images]), ...(source ? [source.image] : [])],
+                requestTimeoutMs: 20_000, sceneId });
+            return { value, summary: value.value.decision };
+        } catch (error) {
+            signal.throwIfAborted();
+            if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
+            return { value: { value: { selected: "baseline", decision: "Kept the baseline styleframe because automated selection was unavailable." } } };
+        }
+    }
     if (step.name.startsWith("engineer:")) {
         const plan = storyboard();
         const target = plan.scenes.find(({ id }) => id === input.sceneId)!;
@@ -633,14 +668,18 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
         const steps = motionSteps(id);
         const hasReview = steps.some(({ name, status }) => name === "layout_review" && status === "done");
-        const layoutStep = steps.find(({ name, status }) => status === "done" && name === `layout_check:${target.id}`)
+        const choice = steps.find(({ name, status }) => status === "done" && name === `styleframe_select:${target.id}`);
+        const selectedLayout = choice && result<{ value: { selected: string } }>(id, choice.name).value.selected === "alternate"
+            ? `styleframe_alt:${target.id}` : `layout_check:${target.id}`;
+        const layoutStep = steps.find(({ name, status }) => status === "done" && name === selectedLayout)
             ?? steps.find(({ name, status }) => status === "done" && name === "layout");
         const layout = layoutStep ? layoutForScene(previewSchema.parse(result(id, layoutStep.name)), target.id) : undefined;
         const suggestions = hasReview ? result<{ suggestions: { sceneId: string; revision: string }[] }>(id, "layout_review").suggestions.find(({ sceneId }) => sceneId === target.id) : undefined;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
             design(), asset ? [asset] : [], evidence,
             details().filter(({ sceneId }) => sceneId === target.id), referenceSpecs().find(({ sceneId }) => sceneId === target.id),
-            layout ? { measurements: layout, revision: suggestions?.revision } : undefined);
+            layout ? { measurements: layout, revision: choice ? result<{ value: { decision: string } }>(id, choice.name).value.decision
+                : suggestions?.revision } : undefined, plan.artDirection);
         if (asset && value.value.scene.type === "liquid") {
             const { scene } = value.value;
             value.value.scene = motionSceneSchema.parse({ ...scene, assets: [asset],

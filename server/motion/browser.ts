@@ -143,7 +143,8 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
                 scene.id === sceneId && scene.start_frame <= frame && frame < scene.end_frame) ||
             elements.some(({ bounds }) => bounds[0] > bounds[2] || bounds[1] > bounds[3]))) fail(422, "The preview layout evidence is invalid.");
         if (input.tool === "preview" && "frames" in value &&
-            (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:") || input.sampleFrames)) {
+            (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:") ||
+                step.name.startsWith("styleframe_alt:") || input.sampleFrames)) {
             const [scene] = input.document.tracks.motion_graphics;
             if (value.frames.some((frame) => frame < scene.start_frame || frame >= scene.end_frame) ||
                 (input.staticLayout && (value.frames.length !== 1 || value.frames[0] !== scene.end_frame - 1)) ||
