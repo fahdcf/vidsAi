@@ -2,9 +2,10 @@ import { randomUUID } from "node:crypto";
 import { db, json, project, update } from "../database";
 import { commit, document } from "../document";
 import { fail } from "../security";
-import { compileMotionPlan, motionPlanSchema } from "../../shared/motion/compile";
+import { compileMotionPlan, motionPlanSchema, motionSceneExceedsBudget } from "../../shared/motion/compile";
 import { motionRendererVersion } from "../../shared/motion/registry";
 import { motionQualitySchema, motionSceneSchema, type MotionQuality } from "../../shared/motion/schema";
+import { applyMotionEdit } from "../../shared/motion/edit";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import { referenceSceneSpecSchema } from "../../shared/motion/reference-spec";
 import { referenceClock, referenceTimeAt } from "../../shared/motion/time-map";
@@ -14,11 +15,13 @@ import { captureSchema, previewSchema, traceRequestSchema, traceResultSchema, ev
 import { MotionBudgetError, motionLimits, type MotionModelBudget } from "./budget";
 import { motionElapsed, stepMotionBudget } from "./ledger";
 import { MotionAgentUnavailable, type MotionAgentProgress } from "./agent-call";
+import { agentToolLimit, agentToolStageLimit, MotionToolYield, parseAgentToolRequest, type AgentToolSession } from "./agent-tools";
+import { validateMotionAssetOwnership } from "./assets";
 import { sceneReferenceEvidence } from "./reference-segments";
 import { runReferenceSpec } from "./reference-spec";
 import { createMotionLayoutDraft, layoutForScene } from "./layout-draft";
 import { motionSpeechTiming, type SpeechSpan } from "./speech";
-import { motionSkillManifest } from "./prompts";
+import { motionSkillManifest, type MotionPromptRole } from "./prompts";
 import { pendingMotionSetup } from "./setup";
 import { motionReference, saveMotionReferenceAnalysis } from "./references";
 import { observeReferenceSheet, referenceObservationsSchema } from "./reference-observer";
@@ -229,6 +232,22 @@ export function readyMotionSteps(runId: string) {
 }
 
 export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMotionInput {
+    if (step.name.startsWith("agent_tool:")) {
+        const stored = json<{ role: MotionPromptRole; request: unknown; payload: unknown }>(step.input, {} as never);
+        const request = parseAgentToolRequest(stored.role, stored.request);
+        if (request.name === "sample_reference") {
+            const reference = motionReference(run.project_id);
+            if (!reference?.available || reference.bindingId !== run.reference_binding_id) throw new Error("Relink the assigned reference.");
+            return { tool: "reference_followup", requests: referenceFollowupRequest.parse(stored.payload), reference: {
+                bindingId: reference.bindingId, assetId: reference.assetId, url: reference.url, metadata: referenceMetadata.parse(reference.metadata),
+            } };
+        }
+        if (request.name !== "render_scene") throw new Error("The specialist tool does not run in the browser.");
+        const scene = motionSceneSchema.parse(stored.payload);
+        const snapshot = motionSnapshot(run);
+        return { tool: "preview", sampleFrames: [...new Set(request.args.frames)].sort((a, b) => a - b),
+            document: { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [scene] } } };
+    }
     if (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:")) {
         const sceneId = step.name.split(":")[1];
         const staticLayout = step.name.startsWith("layout_check:");
@@ -329,6 +348,85 @@ export function failMotionStep(run: MotionRun, step: MotionStep, error: string) 
 const imageBytes = (images: z.infer<typeof evidenceImages>) =>
     images.map(({ mime, base64 }) => ({ mime, bytes: Buffer.from(base64, "base64") }));
 
+type SavedAgentTool = { role: MotionPromptRole; request: ReturnType<typeof parseAgentToolRequest>; payload?: unknown };
+
+function agentTools(run: MotionRun, step: MotionStep): AgentToolSession {
+    const steps = motionSteps(run.id);
+    const calls = steps.filter(({ name }) => name.startsWith("agent_tool:"));
+    const previous = calls.filter(({ name }) => name.split(":")[2] === step.id);
+    const snapshot = motionSnapshot(run);
+    const { round = 1, sceneId: stageSceneId } = json<{ round?: number; sceneId?: string }>(step.input, {});
+    const done = (name: string) => steps.some((item) => item.name === name && item.status === "done");
+    const history: AgentToolSession["history"] = (role) => previous.flatMap((call) => {
+        if (call.status !== "done") return [];
+        const stored = json<SavedAgentTool>(call.input, {} as never);
+        if (stored.role !== role) return [];
+        const request = parseAgentToolRequest(role, stored.request);
+        const value = result<unknown>(run.id, call.name);
+        if (call.lane !== "browser") return [{ request, result: value }];
+        if (request.name === "sample_reference") {
+            const { followups, images } = referenceFollowupResult.parse(value);
+            return [{ request, result: { followups }, images: images.map((image) => imageBytes([image])[0]) }];
+        }
+        const { frames, layout, images } = previewSchema.parse(value);
+        return [{ request, result: { frames, layout }, images: imageBytes(images) }];
+    });
+    return {
+        available: calls.length < agentToolLimit,
+        history,
+        request(role, request, expectedSceneId) {
+            if (calls.length >= agentToolLimit || previous.length >= agentToolStageLimit) {
+                throw new Error("The specialist used its motion tool allowance. Return the final artifact.");
+            }
+            const { sceneId } = request.args;
+            if (history(role).some((call) => JSON.stringify(call.request) === JSON.stringify(request))) {
+                throw new Error("The same motion tool result is already available.");
+            }
+            if ((expectedSceneId ?? stageSceneId ?? run.target_scene_id) &&
+                sceneId !== (expectedSceneId ?? stageSceneId ?? run.target_scene_id)) throw new Error("The tool must target the assigned scene.");
+            const patched = history(role).reverse().find(({ request }) => request.name === "patch_scene" && request.args.sceneId === sceneId);
+            const scene = patched ? motionSceneSchema.parse((patched.result as { candidate: unknown }).candidate)
+                : done(stepNames(round).assemble)
+                ? result<BuildArtifact>(run.id, stepNames(round).assemble).plan.scenes.find(({ id }) => id === sceneId)
+                : done(`engineer:${sceneId}`) ? agentResult(run.id, `engineer:${sceneId}`, motionBuildSchema).scene
+                    : done(`layout_proposal:${sceneId}`) ? motionSceneSchema.parse(result(run.id, `layout_proposal:${sceneId}`))
+                        : snapshot.tracks.motion_graphics.find(({ id }) => id === sceneId);
+            if (!scene) throw new Error("The tool needs a saved scene candidate.");
+            let payload: unknown = scene;
+            if (request.name === "sample_reference") {
+                const reference = motionReference(run.project_id);
+                const analysis = done("reference_analysis") ? agentResult(run.id, "reference_analysis", referenceAnalysisSchema)
+                    : referenceAnalysisSchema.safeParse(reference?.analysis).data;
+                if (!reference?.available || reference.bindingId !== run.reference_binding_id || !analysis) {
+                    throw new Error("The tool needs a connected reference.");
+                }
+                const interval = analysis.interval;
+                const time = request.args.time;
+                const proposed = done("director") ? agentResult(run.id, "director", motionStoryboardSchema).scenes
+                    .find(({ id }) => id === sceneId) : undefined;
+                const source = proposed ? sceneReferenceEvidence(analysis, proposed, snapshot)?.timing ?? interval : interval;
+                if (source ? time < source.start || time >= source.end : time !== 0) throw new Error("The time is outside the assigned reference interval.");
+                payload = referenceFollowupRequest.parse([{ sceneId, time, interval: source, reason: "Specialist reference check" }]);
+            } else if (request.name === "measure_layout") {
+                const source = [stepNames(round).preview, `motion_check:${sceneId}`, `layout_check:${sceneId}`].find(done);
+                const measurements = source && previewSchema.parse(result(run.id, source)).layout?.filter((item) => item.sceneId === sceneId);
+                if (!measurements?.length) throw new Error("This scene has no saved browser measurements.");
+                payload = { source, measurements };
+            } else if (request.name === "render_scene" && request.args.frames.some((frame) => frame < scene.start_frame || frame >= scene.end_frame)) {
+                throw new Error("The requested frames are outside the assigned scene.");
+            } else if (request.name === "patch_scene") {
+                const draft = { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [scene] } };
+                applyMotionEdit(draft, { tool: "update_motion_scene", params: { id: sceneId, patch: request.args.patch } });
+                validateMotionAssetOwnership(run.project_id, draft);
+                if (motionSceneExceedsBudget(draft.tracks.motion_graphics[0])) throw new Error("The patched candidate exceeds the scene budget.");
+                payload = { candidate: draft.tracks.motion_graphics[0] };
+            }
+            if (JSON.stringify({ role, request, payload }).length > 80_000) throw new Error("The tool input exceeds the motion artifact allowance.");
+            throw new MotionToolYield(role, request, payload);
+        },
+    };
+}
+
 const executeStep: StepHandler = async (run, step, budget, signal) => {
     const { id } = run;
     const onProgress: MotionAgentProgress = (data) => {
@@ -340,7 +438,11 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
     const snapshot = motionSnapshot(run);
     const speechTiming = snapshot.metadata.motion_speech_requested && motionSteps(id).some(({ name, status }) => name === "audio_speech" && status === "done")
         ? result<{ spans: SpeechSpan[] }>(id, "audio_speech").spans : undefined;
-    const context = { brief: run.brief, document: snapshot, budget, signal, onProgress, speechTiming };
+    if (step.name.startsWith("agent_tool:")) {
+        const { payload } = json<SavedAgentTool>(step.input, {} as never);
+        return { value: payload };
+    }
+    const context = { brief: run.brief, document: snapshot, budget, signal, onProgress, speechTiming, tools: agentTools(run, step) };
     if (step.name === "audio_speech") {
         const { spans, summary } = await motionSpeechTiming(snapshot, budget, signal);
         return { value: { spans }, summary };
@@ -826,6 +928,32 @@ export class MotionOrchestrator {
                     applyStepOutput(motionRun(id)!, step, output);
                 }).immediate();
             } catch (error) {
+                if (error instanceof MotionToolYield) {
+                    const scheduled = db.transaction(() => {
+                        const current = motionRun(id);
+                        const steps = motionSteps(id);
+                        const live = steps.find(({ id }) => id === step.id);
+                        if (!current || !isActiveMotionRun(current) || live?.status !== "running" ||
+                            live.lease_token !== step.lease_token || (live.lease_expires ?? 0) <= Date.now()) return true;
+                        const calls = steps.filter(({ name }) => name.startsWith("agent_tool:"));
+                        const ordinal = calls.filter(({ name }) => name.split(":")[2] === step.id).length + 1;
+                        if (calls.length >= agentToolLimit || ordinal > agentToolStageLimit) {
+                            db.prepare("UPDATE motion_steps SET status='pending',lease_token=NULL,lease_expires=NULL WHERE id=?").run(step.id);
+                            return true;
+                        }
+                        const { role, request, payload } = error;
+                        const input = { role, request, payload } satisfies SavedAgentTool;
+                        if (JSON.stringify(input).length > 80_000) return false;
+                        const name = `agent_tool:${request.name}:${step.id}:${ordinal}`;
+                        const browser = request.name === "sample_reference" || request.name === "render_scene";
+                        addMotionStep(id, { name, lane: browser ? "browser" : "local", input });
+                        db.prepare("UPDATE motion_steps SET status='pending',attempts=MAX(0,attempts-1),dependencies=?,lease_token=NULL,lease_expires=NULL WHERE id=?")
+                            .run(JSON.stringify([...json<string[]>(live.dependencies, []), name]), step.id);
+                        appendMotionEvent(id, "agent_tool_requested", { step: step.name, tool: request.name, sceneId: request.args.sceneId });
+                        return true;
+                    }).immediate();
+                    if (scheduled) return;
+                }
                 const details = error instanceof Error ? error.message : "";
                 const message = error instanceof MotionBudgetError ||
                     /^The [a-zA-Z]+ stage could not produce a valid artifact within the configured routes\.$/.test(details) ||

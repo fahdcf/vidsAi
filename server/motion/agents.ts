@@ -399,6 +399,7 @@ export async function runMotionEngineer(
                 layout: "Prefer a version 1 composition with explicit property intervals. Preserve the static layout during the readable hold. Animate the specific objects and landmarks in the scene brief and reference evidence. Use a flat layers response only for simple or static layouts. Positions are normalized. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Prefer palette roles for brand colors, semantic status colors for status and #RRGGBB for exact source colors. Styled spans must concatenate to the complete layer text.",
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
+                sceneId: target.id,
                 images: details.map(({ image }) => image),
                 validate: (proposal) => { compile(proposal); },
             }));
@@ -434,6 +435,7 @@ export async function runMotionEngineer(
         speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
     }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
         validate: ({ scene }) => { buildScene(scene); },
+        sceneId: target.id,
         images: details.map(({ image }) => image),
         requestTimeoutMs: details.length ? 45_000 : undefined,
     }));

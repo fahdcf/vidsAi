@@ -92,6 +92,7 @@ export type BrowserMotionInput = {
     tool: "preview";
     document: Document;
     staticLayout?: boolean;
+    sampleFrames?: number[];
 };
 export type BrowserMotionTask = {
     id: string;

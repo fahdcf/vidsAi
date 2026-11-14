@@ -94,7 +94,8 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         }
         const value = step.name === "reference_capture" ? captureSchema.parse(result)
             : step.name === "reference_detail" ? referenceDetailResult.parse(result)
-            : step.name === "reference_followup" ? referenceFollowupResult.parse(result)
+            : step.name === "reference_followup" || step.name.startsWith("agent_tool:sample_reference:")
+                ? referenceFollowupResult.parse(result)
             : step.name.startsWith("trace:") ? traceResultSchema.parse(result) : previewSchema.parse(result);
         if (step.status === "done" && step.result_id) {
             const prior = motionArtifact(runId, step.result_id);
@@ -142,10 +143,11 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
                 scene.id === sceneId && scene.start_frame <= frame && frame < scene.end_frame) ||
             elements.some(({ bounds }) => bounds[0] > bounds[2] || bounds[1] > bounds[3]))) fail(422, "The preview layout evidence is invalid.");
         if (input.tool === "preview" && "frames" in value &&
-            (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:"))) {
+            (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:") || input.sampleFrames)) {
             const [scene] = input.document.tracks.motion_graphics;
             if (value.frames.some((frame) => frame < scene.start_frame || frame >= scene.end_frame) ||
                 (input.staticLayout && (value.frames.length !== 1 || value.frames[0] !== scene.end_frame - 1)) ||
+                (input.sampleFrames && JSON.stringify(value.frames) !== JSON.stringify(input.sampleFrames)) ||
                 !value.layout || value.layout.length !== value.frames.length ||
                 new Set(value.layout.map(({ frame }) => frame)).size !== value.frames.length) {
                 fail(422, "The browser check must include measurements for every sampled scene frame.");

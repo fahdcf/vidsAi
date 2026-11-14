@@ -152,10 +152,10 @@ async function captureReference(reference: BrowserMotionReference, signal: Abort
 type MeasuredLayout = NonNullable<import("../../../../shared/motion/browser-tools").MotionPreview["layout"]>;
 const previewFrames = new Map<string, { image: Blob; layout: MeasuredLayout }>();
 
-async function renderPreview(draft: Document, signal: AbortSignal, staticLayout = false) {
+async function renderPreview(draft: Document, signal: AbortSignal, staticLayout = false, sampleFrames?: number[]) {
     const scenes = [...draft.tracks.motion_graphics].sort((a, b) => a.layer - b.layer);
     const soundtrack = draft.tracks.audio.find(({ id }) => id === "motion-soundtrack");
-    const frames = [...new Set(scenes.flatMap((scene) => {
+    const frames = [...new Set(sampleFrames ?? scenes.flatMap((scene) => {
         const { start_frame, end_frame } = scene;
         if (staticLayout) return [end_frame - 1];
         const accents = draft.metadata.motion_cues?.filter(({ frame }) => frame > start_frame && frame < end_frame - 1);
@@ -253,7 +253,7 @@ export async function runMotionBrowserInput(input: BrowserMotionInput, signal: A
     if (input.tool === "reference_capture") return captureReference(input.reference, signal);
     if (input.tool === "reference_detail") return captureDetails(input, signal);
     if (input.tool === "reference_followup") return captureFollowups(input, signal);
-    if (input.tool === "preview") return renderPreview(input.document, signal, input.staticLayout);
+    if (input.tool === "preview") return renderPreview(input.document, signal, input.staticLayout, input.sampleFrames);
     const { reference, interval, colors } = input;
     const source = await loadMotionReference(reference, signal);
     const { traceReferenceShapes } = await import("./reference-trace");

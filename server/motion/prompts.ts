@@ -41,6 +41,7 @@ const requestContext = z.object({
     frames: z.number().int().positive().max(7200),
     input: z.unknown(),
     maxOutputTokens: z.number().int().positive(),
+    toolResults: z.unknown().optional(),
 }).strict();
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -51,7 +52,7 @@ export function motionSkillSource(id: string) {
     return { ...entry, text, hash: digest(text) };
 }
 
-export function buildMotionPrompt(role: MotionPromptRole, context: z.input<typeof requestContext>, output: z.ZodType) {
+export function buildMotionPrompt(role: MotionPromptRole, context: z.input<typeof requestContext>, output: z.ZodType, toolsEnabled = false) {
     const checked = requestContext.parse(context);
     const definition = definitions[role];
     const roleText = readFileSync(new URL(`./prompts/${definition.filename}.md`, import.meta.url), "utf8").trim();
@@ -65,6 +66,7 @@ export function buildMotionPrompt(role: MotionPromptRole, context: z.input<typeo
         ...skills.map(({ text }) => text.split("```json", 1)[0].split(/\r?\n/)
             .filter((line) => !line.startsWith("Skill version ") && !line.startsWith("Supported components ")).join("\n").trim()),
         "Return one final JSON object matching the request's output schema. Include only concise user-facing decisions when asked. Tool availability is controlled by VidsAI.",
+        ...(toolsEnabled ? ["When additional evidence is necessary, return the toolRequest form in the output schema instead of the final artifact. Use only the listed request forms. Results from previous calls are in toolResults. Continue to a final artifact when you have enough evidence."] : []),
     ].join("\n\n");
     const prompt = JSON.stringify({ context: checked, tools, output: z.toJSONSchema(output, { io: "input", unrepresentable: "any" }) });
     if (prompt.length > 125_000 || instruction.length > 36_000) throw new Error("The motion prompt exceeds its context budget.");

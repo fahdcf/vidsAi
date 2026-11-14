@@ -1,4 +1,5 @@
-import type { z } from "zod";
+import { z } from "zod";
+import { agentToolSchemas, agentToolStageLimit, MotionToolYield, parseAgentToolRequest, type AgentToolSession } from "./agent-tools";
 import type { SpeechSpan } from "./speech";
 import type { Document } from "../../shared/contracts";
 import { MotionBudgetError, type ModelReservation, type MotionModelBudget } from "./budget";
@@ -14,6 +15,7 @@ export type MotionAgentContext = {
     signal: AbortSignal;
     onProgress?: MotionAgentProgress;
     speechTiming?: readonly SpeechSpan[];
+    tools?: AgentToolSession;
 };
 export type MotionVisionImage = { mime: "image/jpeg" | "image/png"; bytes: Uint8Array };
 export class MotionAgentUnavailable extends Error {}
@@ -40,20 +42,34 @@ export async function runMotionAgent<T>(
     route: MotionRoute,
     input: unknown,
     schema: z.ZodType<T>,
-    options: { images?: readonly MotionVisionImage[]; validate?: (value: T) => void; constrainedOutput?: boolean; requestTimeoutMs?: number } = {},
+    options: { images?: readonly MotionVisionImage[]; validate?: (value: T) => void; constrainedOutput?: boolean;
+        requestTimeoutMs?: number; sceneId?: string } = {},
 ) {
     const { document, brief, budget, signal, onProgress } = context;
     const mode = role === "repair" ? "deep" : motionRoleMode[role];
-    const images = options.images ?? [];
+    const history = context.tools?.history(role, options.sceneId) ?? [];
+    const requests = context.tools?.available && history.length < agentToolStageLimit ? agentToolSchemas(role) : [];
+    const requestSchema = requests.length ? z.object({ toolRequest: z.union(requests) }).strict() : null;
+    const output = requestSchema ? z.union([schema, requestSchema]) : schema;
+    const originalImages = options.images ?? [];
+    const toolImages = history.flatMap(({ images }) => images ?? []).slice(0, Math.max(0, Math.min(2, 8 - originalImages.length)));
+    const images = [...originalImages, ...toolImages];
     const maxTokens = mode === "off" ? 2048 : ["referenceAnalyst", "referenceSpec", "director", "visualCritic"].includes(role) ? 6400 : 4096;
     const providers = await qualifiedMotionProviders(route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
     ]);
     if (!providers.length) throw new MotionAgentUnavailable(`No qualified model is available for ${role}.`);
+    let imageIndex = originalImages.length + 1;
+    const toolResults = history.map(({ request, result, images }) => {
+        const count = Math.max(0, Math.min(images?.length ?? 0, originalImages.length + toolImages.length + 1 - imageIndex));
+        const attachedImages = Array.from({ length: count }, () => imageIndex++);
+        return { request, result, attachedImages };
+    });
     const prompt = buildMotionPrompt(role, {
         brief, revision: document.revision, width: document.width, height: document.height,
         fps: document.fps, frames: document.total_frames, input, maxOutputTokens: maxTokens,
-    }, schema);
+        toolResults: toolResults.length ? toolResults : undefined,
+    }, output, requestSchema !== null);
     const promptTokens = Math.max(1, Math.ceil((prompt.prompt.length + prompt.instruction.length) / 3) + 2048 * images.length);
     let providerBudget: MotionBudgetError | undefined;
     for (const provider of providers) {
@@ -73,7 +89,7 @@ export async function runMotionAgent<T>(
             const timeoutMs = Math.min(attempt.timeoutMs, options.requestTimeoutMs ?? attempt.timeoutMs);
             const result = await requestMotionJson(provider, {
                 ...prompt, images, mode, conciseReasoning: true, constrainedOutput: options.constrainedOutput ?? true,
-                schema, maxTokens, stream: true, signal,
+                schema: output, maxTokens, stream: true, signal,
                 timeoutMs, firstTokenTimeoutMs: Math.min(attempt.firstTokenTimeoutMs, timeoutMs),
                 onFirstToken: (elapsedMs) => onProgress?.({ ...diagnostic, state: "responding", elapsedMs }),
             });
@@ -82,14 +98,26 @@ export async function runMotionAgent<T>(
                 onProgress?.({ ...diagnostic, state: "rejected", outcome: "missing_reasoning", elapsedMs: result.latencyMs, tokens: actual });
                 continue;
             }
-            options.validate?.(result.value);
+            if (requestSchema) {
+                const tool = requestSchema.safeParse(result.value);
+                if (tool.success) {
+                    context.tools!.request(role, parseAgentToolRequest(role, tool.data.toolRequest), options.sceneId);
+                }
+            }
+            const value = schema.parse(result.value);
+            options.validate?.(value);
             onProgress?.({ ...diagnostic, state: "accepted", elapsedMs: result.latencyMs, tokens: actual, reasoningObserved: result.reasoningObserved });
             return {
-                value: result.value, promptVersion: prompt.version, model: provider.alias,
+                value, promptVersion: prompt.version, model: provider.alias,
                 mode, reasoningObserved: result.reasoningObserved, latencyMs: result.latencyMs, usage: result.usage,
             };
         } catch (error) {
             signal.throwIfAborted();
+            if (error instanceof MotionToolYield) {
+                onProgress?.({ ...diagnostic, state: "accepted", outcome: "tool_requested", elapsedMs: Math.round(performance.now() - started), tokens: actual });
+                throw error;
+            }
+            if (error instanceof MotionBudgetError) throw error;
             const providerFailure = error instanceof MotionProviderError ? error : undefined;
             actual ??= providerFailure?.artifact?.totalTokens;
             onProgress?.({ ...diagnostic, state: "rejected", elapsedMs: Math.round(performance.now() - started), tokens: actual,

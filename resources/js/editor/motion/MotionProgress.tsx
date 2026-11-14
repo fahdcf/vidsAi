@@ -19,6 +19,15 @@ export function motionStageName(name: string) {
         case "layout_proposal": return "Scene layout proposal";
         case "layout_check": return "Browser layout check";
         case "motion_check": return "Browser motion check";
+        case "agent_tool": {
+            switch (name.split(":")[1]) {
+                case "measure_layout": return "Read layout measurements";
+                case "patch_scene": return "Check scene patch";
+                case "sample_reference": return "Sample reference frame";
+                case "render_scene": return "Render scene samples";
+                default: return "Motion tool";
+            }
+        }
         case "engineer": return "Motion engineer";
         case "assemble": return "Timeline assembly";
         case "preview": return "Browser preview render";

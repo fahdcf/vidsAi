@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false } = {}) {
     const stages = [];
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
     const labels = ["Get transcript", "Try it now"];
@@ -15,6 +15,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
         const role = instruction.match(/^You are the VidsAI (.+?) specialist\./)?.[1] ?? "observe";
         stages.push(role);
         const artifact = role === "observe" ? null : JSON.parse(prompt).context.input;
+        const toolResults = role === "observe" ? [] : JSON.parse(prompt).context.toolResults ?? [];
         const choices = (delta, finish_reason = null) => ({ choices: [{ delta, finish_reason }] });
         let value;
         switch (role) {
@@ -95,6 +96,15 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 if (artifact.task?.startsWith("Compare each static layout")) {
                     assert.ok(artifact.layout.length && artifact.contactSheetFrames.length);
                     assert.equal(artifact.contactSheetFrames.length, graphic.length);
+                    if (agentTools && !toolResults.length) {
+                        const frame = artifact.referenceFrames[0];
+                        value = { toolRequest: { name: "sample_reference", args: { sceneId: frame.sceneId, time: frame.time } } };
+                        break;
+                    }
+                    if (agentTools) {
+                        assert.equal(toolResults[0].result.followups[0].sceneId, graphic[0].id);
+                        assert.equal(toolResults[0].attachedImages.length, 1);
+                    }
                     value = { suggestions: [{ sceneId: graphic[0].id, revision: "Keep opening headline hierarchy aligned to the source." }] };
                     break;
                 }
@@ -115,6 +125,19 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 })) };
                 break;
             case "motion-engineer": {
+                if (agentTools && artifact.target.id === graphic[0].id) {
+                    if (!toolResults.length) {
+                        value = { toolRequest: { name: "measure_layout", args: { sceneId: artifact.target.id } } };
+                        break;
+                    }
+                    assert.equal(toolResults[0].result.measurements[0].sceneId, artifact.target.id);
+                    if (toolResults.length === 1) {
+                        value = { toolRequest: { name: "render_scene", args: { sceneId: artifact.target.id, frames: [artifact.target.start_frame] } } };
+                        break;
+                    }
+                    assert.deepEqual(toolResults[1].result.frames, [artifact.target.start_frame]);
+                    assert.equal(toolResults[1].attachedImages.length, 1);
+                }
                 assert.equal(typeof artifact.approvedCopy, "string");
                 assert.ok(artifact.reference?.observations.length);
                 assert.equal(artifact.referenceSpec.sceneId, artifact.target.id);
@@ -125,7 +148,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.ok(rejectSpec ? artifact.referenceSpec.uncertainties.length : artifact.referenceSpec.objects.length);
                 if (artifact.referenceFrames.length) {
                     assert.ok(artifact.referenceFrames.every(({ sceneId }) => sceneId === artifact.target.id));
-                    assert.equal(message.length, artifact.referenceFrames.length + 1);
+                    assert.equal(message.length, artifact.referenceFrames.length + 1 + toolResults.flatMap(({ attachedImages }) => attachedImages).length);
                     assert.ok(!artifact.referenceFrames[0].crop);
                     const extra = artifact.referenceFrames.find(({ followup }) => followup);
                     if (referenceFollowup) assert.equal(extra?.followup, artifact.target.id === graphic[0].id ? "Read the control label." : "Check the later layout.");
@@ -174,6 +197,11 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                         : [], unresolved: [] };
                 break;
             case "repair":
+                if (agentTools && !toolResults.length) {
+                    value = { toolRequest: { name: "patch_scene", args: { sceneId: artifact.scene.id, patch: { motionRate: 1.2 } } } };
+                    break;
+                }
+                if (agentTools) assert.equal(toolResults[0].result.candidate.motionRate, 1.2);
                 value = componentCompatibility ? { decision: "Sped up the entrance.", approximation: null, scene: { ...artifact.scene, motionRate: 1.2 } }
                     : { decision: "Moved the impact later.", approximation: null,
                         scene: { ...artifact.scene, params: { ...artifact.scene.params, impactAt: 0.42 } } };

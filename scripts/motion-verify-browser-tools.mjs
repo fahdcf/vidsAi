@@ -642,7 +642,8 @@ try {
         assert.equal(image.status, 201);
         graphAssets = { vector: vectorAsset.id, image: (await image.json()).id };
     }
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets });
+    const agentTools = process.argv.includes("--agent-tools");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -658,11 +659,19 @@ try {
     try {
         const graph = new MotionOrchestrator();
         let checkedBeforeRetry;
+        let retriedTool = false;
         for (let tick = 0; tick < 60 && motionRun(graphRun.id).status !== "ready"; tick++) {
             await graph.tick(graphRun.id);
             const current = motionRun(graphRun.id);
             assert.notEqual(current.status, "failed", current.error);
             if (current.status === "waiting_for_browser") {
+                if (agentTools && !retriedTool && motionSteps(graphRun.id).some(({ name, status }) =>
+                    name.startsWith("agent_tool:render_scene:") && status === "pending")) {
+                    assert.equal(graph.cancel(graphRun.id, a.owner).status, "cancelled");
+                    assert.equal(retryMotionRun(graphRun.id, a.owner).status, "queued");
+                    retriedTool = true;
+                    continue;
+                }
                 assert.equal(await graphPage.evaluate(async (id) =>
                     (await import("/resources/js/editor/motion/browser-runner.ts"))
                         .runNextMotionBrowserTask(id, AbortSignal.timeout(45_000)), graphRun.id), true);
@@ -676,6 +685,12 @@ try {
         }
         assert.ok(checkedBeforeRetry);
         const steps = motionSteps(graphRun.id);
+        if (agentTools) {
+            assert.ok(retriedTool);
+            assert.deepEqual(steps.filter(({ name }) => name.startsWith("agent_tool:")).map(({ name, status }) => [name.split(":")[1], status]),
+                [["sample_reference", "done"], ["measure_layout", "done"], ["render_scene", "done"], ["patch_scene", "done"]]);
+            assert.equal(db.prepare("SELECT COUNT(*) AS n FROM motion_events WHERE run_id=? AND type='agent_tool_requested'").get(graphRun.id).n, 4);
+        }
         const saved = steps.find(({ id }) => id === checkedBeforeRetry.id);
         assert.equal(saved.result_id, checkedBeforeRetry.result_id);
         assert.equal(saved.attempts, checkedBeforeRetry.attempts);
@@ -1085,7 +1100,10 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
         assert.ok(texture.rejected);
         console.log("Chrome WebGL2 qualified the lit primitive, imported mesh, owned texture, 2D fallback and decoded MP4 pixels.");
     }
-    const events = motionEvents(graphRun.id, 0);
+    const events = [];
+    for (let page = motionEvents(graphRun.id, 0); page.length; page = motionEvents(graphRun.id, page.at(-1).id)) {
+        events.push(...page);
+    }
     if (useGraphEngineer) {
         const step = motionSteps(graphRun.id).find(({ name }) => name === `engineer:${graphic[1].id}`);
         const artifact = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString("utf8"));
