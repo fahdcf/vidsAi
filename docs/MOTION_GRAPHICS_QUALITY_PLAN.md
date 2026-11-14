@@ -211,7 +211,7 @@ Run typecheck, build and focused renderer/editor tests. Render diagnostic scenes
 
 ## F. Qualify models for this work and control cost
 
-- [ ] F1. Evaluate currently configured routes separately for reference layout reading, scene design, structured authoring and visual criticism. Use fixed tasks from several visual families and score correctness, visual quality, latency, retry rate and accounted tokens.
+- [ ] F1. Evaluate currently configured routes separately for reference layout reading, scene design, structured authoring and visual criticism. `npm run motion:benchmark-models` lists fixed synthetic tasks across product UI, typography and data. `--live` runs the selected route and records automatic correctness, latency and token usage. Full-scene visual quality, repeatability and broader route qualification remain open.
 - [ ] F2. Prefer a qualified vision model for visual design and comparison. Use configured text/code-capable models for construction from a complete specification when they perform better. Keep model IDs, credentials and provider routing server-side.
 - [ ] F3. Size requests by stage and scene complexity. Reserve budget for visual verification and repair. Cache evidence, schemas and approved artifacts by their hashes. Retry failed scene work without regenerating the entire project.
 - [ ] F4. Record actual development provider usage and failed attempts. Evaluate quality under the normal product budget. Keep a larger experimental budget labeled separately so a manually rescued result cannot stand in for routine performance.
