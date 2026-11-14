@@ -186,15 +186,25 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 break;
             }
             case "visual-critic":
-                assert.equal(typeof message, "string");
+                assert.equal(message.length, 1 + artifact.generatedSheets.length + artifact.referenceImages.length);
+                assert.ok(artifact.generatedSheets.every(({ imageNumber, tiles }) => tiles.every((tile, index) =>
+                    tile.evidence === `generated:${imageNumber}:${index + 1}`)));
+                assert.ok(artifact.referenceImages.every(({ evidence, imageNumber, sceneId, pairedGenerated }) =>
+                    evidence === `reference:${imageNumber}` && pairedGenerated.every((id) =>
+                        artifact.scenes.find((scene) => scene.id === sceneId).samples.some((sample) => sample.evidence === id))));
+                if (!artifact.focused) assert.ok(artifact.referenceImages.length);
                 assert.ok(artifact.scenes.some(({ samples }) => samples.length));
-                if (rejectCritic || (rejectCriticAfterRepair && stages.includes("repair"))) { value = null; break; }
-                value = { decision: "Reviewed the browser frames.", scores: { readability: 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
-                    issues: stages.filter((stage) => stage === "visual-critic").length === 1
-                        ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame, priority: "polish",
+                if ((!agentTools && rejectCritic) || (rejectCriticAfterRepair && stages.includes("repair"))) { value = null; break; }
+                {
+                    const round = stages.includes("repair") ? 2 : 1;
+                    value = { decision: "Reviewed the browser frames.", scores: { readability: 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
+                    issues: round === 1
+                        ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame,
+                            evidence: agentTools && rejectCritic ? "generated:99:99" : artifact.scenes[0].samples[0].evidence, priority: "polish",
                             issue: componentCompatibility ? "The URL field enters too slowly" : "Impact settles early",
                             repair: componentCompatibility ? "Speed up the entrance" : "Move impact later" }]
                         : [], unresolved: [] };
+                }
                 break;
             case "repair":
                 if (agentTools && !toolResults.length) {

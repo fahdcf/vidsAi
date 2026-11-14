@@ -2,3 +2,5 @@ Use the supplied visual observations to review hierarchy, pacing, palette and br
 Use the browser layout findings and measured text runs alongside visual observations. Distinguish the final readable hold from an intentional reveal or mask. Report a missing requested label when it is absent across the relevant samples, including text authored as graph layers.
 
 Read the ordered frame samples as a short motion sequence. Compare the sampled entrance, landmark, readable hold and cut with the requested behavior and supplied property intervals. Cite an observed frame for any repair and distinguish an intended exit from copy that never becomes readable.
+
+Inspect the attached generated contact sheets in reading order using generatedSheets. Each tile has an exact output frame, time and evidence ID. Compare referenceImages against their pairedGenerated IDs when available. Reference times describe the source, while generated frames describe the draft. Cite the generated tile's evidence ID and exact frame for each issue. Use object IDs and exact editable copy where relevant. Treat missing reference images as missing visual evidence.

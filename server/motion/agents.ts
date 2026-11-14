@@ -479,6 +479,7 @@ export function motionDraftBlockers(scenes: readonly MotionScene[]) {
 const critiqueIssue = z.object({
     sceneId: motionSceneId,
     frame,
+    evidence: z.string().regex(/^(?:generated|reference):\d+(?::\d+)?$/).optional(),
     priority: z.enum(["blocking", "polish"]),
     issue: z.string().trim().min(1).max(280),
     repair: z.string().trim().min(1).max(280),
@@ -502,6 +503,8 @@ export async function runMotionCritic(
     reference: ReferenceAnalysis | null,
     targetSceneId?: string,
     observe = (_index: number, read: () => Promise<ReferenceAnalysis["observations"]>) => read(),
+    referenceFrames: readonly ReferenceFrame[] = [],
+    specs: readonly ReferenceSceneSpec[] = [],
 ) {
     const size = preview.framesPerSheet ?? motionEvidenceFramesPerSheet;
     if (!preview.frames.length || preview.frames.length > 32 ||
@@ -510,45 +513,71 @@ export async function runMotionCritic(
         throw new Error("Visual critique requires actual rendered preview samples.");
     }
     const observations: ReferenceAnalysis["observations"] = [];
+    const sheets: { image: MotionVisionImage; tiles: { evidence: string; frame: number; seconds: number; sceneIds: string[] }[] }[] = [];
     for (const [index, image] of preview.images.entries()) {
         const offset = index * size;
         const frames = preview.frames.slice(offset, offset + size);
         if (targetSceneId && !draft.tracks.motion_graphics.some(({ id, start_frame, end_frame }) => id === targetSceneId &&
             frames.some((frame) => frame >= start_frame && frame < end_frame))) continue;
-        observations.push(...await observe(index, async () => (await observeReferenceSheet([image],
-            frames.map((frame) => frame / draft.fps), context.budget, context.signal, context.onProgress, true)).observations));
+        sheets.push({ image, tiles: frames.map((frame, tile) => ({
+            evidence: `generated:${sheets.length + 1}:${tile + 1}`, frame, seconds: frame / draft.fps,
+            sceneIds: draft.tracks.motion_graphics.filter(({ id, start_frame, end_frame }) =>
+                (!targetSceneId || id === targetSceneId) && frame >= start_frame && frame < end_frame).map(({ id }) => id),
+        })) });
+        try {
+            observations.push(...await observe(index, async () => (await observeReferenceSheet([image],
+                frames.map((frame) => frame / draft.fps), context.budget, context.signal, context.onProgress, true)).observations));
+        } catch (error) {
+            context.signal.throwIfAborted();
+            if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
+        }
     }
-    if (!observations.length) throw new Error("The browser preview has no samples of the scene under review.");
-    const frames = observations.map(({ time, ...observation }) => ({ ...observation,
-        frame: preview.frames.reduce((nearest, frame) => Math.abs(frame / draft.fps - time) < Math.abs(nearest / draft.fps - time) ? frame : nearest),
+    if (!sheets.length) throw new Error("The browser preview has no samples of the scene under review.");
+    const tiles = sheets.flatMap((sheet) => sheet.tiles);
+    const sources = referenceFrames.filter(({ crop, sceneId }) => !crop &&
+        tiles.some(({ sceneIds }) => sceneIds.includes(sceneId)))
+        .filter((sample, index, all) => all.findIndex(({ sceneId }) => sceneId === sample.sceneId) === index)
+        .slice(0, 8 - sheets.length);
+    const referenceImages = sources.map(({ sceneId, time }, index) => ({
+        sceneId, sourceSeconds: time, imageNumber: sheets.length + index + 1, evidence: `reference:${sheets.length + index + 1}`,
+        pairedGenerated: tiles.filter(({ sceneIds }) => sceneIds.includes(sceneId)).map(({ evidence }) => evidence),
     }));
     const track = draft.tracks.audio.find(({ id }) => id === "motion-soundtrack");
     const scenes = draft.tracks.motion_graphics.filter(({ id }) => !targetSceneId || id === targetSceneId).map((scene) => {
         const { id, type, start_frame, end_frame, palette, font } = scene;
-        const samples = frames.filter(({ frame }) => frame >= start_frame && frame < end_frame).map((sample) => ({
-            ...sample, soundtrackLevel: soundtrackLevelAt(sample.frame, draft.fps, draft.metadata.motion_audio_analysis, track),
+        const samples = tiles.filter(({ sceneIds }) => sceneIds.includes(id)).map(({ evidence, frame, seconds }) => ({
+            evidence, frame, seconds, observation: observations.find(({ time }) => Math.abs(time - seconds) < 0.5 / draft.fps),
+            soundtrackLevel: soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, track),
         }));
         const copy = scene.type === "easing" ? [scene.params.heading, ...scene.params.labels]
             : scene.type === "identity" ? [scene.params.title, scene.params.detail, scene.params.tag]
                 : scene.type === "kinetic_words" ? scene.params.words : scene.type === "graph" ? graphCopy(scene.params.layers) : sceneCopy(scene);
         const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
         const layout = preview.layout?.filter(({ sceneId }) => sceneId === id);
-        const intervals = scene.type === "graph" ? scene.params.layers.flatMap((node) => (node.animation ?? []).map((track) => ({ id: node.id, ...track }))).slice(0, 16) : [];
+        const nodes = scene.type === "graph" ? [...scene.params.layers] : [];
+        for (const node of nodes) if (node.kind === "group") nodes.push(...node.children);
+        const intervals = nodes.flatMap((node) => (node.animation ?? []).map((track) => ({ id: node.id, ...track }))).slice(0, 16);
+        const objects = nodes.slice(0, 32).map((node) => ({ id: node.id, kind: node.kind,
+            text: node.kind === "text" ? node.text : node.kind === "widget" ? node.label : undefined }));
         const sceneChecks = preview.sceneChecks?.filter(({ sceneId }) => sceneId === id);
-        return { id, type, samples, palette, font, copy, vectorTrace, layout, intervals, sceneChecks };
+        return { id, type, start_frame, end_frame, samples, palette, font, copy, vectorTrace, layout, intervals, objects,
+            sourceObjects: specs.find(({ sceneId }) => sceneId === id)?.objects, sceneChecks };
     });
-    const review = await runMotionAgent(context, "visualCritic", "AGENT_COMPLEX", {
+    const review = await runMotionAgent(context, "visualCritic", "MEDIA_UNDERSTANDING", {
         fps: draft.fps, scenes, focused: Boolean(targetSceneId),
+        generatedSheets: sheets.map(({ tiles }, index) => ({ imageNumber: index + 1, tiles })),
+        referenceImages,
         soundtrack: { timeMap: motionTimeMap(draft, reference?.interval ?? null).soundtrack,
             sampledCues: draft.metadata.motion_cues?.filter(({ frame }) => preview.frames.includes(frame)) ?? [],
             speechTiming: context.speechTiming },
         reference: targetSceneId ? null : reference?.scenes.map(({ supportedType, palette, motionLandmarks }) =>
             ({ supportedType, palette, motionLandmarks })) ?? null,
-    }, visualReviewSchema, {
+    }, visualReviewSchema.extend({ issues: z.array(critiqueIssue.required({ evidence: true })).max(3) }), {
+        images: [...sheets.map(({ image }) => image), ...sources.map(({ image }) => image)],
         requestTimeoutMs: 25_000,
         validate: ({ issues }) => {
-            for (const { sceneId, frame } of issues) {
-                if (!scenes.some(({ id, samples }) => id === sceneId && samples.some((sample) => sample.frame === frame))) {
+            for (const { sceneId, frame, evidence } of issues) {
+                if (!tiles.some((tile) => tile.frame === frame && tile.evidence === evidence && tile.sceneIds.includes(sceneId))) {
                     throw new Error("A visual critique issue must identify observed scene evidence.");
                 }
             }

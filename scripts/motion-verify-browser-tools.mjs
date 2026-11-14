@@ -687,9 +687,10 @@ try {
         const steps = motionSteps(graphRun.id);
         if (agentTools) {
             assert.ok(retriedTool);
+            const expected = ["sample_reference", "measure_layout", "render_scene", ...(rejectCritic ? [] : ["patch_scene"])];
             assert.deepEqual(steps.filter(({ name }) => name.startsWith("agent_tool:")).map(({ name, status }) => [name.split(":")[1], status]),
-                [["sample_reference", "done"], ["measure_layout", "done"], ["render_scene", "done"], ["patch_scene", "done"]]);
-            assert.equal(db.prepare("SELECT COUNT(*) AS n FROM motion_events WHERE run_id=? AND type='agent_tool_requested'").get(graphRun.id).n, 4);
+                expected.map((name) => [name, "done"]));
+            assert.equal(db.prepare("SELECT COUNT(*) AS n FROM motion_events WHERE run_id=? AND type='agent_tool_requested'").get(graphRun.id).n, expected.length);
         }
         const saved = steps.find(({ id }) => id === checkedBeforeRetry.id);
         assert.equal(saved.result_id, checkedBeforeRetry.result_id);
@@ -1133,6 +1134,7 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
     }
     assert.ok(events.some(({ data }) => data.outcome === "invalid_output"));
     assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.reasoningObserved));
+    if (agentTools && rejectCritic) assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.outcome === "artifact_validation"));
     assert.ok(!JSON.stringify(events).includes(reasoning));
     console.log("Browser evidence, ownership, idempotency, leases, restart, cancellation, steering, draft recovery and stale revision passed.");
     console.log("Complete mocked specialist handoffs with real reference/preview evidence, malformed JSON fallback, and targeted repair passed.");

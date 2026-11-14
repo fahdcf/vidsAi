@@ -611,7 +611,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         try {
             const value = await runMotionCritic(context, draft,
                 { ...preview, images: imageBytes(preview.images), sceneChecks }, reference(), run.target_scene_id ?? undefined,
-                (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read));
+                (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read),
+                details(), referenceSpecs());
             return { value, summary: value.value.decision };
         } catch (error) {
             signal.throwIfAborted();
