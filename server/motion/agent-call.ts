@@ -6,7 +6,7 @@ import { MotionBudgetError, type ModelReservation, type MotionModelBudget } from
 import { buildMotionPrompt, type MotionPromptRole } from "./prompts";
 import { MotionProviderError, motionReasoningEffort, motionRoleMode, requestMotionJson } from "./providers/chat";
 import type { MotionRoute } from "./providers/inventory";
-import { qualifiedMotionProviders } from "./providers/qualified";
+import { qualifiedAuthoringProviders, qualifiedMotionProviders } from "./providers/qualified";
 
 export type MotionAgentContext = {
     brief: string;
@@ -63,7 +63,8 @@ export async function runMotionAgent<T>(
             Array.isArray(input.issues) && input.issues.some((issue) => issue.priority === "blocking"))) ? "extended" : "standard";
     const maxTokens = mode === "off" ? 2048 : requestedReasoning === "extended" ||
         ["referenceAnalyst", "referenceSpec", "director", "visualCritic"].includes(role) ? 6400 : 4096;
-    const providers = await qualifiedMotionProviders(route, [
+    const providers = role === "motionEngineer" ? await qualifiedAuthoringProviders(images.length > 0, mode === "deep")
+        : await qualifiedMotionProviders(role === "visualDesigner" && images.length ? "MEDIA_UNDERSTANDING" : route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
     ]);
     if (!providers.length) throw new MotionAgentUnavailable(`No qualified model is available for ${role}.`);

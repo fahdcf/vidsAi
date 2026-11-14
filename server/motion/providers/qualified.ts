@@ -26,3 +26,8 @@ export async function qualifiedMotionProviders(route: MotionRoute, capabilities:
         entry.alias === provider.alias && entry.model === provider.id &&
         capabilities.every((capability) => entry.capabilities[capability] === "qualified")));
 }
+
+export async function qualifiedAuthoringProviders(vision: boolean, reasoning: boolean) {
+    return qualifiedMotionProviders(vision ? "MEDIA_UNDERSTANDING" : "AGENT_COMPLEX",
+        [vision ? "image" : "text", "stream", ...(reasoning ? ["thinking" as const] : [])]);
+}
