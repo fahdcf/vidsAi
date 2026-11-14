@@ -1194,6 +1194,8 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
     }
     assert.ok(events.some(({ data }) => data.outcome === "invalid_output"));
     assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.reasoningObserved));
+    if (workspaceModule) assert.ok(events.some(({ data }) => data.role === "motionEngineer" &&
+        data.requestedReasoning === "extended" && data.reasoningEffort === "high" && data.outcome === "tool_requested"));
     if (agentTools && rejectCritic) assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.outcome === "artifact_validation"));
     assert.ok(!JSON.stringify(events).includes(reasoning));
     console.log("Browser evidence, ownership, idempotency, leases, restart, cancellation, steering, draft recovery and stale revision passed.");

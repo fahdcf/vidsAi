@@ -35,6 +35,7 @@ type MotionChatRequest<T> = {
     images?: readonly { mime: "image/jpeg" | "image/png"; bytes: Uint8Array }[];
     mode: "deep" | "off";
     conciseReasoning?: boolean;
+    reasoning?: "standard" | "extended";
     constrainedOutput?: boolean;
     temperature?: number;
     schema: z.ZodType<T>;
@@ -146,7 +147,8 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         ? setTimeout(() => firstToken.abort(new DOMException("Provider first token timed out.", "TimeoutError")), request.firstTokenTimeoutMs)
         : undefined;
     const stream = request.stream === true;
-    const reasoningEffort = motionReasoningEffort(provider.model, request.mode, request.conciseReasoning);
+    const conciseReasoning = request.reasoning ? request.reasoning === "standard" : request.conciseReasoning;
+    const reasoningEffort = motionReasoningEffort(provider.model, request.mode, conciseReasoning);
     let firstTokenMs: number | undefined;
     let reasoningObserved = false;
     let content = "";
@@ -166,7 +168,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
                 stream,
                 ...(reasoningEffort ? { reasoning_effort: reasoningEffort }
                     : options.thinking ? { chat_template_kwargs: { enable_thinking: request.mode === "deep" } } : {}),
-                ...(provider.model === ultra && request.mode === "deep" && request.conciseReasoning
+                ...(provider.model === ultra && request.mode === "deep" && conciseReasoning
                     ? { chat_template_kwargs: { enable_thinking: true, medium_effort: true,
                         reasoning_budget: Math.min(1400, request.maxTokens - 1) } } : {}),
                 ...(provider.model === superVl && stream ? { stream_options: { include_usage: true } } : {}),

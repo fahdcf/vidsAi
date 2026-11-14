@@ -153,6 +153,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                         } } } };
                     } else if (toolResults.length === 1) {
                         assert.ok(toolResults[0].result.diagnostics.some(({ code }) => code === "TS2345"));
+                        assert.equal(request.reasoning_effort, "high");
                         value = { toolRequest: { name: "patch_module", args: { sceneId, expectedRevision: revision,
                             find: '"invalid"', replace: '0.1 + 0.15 * (1 + sdk.math.sin(input.frame / 5))' } } };
                     } else if (toolResults.length === 2) {

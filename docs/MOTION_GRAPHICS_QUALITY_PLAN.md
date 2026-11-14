@@ -207,7 +207,7 @@ Run typecheck, build and focused renderer/editor tests. Render diagnostic scenes
 - [x] E8. Give the art director responsibility for visual identity, recurring objects and rhythm. Render and choose between two styleframes for one flagged scene before motion authoring. The browser fixture verified distinct layouts, selected-layout handoff and recorded inference usage.
 - [x] E9. Package versioned capability guidance for product UI, mixed type, procedural animation, soundtrack cues, code diagnostics, reference comparison and bounded 3D. The runtime guide retrieves relevant examples by intent. Resource checks and prompt tests verify the manifest links and installed SDK helpers.
 - [x] E10. Derive compact project memory from saved copy, design, timeline, source and review artifacts. Scene workers receive their own details and the full scene order. The browser fixture verified that scope. Text/code authoring and image critique use separate configured routes. Comparative route quality is tracked in F.
-- [ ] E11. Add patch-based reasoning loops for syntax errors, layout defects and visual issues, with adaptive effort and deadlines. A request for extra reasoning must use settings actually supported by that model/provider. Existing `deep` roles currently route some calls through concise low/medium effort. Record requested and effective settings, and qualify stronger settings on real scene tasks.
+- [ ] E11. Add patch-based reasoning loops for syntax errors, layout defects and visual issues, with adaptive effort and deadlines. The browser fixture verifies escalation after a compiler diagnostic and records requested and effective effort. Stronger settings still need live scene qualification in F.
 
 ## F. Qualify models for this work and control cost
 

@@ -29,6 +29,7 @@ export type MotionAgentProgress = (data: {
     promptHash?: string;
     maxTokens?: number;
     reasoningEffort?: ReturnType<typeof motionReasoningEffort>;
+    requestedReasoning?: "standard" | "extended";
     phase?: "observe";
     elapsedMs?: number;
     tokens?: number;
@@ -55,7 +56,13 @@ export async function runMotionAgent<T>(
     const originalImages = options.images ?? [];
     const toolImages = history.flatMap(({ images }) => images ?? []).slice(0, Math.max(0, Math.min(2, 8 - originalImages.length)));
     const images = [...originalImages, ...toolImages];
-    const maxTokens = mode === "off" ? 2048 : ["referenceAnalyst", "referenceSpec", "director", "visualCritic"].includes(role) ? 6400 : 4096;
+    const requestedReasoning = mode === "deep" && (history.some(({ result }) =>
+        Array.isArray((result as { diagnostics?: unknown } | null)?.diagnostics) &&
+        Boolean((result as { diagnostics: unknown[] }).diagnostics.length)) ||
+        (role === "repair" && typeof input === "object" && input !== null && "issues" in input &&
+            Array.isArray(input.issues) && input.issues.some((issue) => issue.priority === "blocking"))) ? "extended" : "standard";
+    const maxTokens = mode === "off" ? 2048 : requestedReasoning === "extended" ||
+        ["referenceAnalyst", "referenceSpec", "director", "visualCritic"].includes(role) ? 6400 : 4096;
     const providers = await qualifiedMotionProviders(route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
     ]);
@@ -87,13 +94,14 @@ export async function runMotionAgent<T>(
         }
         let actual: number | undefined;
         const diagnostic = { role, model: provider.alias, mode, promptVersion: prompt.version.promptVersion,
-            promptHash: prompt.version.promptHash, maxTokens, reasoningEffort: motionReasoningEffort(provider.model, mode, true) };
+            promptHash: prompt.version.promptHash, maxTokens, requestedReasoning,
+            reasoningEffort: motionReasoningEffort(provider.model, mode, requestedReasoning === "standard") } as const;
         const started = performance.now();
         try {
             onProgress?.({ ...diagnostic, state: "requesting" });
             const timeoutMs = Math.min(attempt.timeoutMs, options.requestTimeoutMs ?? attempt.timeoutMs);
             const result = await requestMotionJson(provider, {
-                ...prompt, images, mode, conciseReasoning: true, constrainedOutput: options.constrainedOutput ?? true,
+                ...prompt, images, mode, reasoning: requestedReasoning, constrainedOutput: options.constrainedOutput ?? true,
                 schema: output, maxTokens, stream: true, signal,
                 timeoutMs, firstTokenTimeoutMs: Math.min(attempt.firstTokenTimeoutMs, timeoutMs),
                 onFirstToken: (elapsedMs) => onProgress?.({ ...diagnostic, state: "responding", elapsedMs }),
