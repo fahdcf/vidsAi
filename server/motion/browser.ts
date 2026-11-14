@@ -141,6 +141,16 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
             !value.frames.includes(frame) || !input.document.tracks.motion_graphics.some((scene) =>
                 scene.id === sceneId && scene.start_frame <= frame && frame < scene.end_frame) ||
             elements.some(({ bounds }) => bounds[0] > bounds[2] || bounds[1] > bounds[3]))) fail(422, "The preview layout evidence is invalid.");
+        if (input.tool === "preview" && "frames" in value &&
+            (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:"))) {
+            const [scene] = input.document.tracks.motion_graphics;
+            if (value.frames.some((frame) => frame < scene.start_frame || frame >= scene.end_frame) ||
+                (input.staticLayout && (value.frames.length !== 1 || value.frames[0] !== scene.end_frame - 1)) ||
+                !value.layout || value.layout.length !== value.frames.length ||
+                new Set(value.layout.map(({ frame }) => frame)).size !== value.frames.length) {
+                fail(422, "The browser check must include measurements for every sampled scene frame.");
+            }
+        }
         if (input.tool === "reference_detail" && "samples" in value &&
             (value.bindingId !== input.reference.bindingId || (value.samples.length > 0 &&
                 JSON.stringify(value.samples) !== JSON.stringify(input.samples)))) {

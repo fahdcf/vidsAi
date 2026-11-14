@@ -21,7 +21,7 @@ export function createMotionLayoutDraft(snapshot: Document, storyboard: MotionSt
                     : { id, kind: "rect", transform, color: color ?? "muted", width: Math.max(0.001, Math.min(2, w * width / edge)),
                         height: Math.max(0.001, Math.min(2, heightInUnits)) };
             });
-        if (!layers.length) layers.push({ id: "layout-copy", kind: "text", text: target.copy || target.purpose.slice(0, 180),
+        if (!layers.length) layers.push({ id: "layout-copy", kind: "text", text: (target.copy || target.purpose).slice(0, 180),
             transform: { x: 0.5, y: 0.5 }, size: 0.1, color: "foreground", maxWidth: 0.8, typography: { align: "center", boxHeight: 0.4 } });
         return motionSceneSchema.parse({ ...style, id: target.id, start_frame: target.start_frame, end_frame: target.end_frame,
             type: "graph", componentVersion: 1, finish: { grain: 0, vignette: 0 }, params: { layers } });

@@ -197,7 +197,7 @@ Run typecheck, build and focused renderer/editor tests. Render diagnostic scenes
 
 ## E. Give agents a real design and repair loop
 
-- [ ] E1. Split each scene's work into layout proposal, browser layout check, motion proposal and browser motion check. Persist validated artifacts so retries reuse completed work. Give each specialist the source evidence and previous diagnostics relevant to its task.
+- [x] E1. Split each scene's work into layout proposal, browser layout check, motion proposal and browser motion check. Persist validated artifacts so retries reuse completed work. Give each specialist the source evidence and previous diagnostics relevant to its task. Verified with the browser and mocked providers, including artifact reuse after cancel and retry.
 - [ ] E2. Enable bounded tool requests for sampling, measuring, rendering and patching. Current prompt tool lists alone do not provide an interactive model-tool loop. Validate requests, execute with the appropriate role, return results and apply per-run call/token/time budgets.
 - [ ] E3. Review paired reference and generated frames directly with a qualified vision route, supplemented by short temporal sequences and scene metadata. Include graph text and object identities in review inputs. Frame labels must be unambiguous, and issues must cite actual evidence.
 - [ ] E4. Allow a repair to replace an unsuitable scene representation while preserving required content and the declared timing contract. Permit deliberate timing repairs through validated timeline operations. Include graph text, secondary copy and CTA in protected content checks.

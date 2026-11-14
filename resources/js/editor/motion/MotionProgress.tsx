@@ -16,6 +16,9 @@ export function motionStageName(name: string) {
         case "design": return "Visual designer";
         case "layout": return "Browser layout preview";
         case "layout_review": return "Reference layout review";
+        case "layout_proposal": return "Scene layout proposal";
+        case "layout_check": return "Browser layout check";
+        case "motion_check": return "Browser motion check";
         case "engineer": return "Motion engineer";
         case "assemble": return "Timeline assembly";
         case "preview": return "Browser preview render";

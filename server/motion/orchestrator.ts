@@ -144,10 +144,17 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         add({ name: "copy", lane: "provider", dependencies: ["design"] });
         if (!done("design")) return;
         const storyboard = resolveMotionStoryboard(proposed, agentResult(id, "design", motionDesignSchema));
-        const useLayout = useDetails && !steps.some(({ name }) => name.startsWith("engineer:") && !steps.some((item) => item.name === "layout"));
-        if (useLayout) {
-            add({ name: "layout", lane: "browser", dependencies: ["design", "reference_spec"] });
-            add({ name: "layout_review", lane: "provider", dependencies: ["layout"] });
+        const sceneChecks = steps.some(({ name }) => name.startsWith("layout_proposal:")) ||
+            !steps.some(({ name }) => name === "layout" || name === "assemble" || name.startsWith("engineer:"));
+        if (sceneChecks) {
+            const checks = storyboard.scenes.map(({ id: sceneId }) => {
+                const proposal = `layout_proposal:${sceneId}`;
+                const check = `layout_check:${sceneId}`;
+                add({ name: proposal, lane: "local", dependencies: ["copy", "design", ...(useDetails ? ["reference_spec"] : [])], input: { sceneId } });
+                add({ name: check, lane: "browser", dependencies: [proposal], input: { sceneId } });
+                return check;
+            });
+            if (useDetails) add({ name: "layout_review", lane: "provider", dependencies: checks });
         }
         const liquid = storyboard.scenes.find(({ type }) => type === "liquid");
         const evidence = reference?.scenes.find(({ supportedType, timing }) => supportedType === "liquid" && timing && timing.end - timing.start <= 6);
@@ -170,9 +177,13 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
         const engineers = storyboard.scenes.map((target) => {
             const name = `engineer:${target.id}`;
             const traceDependency = traceName && target.id === liquid?.id ? [traceName] : [];
+            const hasReview = sceneChecks ? useDetails : steps.some((item) => item.name === "layout_review");
             add({ name, lane: "provider", dependencies: ["copy", "design", ...traceDependency, ...(useDetails ? ["reference_detail"] : []),
-                ...(useLayout ? ["layout_review"] : [])], input: { sceneId: target.id } });
-            return name;
+                ...(sceneChecks ? [`layout_check:${target.id}`] : []), ...(hasReview ? ["layout_review"] : [])], input: { sceneId: target.id } });
+            if (!sceneChecks) return name;
+            const check = `motion_check:${target.id}`;
+            add({ name: check, lane: "browser", dependencies: [name], input: { sceneId: target.id } });
+            return check;
         });
         add({ name: "assemble", lane: "local", dependencies: engineers, input: { round: 1 } });
     }
@@ -218,6 +229,14 @@ export function readyMotionSteps(runId: string) {
 }
 
 export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMotionInput {
+    if (step.name.startsWith("layout_check:") || step.name.startsWith("motion_check:")) {
+        const sceneId = step.name.split(":")[1];
+        const staticLayout = step.name.startsWith("layout_check:");
+        const scene = staticLayout ? motionSceneSchema.parse(result(run.id, `layout_proposal:${sceneId}`))
+            : agentResult(run.id, `engineer:${sceneId}`, motionBuildSchema).scene;
+        const snapshot = motionSnapshot(run);
+        return { tool: "preview", staticLayout, document: { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [scene] } } };
+    }
     if (step.name === "layout") {
         const design = agentResult(run.id, "design", motionDesignSchema);
         const spec = z.array(referenceSceneSpecSchema).parse(result<{ specs: unknown }>(run.id, "reference_spec").specs);
@@ -400,10 +419,29 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const customCount = resolveMotionStoryboard(plan, value.value).scenes.filter(({ type }, index) => type !== plan.scenes[index].type).length;
         return { value, summary: customCount ? `Selected custom composition for ${customCount} incompatible scene${customCount === 1 ? "" : "s"}.` : value.value.decision };
     }
+    if (step.name.startsWith("layout_proposal:")) {
+        const plan = storyboard();
+        const target = plan.scenes.find(({ id }) => id === input.sceneId)!;
+        const copy = agentResult(id, "copy", motionCopySchema).scenes.find(({ id }) => id === target.id);
+        const source = { ...target, copy: copy?.parts?.filter(Boolean).join(" · ") || copy?.copy || target.copy };
+        const draft = createMotionLayoutDraft(snapshot, { ...plan, scenes: [source] }, design(), referenceSpecs());
+        return { value: draft.tracks.motion_graphics[0], summary: `Proposed layout for ${target.id}.` };
+    }
     if (step.name === "layout_review") {
-        const preview = previewSchema.parse(result(id, "layout"));
-        return reviewMotionLayout(context, storyboard(), referenceSpecs(), preview, imageBytes(preview.images),
-            details().filter(({ crop }) => !crop).slice(0, 6));
+        const plan = storyboard();
+        const references = details().filter(({ crop }) => !crop);
+        if (motionSteps(id).some(({ name }) => name === "layout")) {
+            const preview = previewSchema.parse(result(id, "layout"));
+            return reviewMotionLayout(context, plan, referenceSpecs(), preview, imageBytes(preview.images), references.slice(0, 6));
+        }
+        const previews = plan.scenes.map(({ id: sceneId }) => previewSchema.parse(result(id, `layout_check:${sceneId}`)));
+        const pictured = previews.slice(0, references.length ? 4 : 8);
+        const preview = { frames: pictured.flatMap(({ frames }) => frames), framesPerSheet: 1,
+            layout: previews.flatMap(({ layout }) => layout ?? []) };
+        const paired = plan.scenes.slice(0, pictured.length).flatMap(({ id: sceneId }) =>
+            references.find((frame) => frame.sceneId === sceneId) ?? []);
+        return reviewMotionLayout(context, plan, referenceSpecs(), preview,
+            imageBytes(pictured.flatMap(({ images }) => images)), paired);
     }
     if (step.name.startsWith("engineer:")) {
         const plan = storyboard();
@@ -414,9 +452,12 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const traced = target.type === "liquid" && motionSteps(id).some(({ name, status }) => name === traceName && status === "done")
             ? traceResultSchema.parse(result(id, traceName)) : null;
         const asset = traced?.status === "traced" ? { id: traced.assetId, kind: "vectors" as const } : null;
-        const hasLayout = motionSteps(id).some(({ name, status }) => name === "layout_review" && status === "done");
-        const layout = hasLayout ? layoutForScene(previewSchema.parse(result(id, "layout")), target.id) : undefined;
-        const suggestions = hasLayout ? result<{ suggestions: { sceneId: string; revision: string }[] }>(id, "layout_review").suggestions.find(({ sceneId }) => sceneId === target.id) : undefined;
+        const steps = motionSteps(id);
+        const hasReview = steps.some(({ name, status }) => name === "layout_review" && status === "done");
+        const layoutStep = steps.find(({ name, status }) => status === "done" && name === `layout_check:${target.id}`)
+            ?? steps.find(({ name, status }) => status === "done" && name === "layout");
+        const layout = layoutStep ? layoutForScene(previewSchema.parse(result(id, layoutStep.name)), target.id) : undefined;
+        const suggestions = hasReview ? result<{ suggestions: { sceneId: string; revision: string }[] }>(id, "layout_review").suggestions.find(({ sceneId }) => sceneId === target.id) : undefined;
         const value = await runMotionEngineer(context, target, agentResult(id, "copy", motionCopySchema),
             design(), asset ? [asset] : [], evidence,
             details().filter(({ sceneId }) => sceneId === target.id), referenceSpecs().find(({ sceneId }) => sceneId === target.id),
@@ -461,9 +502,13 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const preview = previewSchema.parse(result(id, stepNames(round).preview));
         const draft = build(round).document;
         if (!draft) throw new Error("The draft needs repairs before review.");
+        const sceneChecks = round === 1 ? motionSteps(id).filter(({ name, status }) =>
+            name.startsWith("motion_check:") && status === "done").flatMap(({ name }) =>
+            (previewSchema.parse(result(id, name)).layout ?? []).filter(({ findings }) => findings?.length)
+                .map(({ sceneId, frame, findings }) => ({ sceneId, frame, findings }))) : [];
         try {
             const value = await runMotionCritic(context, draft,
-                { ...preview, images: imageBytes(preview.images) }, reference(), run.target_scene_id ?? undefined,
+                { ...preview, images: imageBytes(preview.images), sceneChecks }, reference(), run.target_scene_id ?? undefined,
                 (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read));
             return { value, summary: value.value.decision };
         } catch (error) {

@@ -297,7 +297,8 @@ export function resolveMotionStoryboard(storyboard: MotionStoryboard, design: Mo
 }
 
 export async function reviewMotionLayout(context: MotionAgentContext, storyboard: MotionStoryboard, specs: ReferenceSceneSpec[],
-    preview: MotionPreview, rendered: MotionVisionImage[], references: readonly ReferenceFrame[]) {
+    preview: Pick<MotionPreview, "frames" | "layout"> & { framesPerSheet?: number },
+    rendered: MotionVisionImage[], references: readonly ReferenceFrame[]) {
     const schema = z.object({ suggestions: z.array(z.object({ sceneId: motionSceneId, revision: z.string().trim().min(1).max(220) })
         .strict()).max(8) }).strict();
     try {
@@ -306,7 +307,7 @@ export async function reviewMotionLayout(context: MotionAgentContext, storyboard
             storyboard, specs, contactSheetFrames: preview.frames, samplesPerSheet: preview.framesPerSheet,
             layout: preview.layout, referenceFrames: describeReferenceFrames(frames).map((frame) => ({ ...frame, imageNumber: frame.imageNumber + rendered.length })),
         }, schema, {
-            images: frames.length ? [...rendered, ...frames.map(({ image }) => image)].slice(0, 8) : undefined,
+            images: [...rendered, ...frames.map(({ image }) => image)].slice(0, 8),
             requestTimeoutMs: 20_000,
             validate: ({ suggestions }) => {
                 if (new Set(suggestions.map(({ sceneId }) => sceneId)).size !== suggestions.length ||
@@ -494,7 +495,8 @@ export type MotionCritique = z.infer<typeof motionCritiqueSchema>;
 export async function runMotionCritic(
     context: MotionAgentContext,
     draft: Document,
-    preview: { frames: readonly number[]; images: readonly MotionVisionImage[]; framesPerSheet?: number; layout?: MotionPreview["layout"] },
+    preview: { frames: readonly number[]; images: readonly MotionVisionImage[]; framesPerSheet?: number; layout?: MotionPreview["layout"];
+        sceneChecks?: Pick<NonNullable<MotionPreview["layout"]>[number], "sceneId" | "frame" | "findings">[] },
     reference: ReferenceAnalysis | null,
     targetSceneId?: string,
     observe = (_index: number, read: () => Promise<ReferenceAnalysis["observations"]>) => read(),
@@ -530,7 +532,8 @@ export async function runMotionCritic(
         const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
         const layout = preview.layout?.filter(({ sceneId }) => sceneId === id);
         const intervals = scene.type === "graph" ? scene.params.layers.flatMap((node) => (node.animation ?? []).map((track) => ({ id: node.id, ...track }))).slice(0, 16) : [];
-        return { id, type, samples, palette, font, copy, vectorTrace, layout, intervals };
+        const sceneChecks = preview.sceneChecks?.filter(({ sceneId }) => sceneId === id);
+        return { id, type, samples, palette, font, copy, vectorTrace, layout, intervals, sceneChecks };
     });
     const review = await runMotionAgent(context, "visualCritic", "AGENT_COMPLEX", {
         fps: draft.fps, scenes, focused: Boolean(targetSceneId),

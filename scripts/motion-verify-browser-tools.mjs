@@ -657,7 +657,8 @@ try {
     });
     try {
         const graph = new MotionOrchestrator();
-        for (let tick = 0; tick < 25 && motionRun(graphRun.id).status !== "ready"; tick++) {
+        let checkedBeforeRetry;
+        for (let tick = 0; tick < 60 && motionRun(graphRun.id).status !== "ready"; tick++) {
             await graph.tick(graphRun.id);
             const current = motionRun(graphRun.id);
             assert.notEqual(current.status, "failed", current.error);
@@ -665,6 +666,25 @@ try {
                 assert.equal(await graphPage.evaluate(async (id) =>
                     (await import("/resources/js/editor/motion/browser-runner.ts"))
                         .runNextMotionBrowserTask(id, AbortSignal.timeout(45_000)), graphRun.id), true);
+                const checked = motionSteps(graphRun.id).find(({ name, status }) => name.startsWith("layout_check:") && status === "done");
+                if (checked && !checkedBeforeRetry) {
+                    checkedBeforeRetry = checked;
+                    assert.equal(graph.cancel(graphRun.id, a.owner).status, "cancelled");
+                    assert.equal(retryMotionRun(graphRun.id, a.owner).status, "queued");
+                }
+            }
+        }
+        assert.ok(checkedBeforeRetry);
+        const steps = motionSteps(graphRun.id);
+        const saved = steps.find(({ id }) => id === checkedBeforeRetry.id);
+        assert.equal(saved.result_id, checkedBeforeRetry.result_id);
+        assert.equal(saved.attempts, checkedBeforeRetry.attempts);
+        for (const { id: sceneId } of graphic) {
+            const names = [`layout_proposal:${sceneId}`, `layout_check:${sceneId}`, `engineer:${sceneId}`, `motion_check:${sceneId}`];
+            const stages = names.map((name) => steps.find((step) => step.name === name));
+            assert.ok(stages.every((step) => step?.status === "done" && step.result_id));
+            for (let index = 1; index < stages.length; index++) {
+                assert.ok(JSON.parse(stages[index].dependencies).includes(names[index - 1]));
             }
         }
     } finally {
