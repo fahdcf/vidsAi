@@ -61,8 +61,11 @@ export async function runMotionAgent<T>(
         Boolean((result as { diagnostics: unknown[] }).diagnostics.length)) ||
         (role === "repair" && typeof input === "object" && input !== null && "issues" in input &&
             Array.isArray(input.issues) && input.issues.some((issue) => issue.priority === "blocking"))) ? "extended" : "standard";
+    const complexScene = typeof input === "object" && input !== null && "target" in input && input.target &&
+        typeof input.target === "object" && "type" in input.target && input.target.type === "graph";
     const maxTokens = mode === "off" ? 2048 : requestedReasoning === "extended" ||
         ["referenceAnalyst", "referenceSpec", "director", "visualCritic"].includes(role) ? 6400 : 4096;
+    const outputTokens = role === "motionEngineer" && !complexScene && requestedReasoning === "standard" && !images.length ? 3072 : maxTokens;
     const providers = role === "motionEngineer" ? await qualifiedAuthoringProviders(images.length > 0, mode === "deep")
         : await qualifiedMotionProviders(role === "visualDesigner" && images.length ? "MEDIA_UNDERSTANDING" : route, [
         images.length ? "image" : "text", "stream", ...(mode === "deep" ? ["thinking" as const] : []),
@@ -79,7 +82,7 @@ export async function runMotionAgent<T>(
     });
     const prompt = buildMotionPrompt(role, {
         brief, revision: document.revision, width: document.width, height: document.height,
-        fps: document.fps, frames: document.total_frames, input, maxOutputTokens: maxTokens,
+        fps: document.fps, frames: document.total_frames, input, maxOutputTokens: outputTokens,
         projectMemory: context.projectMemory,
         toolResults: toolResults.length ? toolResults : undefined,
     }, output, requestSchema !== null);
@@ -88,14 +91,14 @@ export async function runMotionAgent<T>(
     for (const provider of providers) {
         signal.throwIfAborted();
         let attempt: ModelReservation;
-        try { attempt = budget.reserveModel(promptTokens, maxTokens, provider.alias); } catch (error) {
+        try { attempt = budget.reserveModel(promptTokens, outputTokens, provider.alias); } catch (error) {
             if (!(error instanceof MotionBudgetError) || error.scope !== "provider") throw error;
             providerBudget = error;
             continue;
         }
         let actual: number | undefined;
         const diagnostic = { role, model: provider.alias, mode, promptVersion: prompt.version.promptVersion,
-            promptHash: prompt.version.promptHash, maxTokens, requestedReasoning,
+            promptHash: prompt.version.promptHash, maxTokens: outputTokens, requestedReasoning,
             reasoningEffort: motionReasoningEffort(provider.model, mode, requestedReasoning === "standard") } as const;
         const started = performance.now();
         try {
@@ -103,7 +106,7 @@ export async function runMotionAgent<T>(
             const timeoutMs = Math.min(attempt.timeoutMs, options.requestTimeoutMs ?? attempt.timeoutMs);
             const result = await requestMotionJson(provider, {
                 ...prompt, images, mode, reasoning: requestedReasoning, constrainedOutput: options.constrainedOutput ?? true,
-                schema: output, maxTokens, stream: true, signal,
+                schema: output, maxTokens: outputTokens, stream: true, signal,
                 timeoutMs, firstTokenTimeoutMs: Math.min(attempt.firstTokenTimeoutMs, timeoutMs),
                 onFirstToken: (elapsedMs) => onProgress?.({ ...diagnostic, state: "responding", elapsedMs }),
             });

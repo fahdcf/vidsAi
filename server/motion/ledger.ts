@@ -50,6 +50,14 @@ export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: Motio
                 if (runUsage.attempts >= limits.modelAttempts || runUsage.tokens + tokens > limits.totalTokens) {
                     throw new MotionBudgetError("Motion run model budget exhausted.");
                 }
+                if (step.name.startsWith("engineer:") && json<string[]>(step.dependencies, []).some((name) => name.startsWith("agent_tool:"))) {
+                    const reserveAttempts = Math.min(4, Math.floor(limits.modelAttempts / 5));
+                    const reserveTokens = Math.min(24_000, Math.floor(limits.totalTokens / 5));
+                    if (runUsage.attempts + reserveAttempts >= limits.modelAttempts ||
+                        runUsage.tokens + tokens + reserveTokens > limits.totalTokens) {
+                        throw new MotionBudgetError("The motion run reserved its remaining model budget for visual review and repair.", "provider");
+                    }
+                }
                 if (db.prepare("SELECT 1 FROM motion_provider_cooldowns WHERE provider=? AND available_at>?").get(provider, now)) {
                     throw new MotionBudgetError("This motion provider is waiting for its rate limit to reset.", "provider");
                 }
