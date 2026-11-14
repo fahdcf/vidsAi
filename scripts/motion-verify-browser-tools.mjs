@@ -927,11 +927,22 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
             await graphPage.reload();
             const reloaded = await frameAt(21);
             assert.ok(Math.abs(reloaded.center - frame.center) < 0.003, JSON.stringify({ frame, reloaded }));
+            if (process.argv.includes("--program-1080")) await graphPage.getByLabel("Motion export quality").selectOption("motion1080");
             await graphPage.getByRole("button", { name: "Export video", exact: true }).click();
             await graphPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 90_000 });
             const mp4 = await graphPage.getByRole("link", { name: "Download MP4", exact: true }).getAttribute("href");
             const encoded = await decodedVideoPixel(graphPage, mp4, 0.5, 0.18);
             assert.ok(encoded[0] < 85 && encoded[1] > 205, JSON.stringify(encoded));
+            if (process.argv.includes("--program-1080")) {
+                const width = await graphPage.evaluate(async (url) => {
+                    const video = document.createElement("video");
+                    const loaded = new Promise((resolve, reject) => { video.onloadedmetadata = resolve; video.onerror = reject; });
+                    video.src = url;
+                    await loaded;
+                    return video.videoWidth;
+                }, mp4);
+                assert.equal(width, 1920);
+            }
             console.log("The procedural property changed the production preview and the same color was present in the exported MP4.");
         }
     }
