@@ -13,6 +13,7 @@ import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
 import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes, type GraphEngineerProposal } from "./graph-engineer";
 import { motionGraphAssets } from "./assets";
+import { motionThreeCost } from "../../shared/motion/three-scene";
 import { observeReferenceSheet } from "./reference-observer";
 import { mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
 
@@ -341,7 +342,8 @@ export async function runMotionEngineer(
         const availableAssets = motionGraphAssets(context.document.project_id).map(({ id, name, kind }) => ({ id, name, kind }));
         const makeScene = (params: ReturnType<typeof compileEngineerGraph>) => {
             const used = new Map(assets.map((ref) => [ref.id, ref]));
-            for (const ref of graphAssetRefs(params.layers)) {
+            const textures = params.three ? motionThreeCost(params.three).textures.map((id) => ({ id, kind: "image" as const })) : [];
+            for (const ref of [...graphAssetRefs(params.layers), ...textures]) {
                 if (!availableAssets.some(({ id, kind }) => id === ref.id && kind === ref.kind)) throw new Error("The selected graph asset is unavailable.");
                 used.set(ref.id, ref);
             }

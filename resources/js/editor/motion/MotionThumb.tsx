@@ -20,7 +20,7 @@ export default function MotionThumb({ scene, projectId, width, height, fps }: {
             const context = target.getContext("2d");
             if (!context) return;
             const signal = AbortSignal.any([abort.signal, AbortSignal.timeout(15_000)]);
-            void prepareMotionSceneAssets(scene, projectId, signal).then(async (assets) => {
+            void prepareMotionSceneAssets(scene, projectId, signal, undefined, true).then(async (assets) => {
                 try {
                     signal.throwIfAborted();
                     const frame = Math.floor((scene.end_frame - scene.start_frame - 1) * 0.66);

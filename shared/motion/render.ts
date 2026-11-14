@@ -14,6 +14,7 @@ import { drawGraphWidget } from "./widgets";
 import { sampleGraphAnimation } from "./graph-animation";
 import { partialMotionPath } from "./partial-path";
 import type { BrowserMotionProgram } from "./runtime/browser-program";
+import type { BrowserMotionThree } from "./browser-three";
 
 export const motionFontFamilies = {
     archivo_black: '"VidsAI Archivo Black", Arial, sans-serif',
@@ -26,6 +27,7 @@ export type ReadyMotionAssets = {
     vectors?: Readonly<Record<string, MotionVectors>>;
     images?: Readonly<Record<string, ImageBitmap>>;
     program?: BrowserMotionProgram;
+    three?: BrowserMotionThree;
 };
 
 function drawGraphAsset({ ctx, scene }: MotionFrame, assets: ReadyMotionAssets, id: string, kind: "image" | "vectors",
@@ -278,7 +280,11 @@ export function drawMotionFrame(frame: MotionFrame, assets: ReadyMotionAssets) {
     ctx.fillStyle = scene.palette.background;
     ctx.fillRect(0, 0, width, height);
     switch (scene.type) {
-        case "graph": drawGraph(frame, scene.params.layers, progress, assets); drawProgram(frame, assets, progress); break;
+        case "graph":
+            assets.three?.draw(ctx, width, height, progress);
+            drawGraph(frame, scene.params.layers, progress, assets);
+            drawProgram(frame, assets, progress);
+            break;
         case "impact": drawImpact({ ...frame, scene }, progress, assets.fontFamily); break;
         case "kinetic_words": drawKineticWords({ ...frame, scene }, progress, assets.fontFamily); break;
         case "grid": drawGrid({ ...frame, scene }, progress); break;

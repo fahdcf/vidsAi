@@ -1,6 +1,7 @@
 import { getClipSequenceTiming, normalizeDocument, type Document } from "@vidsai/contracts";
 import { motionSceneCost } from "../../../../shared/motion/registry";
 import { graphShadowCount } from "../../../../shared/motion/graph";
+import { motionThreeCost } from "../../../../shared/motion/three-scene";
 
 export const browserRenderProfile = {
     version: 1,
@@ -174,18 +175,20 @@ export function validateBrowserRenderProfile(
         limit(new Set(motion.flatMap(({ assets }) => assets.map(({ id }) => id))).size > m.maxAssets, "motion_complexity",
             `Use no more than ${m.maxAssets} project assets inside motion scenes.`);
         const costs = motion.map((scene) => ({ scene, cost: motionSceneCost(scene),
-            surfaces: 1 + (scene.transitionIn ? 0.25 : 0) + (scene.type === "graph" ? graphShadowCount(scene.params.layers) * 0.25 : 0) }));
+            surfaces: 1 + (scene.transitionIn ? 0.25 : 0) + (scene.type === "graph" ? graphShadowCount(scene.params.layers) * 0.25 : 0),
+            three: scene.type === "graph" && scene.params.three ? motionThreeCost(scene.params.three) : null }));
         const overloaded = motion.some(({ start_frame: frame }) => {
             const totals = costs.filter(({ scene }) => scene.start_frame <= frame && frame < scene.end_frame)
-                .reduce((sum, { cost, scene, surfaces }) => ({
+                .reduce((sum, { cost, scene, surfaces, three }) => ({
                     geometry: sum.geometry + cost.geometry,
                     particles: sum.particles + cost.particles,
                     vectors: sum.vectors + cost.vectors,
                     assets: sum.assets + scene.assets.length,
                     surfaces: sum.surfaces + surfaces,
-                }), { geometry: 0, particles: 0, vectors: 0, assets: 0, surfaces: 0 });
+                    threePixels: sum.threePixels + (three ? three.texturePixels + 2 * three.targetPixels : 0),
+                }), { geometry: 0, particles: 0, vectors: 0, assets: 0, surfaces: 0, threePixels: 0 });
             return totals.geometry > m.maxGeometry || totals.particles > m.maxParticles || totals.vectors > m.maxVectorAssets ||
-                totals.assets > m.maxActiveAssets || width * height * totals.surfaces > m.maxSurfacePixels;
+                totals.assets > m.maxActiveAssets || width * height * totals.surfaces + totals.threePixels > m.maxSurfacePixels;
         });
         limit(overloaded, "motion_complexity", "Reduce overlapping motion, effects or assets to fit the browser render budget.");
     }

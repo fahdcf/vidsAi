@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { isFollowupSourceTime, referenceCropBounds, referenceMetadata, type BrowserMotionReference } from "../../../../shared/motion/browser-tools";
 import { motionAssetProvenance } from "../../../../shared/motion/assets";
+import { motionThreeScene } from "../../../../shared/motion/three-scene";
 import type { z } from "zod";
 import { api } from "../api";
 import type { MotionScene, SaveMotionOperations } from "./MotionSceneControls";
@@ -135,6 +136,17 @@ export default function MotionAssetControls({ projectId, scene, busy, save }: {
             <div className="motion-fields"><label>Trace start<input type="number" name="start" step="any" min={interval.start} max={interval.end} defaultValue={interval.start} required /></label>
                 <label>Trace end<input type="number" name="end" step="any" min={interval.start} max={interval.end} defaultValue={Math.min(interval.end, interval.start + 3)} required /></label></div>
             <button type="submit">Trace and add vector layer</button>
+        </fieldset></form>}
+        {scene.type === "graph" && <form data-no-autosave onSubmit={(event) => void run(event, async (data, signal) => {
+            const file = data.get("scene-3d");
+            if (!(file instanceof File) || !file.size || file.size > 65_536) throw new Error("Choose a 3D scene JSON file up to 64 KiB.");
+            const parsed = motionThreeScene.safeParse(JSON.parse(await file.text()));
+            signal.throwIfAborted();
+            if (!parsed.success) throw new Error("The file does not match the bounded 3D scene format.");
+            save([{ tool: "update_motion_scene", params: { id: scene.id, patch: { params: { three: parsed.data } } } }]);
+        })}><fieldset disabled={busy || waiting}>
+            <label>Import 3D scene<input type="file" name="scene-3d" accept=".json,application/json" required /></label>
+            <button type="submit">Apply 3D scene</button>
         </fieldset></form>}
         {waiting && <p role="status">Preparing motion asset…</p>}
         {error && <p role="alert">{error}</p>}

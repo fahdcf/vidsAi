@@ -2,6 +2,7 @@ import { z } from "zod";
 import { graphAssetRefs, graphComposition } from "./graph";
 import { motionContinuityTarget } from "./continuity";
 import { resolveSceneProgramValues } from "./scene-program";
+import { motionThreeCost } from "./three-scene";
 
 export const motionSceneId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/);
 export const motionColor = z.string().regex(/^#[0-9a-fA-F]{6}$/);
@@ -179,12 +180,21 @@ export const motionSceneSchema = z.discriminatedUnion("type", [
             resolveSceneProgramValues(scene.params.program, scene.params.programValues);
         } catch { ctx.addIssue({ code: "custom", path: ["params", "programValues"], message: "A scene module property is invalid." }); }
     }
+    if (scene.type === "graph" && scene.params.three && motionThreeCost(scene.params.three).textures.some((texture) =>
+        !scene.assets.some(({ id, kind }) => id === texture && kind === "image"))) {
+        ctx.addIssue({ code: "custom", path: ["params", "three"], message: "3D textures must be owned scene images." });
+    }
 });
 
 export type MotionScene = z.infer<typeof motionSceneSchema>;
 export type MotionSceneType = MotionScene["type"];
 
 export const motionTrackSchema = z.array(motionSceneSchema).max(8).superRefine((scenes, ctx) => {
+    const three = scenes.filter((scene) => scene.type === "graph" && scene.params.three);
+    if (three.length > 2 || three.some((scene, index) => three.slice(index + 1).some((other) =>
+        scene.start_frame < other.end_frame && other.start_frame < scene.end_frame))) {
+        ctx.addIssue({ code: "custom", message: "Use up to two 3D scenes without overlap." });
+    }
     for (const [index, scene] of scenes.entries()) {
         if (scene.type === "graph" && scene.params.continuity && !motionContinuityTarget(scene, scenes)) {
             ctx.addIssue({ code: "custom", path: [index, "params", "continuity"], message: "Continuity needs matching stable layers in adjacent scenes." });

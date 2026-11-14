@@ -60,7 +60,17 @@ export function MotionLayer({ scene, nextScene, projectId, width, height, left, 
             if (isClientSideRendering) return;
         }
         const audioLevel = soundtrackLevelAt(scene.start_frame + last.current, fps, audioAnalysis, soundtrack);
-        drawMotionFrame({ ctx, scene, nextScene, frame: localFrame, fps, width: pixelWidth, height: pixelHeight, audioLevel }, assets);
+        const input = { ctx, scene, nextScene, frame: localFrame, fps, width: pixelWidth, height: pixelHeight, audioLevel };
+        try { drawMotionFrame(input, assets); }
+        catch (error) {
+            const detail = error instanceof Error ? error : new Error("The motion frame could not be drawn.");
+            if (isClientSideRendering) { cancelRender(detail); return; }
+            setFailure(detail.message);
+            if (!assets.three) return;
+            assets.three.release();
+            assets.three = undefined;
+            drawMotionFrame(input, assets);
+        }
         if (!assets.program || assets.program.cached(localFrame, fps)) target.dataset.motionFrame = String(localFrame);
     }
 
@@ -75,13 +85,14 @@ export function MotionLayer({ scene, nextScene, projectId, width, height, left, 
             if (waiting !== null) continueRender(waiting);
             waiting = null;
         }
-        void prepareMotionSceneAssets(scene, projectId, AbortSignal.any([abort.signal, AbortSignal.timeout(15000)]), preloaded)
+        void prepareMotionSceneAssets(scene, projectId, AbortSignal.any([abort.signal, AbortSignal.timeout(15000)]), preloaded, !isClientSideRendering)
             .then((assets) => {
                 if (abort.signal.aborted) {
                     assets.release();
                     return;
                 }
                 ready.current = assets;
+                if (assets.threeWarning) setFailure(assets.threeWarning);
                 draw();
                 releaseHandle();
             }).catch((error: unknown) => {

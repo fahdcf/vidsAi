@@ -4,6 +4,7 @@ import { compileMotionPlan } from "../shared/motion/compile";
 import { graphAuthoring, graphComposition, motionGraphVersion } from "../shared/motion/graph";
 import { graphAnimation, sampleGraphAnimation } from "../shared/motion/graph-animation";
 import { partialMotionPath } from "../shared/motion/partial-path";
+import { motionThreeCost, motionThreeScene } from "../shared/motion/three-scene";
 import { motionComponentTypes, describeMotionComponent, motionSceneCost } from "../shared/motion/registry";
 import { motionSceneSchema, motionTrackSchema } from "../shared/motion/schema";
 import { applyOperations } from "../shared/editing-core";
@@ -102,4 +103,15 @@ test("graph continuity links only unchanged layers across adjacent cuts", () => 
     assert.ok(motionTrackSchema.safeParse([first, second]).success);
     assert.equal(motionTrackSchema.safeParse([first, { ...second, start_frame: 29 }]).success, false);
     assert.equal(motionTrackSchema.safeParse([first, { ...second, params: { layers: [{ ...layers[0], color: "danger" }] } }]).success, false);
+});
+
+test("bounded 3D descriptions count triangles and reject invalid meshes", () => {
+    const three = { version: 1, camera: { position: [0, 0, 4] }, ambient: { color: "#ffffff", intensity: 1 },
+        keyLight: { color: "#ffffff", intensity: 2, position: [1, 2, 3] },
+        objects: [{ id: "panel", shape: { kind: "mesh", positions: [-1, -1, 0, 1, -1, 0, 0, 1, 0], indices: [0, 1, 2] },
+            material: { color: "#ff5500" } }] };
+    assert.equal(motionThreeCost(motionThreeScene.parse(three)).triangles, 1);
+    assert.equal(motionThreeScene.safeParse({ ...three, objects: [{ ...three.objects[0], shape: { ...three.objects[0].shape, indices: [0, 1, 3] } }] }).success, false);
+    assert.equal(motionThreeScene.safeParse({ ...three, objects: Array.from({ length: 8 }, (_, i) => ({ id: "sphere-" + i,
+        shape: { kind: "sphere", segments: 24 }, material: { color: "#ff5500" } })) }).success, false);
 });

@@ -4,6 +4,8 @@ import { motionAssetByteLimit, parseMotionVectors, type MotionAssetFiles, type M
 import { graphAssetRefs } from "./graph";
 import { imageDimensions } from "./image-dimensions";
 import type { BrowserMotionProgram } from "./runtime/browser-program";
+import type { BrowserMotionThree } from "./browser-three";
+import { motionThreeCost } from "./three-scene";
 
 const bundled = {
     archivo_black: { name: "VidsAI Archivo Black", url: "/motion-fonts/ArchivoBlack-Regular.ttf" },
@@ -38,17 +40,20 @@ export async function prepareMotionFont(scene: MotionScene, signal: AbortSignal)
 }
 
 export async function prepareMotionSceneAssets(
-    scene: MotionScene, projectId: string, signal: AbortSignal, preloaded?: MotionAssetFiles,
-): Promise<ReadyMotionAssets & { release: () => void }> {
+    scene: MotionScene, projectId: string, signal: AbortSignal, preloaded?: MotionAssetFiles, allowThreeFallback = false,
+): Promise<ReadyMotionAssets & { release: () => void; threeWarning?: string }> {
     const ready = await prepareMotionFont(scene, signal);
     const vectors: Record<string, MotionVectors> = {};
     const images: Record<string, ImageBitmap> = {};
     const imageIds = new Set(scene.type === "graph" ? [...graphAssetRefs(scene.params.layers), ...(scene.params.program?.assets ?? [])]
         .filter(({ kind }) => kind === "image").map(({ id }) => id) : []);
+    if (scene.type === "graph" && scene.params.three) for (const id of motionThreeCost(scene.params.three).textures) imageIds.add(id);
     let program: BrowserMotionProgram | undefined;
+    let three: BrowserMotionThree | undefined, threeWarning: string | undefined;
     const fonts: FontFace[] = [];
     const release = () => {
         for (const face of fonts.splice(0)) document.fonts.delete(face);
+        three?.release();
         for (const [id, image] of Object.entries(images)) { image.close(); delete images[id]; }
         program?.close();
     };
@@ -86,7 +91,18 @@ export async function prepareMotionSceneAssets(
             const { prepareBrowserProgram } = await import("./runtime/browser-program");
             program = await prepareBrowserProgram(scene.params.program, scene.params.programValues, scene.end_frame - scene.start_frame, signal);
         }
-        return { ...ready, images, vectors, program, release };
+        if (scene.type === "graph" && scene.params.three) {
+            try {
+                const { prepareMotionThree } = await import("./browser-three");
+                signal.throwIfAborted();
+                three = prepareMotionThree(scene.params.three, images);
+            } catch (error) {
+                signal.throwIfAborted();
+                if (!allowThreeFallback) throw error;
+                threeWarning = error instanceof Error ? error.message : "This browser cannot draw the 3D scene.";
+            }
+        }
+        return { ...ready, images, vectors, program, three, threeWarning, release };
     } catch (error) {
         release();
         throw error;

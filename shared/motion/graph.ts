@@ -2,6 +2,7 @@ import { z } from "zod";
 import { graphColor, graphPaintFields, graphTextFields } from "./graph-style";
 import { graphAnimation } from "./graph-animation";
 import { sceneProgram, sceneProgramValues } from "./scene-program";
+import { motionThreeScene } from "./three-scene";
 
 const coordinate = z.number().min(-2).max(3);
 const opacity = z.number().min(0).max(1);
@@ -121,7 +122,8 @@ export const motionGraphVersion = 1;
 const continuity = z.object({ nextSceneId: common.id, frames: z.number().int().min(2).max(7200),
     nodeIds: z.array(common.id).min(1).max(4).refine((ids) => new Set(ids).size === ids.length) }).strict();
 export const graphComposition = z.object({ version: z.literal(motionGraphVersion).optional(), layers: graphLayers,
-    continuity: continuity.optional(), program: sceneProgram.optional(), programValues: sceneProgramValues.optional() }).strict();
+    continuity: continuity.optional(), program: sceneProgram.optional(), programValues: sceneProgramValues.optional(),
+    three: motionThreeScene.optional() }).strict();
 const versionedGraph = graphComposition.required({ version: true });
 const flatRecord = z.object({
     parentId: common.id.nullable(),
@@ -133,8 +135,9 @@ export const graphAuthoringInput = z.object({
     version: z.literal(motionGraphVersion),
     nodes: z.array(flatRecord).min(1).max(MAX_GRAPH_NODES),
     continuity: continuity.optional(),
+    three: motionThreeScene.optional(),
 }).strict();
-export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versionedGraph>>(({ version, nodes, continuity }, ctx) => {
+export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versionedGraph>>(({ version, nodes, continuity, three }, ctx) => {
     const byId = new Map(nodes.map((record) => [record.node.id, record]));
     if (byId.size !== nodes.length) {
         ctx.addIssue({ code: "custom", path: ["nodes"], message: "Graph node IDs must be unique." });
@@ -163,7 +166,7 @@ export const graphAuthoring = graphAuthoringInput.transform<z.input<typeof versi
     }
     const layersFor = (parent: string | null): MotionGraphNode[] => (byParent.get(parent) ?? []).sort((a, b) => a.order - b.order)
         .map(({ node }) => node.kind === "group" ? { ...node, children: layersFor(node.id) } : node);
-    return { version, layers: layersFor(null), ...(continuity ? { continuity } : {}) };
+    return { version, layers: layersFor(null), ...(continuity ? { continuity } : {}), ...(three ? { three } : {}) };
 }).pipe(versionedGraph);
 
 export function graphGeometryCost(nodes: readonly MotionGraphNode[]): number {

@@ -1,5 +1,6 @@
 import { motionSdkHelpers } from "../../shared/motion/scene-sdk";
 import { motionProgramVersion, motionSdkModule } from "../../shared/motion/scene-program";
+import { motionThreeCapability } from "../../shared/motion/three-scene";
 
 const rectPath = `[{ op: "M", x: -0.09, y: -0.09 }, { op: "L", x: 0.09, y: -0.09 }, { op: "L", x: 0.09, y: 0.09 }, { op: "L", x: -0.09, y: 0.09 }, { op: "Z" }]`;
 const gradient = `{ x0: -0.1, y0: 0, x1: 0.1, y1: 0, stops: [{ at: 0, color: "#ff5566" }, { at: 1, color: "#5577ff" }] }`;
@@ -39,6 +40,7 @@ export function motionProgramAuthoringGuide() {
         version: motionProgramVersion, module: motionSdkModule,
         prompt: "Write one pure frame function. Use editable graph layers for ordinary layouts and keyframes. Use a TypeScript module for procedural commands. All coordinates are normalized, drawing order follows the returned array, and every command needs a stable unique ID. Read properties from input.properties and use only declared asset handles.",
         helpers: Object.values(motionSdkHelpers).map(({ signature }) => signature),
+        adapters: { three: motionThreeCapability },
         examples: motionProgramExamples.map(({ id, helper, body, failure, repair, expected, broken: [from, to] }) => ({
             id, helper, expected, source: motionExampleSource(body), failure, failingSource: motionExampleSource(body.replace(from, to)), repair,
         })),

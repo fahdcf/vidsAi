@@ -7,6 +7,28 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import { mockMotionProviders } from "./fixtures/motion-provider.mjs";
 
+function decodedVideoPixel(page, url, x, y) {
+    return page.evaluate(async ({ url, x, y }) => {
+        const video = document.createElement("video");
+        video.muted = true;
+        video.playsInline = true;
+        document.body.append(video);
+        try {
+            const loaded = new Promise((resolve, reject) => { video.onloadeddata = resolve; video.onerror = reject; });
+            video.src = url;
+            await loaded;
+            const decoded = new Promise((resolve) => video.requestVideoFrameCallback(resolve));
+            await video.play();
+            await decoded;
+            video.pause();
+            const canvas = new OffscreenCanvas(video.videoWidth, video.videoHeight);
+            const ctx = canvas.getContext("2d");
+            ctx.drawImage(video, 0, 0);
+            return [...ctx.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data];
+        } finally { video.remove(); }
+    }, { url, x, y });
+}
+
 const source = process.argv[2];
 if (!source) throw new Error("Supply a local H.264 reference MP4 of at least 12.5 seconds.");
 const output = path.resolve(import.meta.dirname, "../../runtime/motion-verification");
@@ -61,7 +83,8 @@ try {
     addMotionStep(run.id, { name: "reference_capture", lane: "browser" });
     const claim = (account) => fetch(target + url + "/claim", { method: "POST", headers: account.headers, body: "{}" });
     assert.equal((await claim(b)).status, 404);
-    browser = await chromium.launch({ channel: process.env.MOTION_TEST_BROWSER || "chrome", headless: true });
+    browser = await chromium.launch({ channel: process.env.MOTION_TEST_BROWSER || "chrome", headless: true,
+        args: process.argv.includes("--motion-three") ? ["--enable-unsafe-swiftshader", "--use-angle=swiftshader"] : [] });
     const context = await browser.newContext();
     await context.addCookies([{ name: "vidsai_session", value: a.token, url: base }]);
     if (process.argv.includes("--reference-audio")) {
@@ -866,29 +889,7 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
             await graphPage.getByRole("button", { name: "Export video", exact: true }).click();
             await graphPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 90_000 });
             const mp4 = await graphPage.getByRole("link", { name: "Download MP4", exact: true }).getAttribute("href");
-            const encoded = await graphPage.evaluate(async (url) => {
-                const video = document.createElement("video");
-                video.muted = true;
-                video.playsInline = true;
-                document.body.append(video);
-                const loaded = new Promise((resolve, reject) => {
-                    video.onloadeddata = resolve;
-                    video.onerror = reject;
-                });
-                video.src = url;
-                await loaded;
-                const decoded = new Promise((resolve) => video.requestVideoFrameCallback(resolve));
-                await video.play();
-                await decoded;
-                video.pause();
-                const canvas = document.createElement("canvas");
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext("2d");
-                ctx.drawImage(video, 0, 0);
-                video.remove();
-                return [...ctx.getImageData(Math.floor(canvas.width * 0.5), Math.floor(canvas.height * 0.18), 1, 1).data];
-            }, mp4);
+            const encoded = await decodedVideoPixel(graphPage, mp4, 0.5, 0.18);
             assert.ok(encoded[0] < 85 && encoded[1] > 205, JSON.stringify(encoded));
             console.log("The procedural property changed the production preview and the same color was present in the exported MP4.");
         }
@@ -938,6 +939,79 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
             sourceSha256: graphRef.metadata.sha256, startSeconds: 10.4, endSeconds: 12.3 });
         assert.deepEqual(provenance(imported.assetId), { kind: "imported" });
         console.log("The editor approved a real reference crop, traced source shapes and imported SVG with separate linked layers and provenance.");
+    }
+    if (process.argv.includes("--motion-three")) {
+        assert.ok(componentCompatibility, "Use --component-compatibility with --motion-three.");
+        graphPage.setDefaultTimeout(12_000);
+        await graphPage.goto(`${target}/projects/${graphProject}/editor`);
+        const tools = graphPage.getByRole("button", { name: "Tools", exact: true });
+        if (await tools.getAttribute("aria-pressed") === "false") await tools.click();
+        await graphPage.getByText("Linked motion assets", { exact: true }).click();
+        const spec = { version: 1, camera: { position: [0, 0, 4] }, ambient: { color: "#ffffff", intensity: 2 },
+            keyLight: { color: "#ffffff", intensity: 1.5, position: [2, 3, 4] }, objects: [
+                { id: "cube", shape: { kind: "box" }, position: [-1.3, 0.8, 0], spin: [0, 0.5, 0], scale: [0.8, 0.8, 0.8],
+                    material: { color: "#14dd44" } },
+                { id: "triangle", shape: { kind: "mesh", positions: [-0.5, -0.4, 0, 0.5, -0.4, 0, 0, 0.5, 0], indices: [0, 1, 2] },
+                    position: [1.2, 0.78, 0], material: { color: "#f23836" } },
+            ] };
+        await graphPage.getByLabel("Import 3D scene", { exact: true }).setInputFiles({ name: "three.json", mimeType: "application/json", buffer: Buffer.from(JSON.stringify(spec)) });
+        const [response] = await Promise.all([
+            graphPage.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/commands")),
+            graphPage.getByRole("button", { name: "Apply 3D scene", exact: true }).click(),
+        ]);
+        assert.ok(response.ok(), await response.text());
+        assert.equal(document(project(graphProject)).tracks.motion_graphics[0].params.three.objects[1].shape.kind, "mesh");
+        await graphPage.waitForFunction(() => {
+            const canvas = document.querySelector('canvas[data-motion-frame="0"]');
+            if (!canvas) return false;
+            const ctx = canvas.getContext("2d");
+            const green = ctx.getImageData(Math.floor(canvas.width * 0.28), Math.floor(canvas.height * 0.26), 1, 1).data;
+            const red = ctx.getImageData(Math.floor(canvas.width * 0.7), Math.floor(canvas.height * 0.27), 1, 1).data;
+            return green[1] > green[0] + 80 && red[0] > red[1] + 60;
+        });
+        await graphPage.getByRole("button", { name: "Export video", exact: true }).click();
+        await graphPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 90_000 });
+        const url = await graphPage.getByRole("link", { name: "Download MP4", exact: true }).getAttribute("href");
+        const exported = await decodedVideoPixel(graphPage, url, 0.28, 0.26);
+        assert.ok(exported[1] > exported[0] + 65, JSON.stringify(exported));
+        const fallback = await context.newPage();
+        await fallback.addInitScript(() => {
+            const original = HTMLCanvasElement.prototype.getContext;
+            HTMLCanvasElement.prototype.getContext = function (kind, options) { return kind === "webgl2" ? null : original.call(this, kind, options); };
+        });
+        await fallback.goto(`${target}/projects/${graphProject}/editor`);
+        await fallback.getByRole("alert").filter({ hasText: "This browser cannot prepare the bounded WebGL2 motion renderer." }).waitFor({ timeout: 12_000 });
+        await fallback.locator('canvas[data-motion-frame="0"]').first().waitFor();
+        await fallback.close();
+        await graphPage.goto(base + "/__motion_graph");
+        const texture = await graphPage.evaluate(async (spec) => {
+            const { prepareMotionThree } = await import("/shared/motion/browser-three.ts");
+            const id = "36abf9f1-dbea-4ea2-b459-a56d3abb52ed";
+            const makeTexture = async (size) => {
+                const image = new OffscreenCanvas(size, size);
+                const ctx = image.getContext("2d");
+                ctx.fillStyle = "#2299ff";
+                ctx.fillRect(0, 0, size, size);
+                return createImageBitmap(image);
+            };
+            const object = { ...spec.objects[0], position: [0, 0, 0], material: { color: "#ffffff", textureId: id } };
+            const input = { ...spec, objects: [object] };
+            const image = await makeTexture(32), oversize = await makeTexture(513);
+            let renderer;
+            try {
+                renderer = prepareMotionThree(input, { [id]: image });
+                const ctx = new OffscreenCanvas(180, 180).getContext("2d");
+                renderer.draw(ctx, 180, 180, 0);
+                const center = [...ctx.getImageData(90, 90, 1, 1).data];
+                let rejected = false;
+                try { prepareMotionThree(input, { [id]: oversize }).release(); }
+                catch (error) { rejected = String(error.message).includes("512 pixels"); }
+                return { center, rejected };
+            } finally { renderer?.release(); image.close(); oversize.close(); }
+        }, spec);
+        assert.ok(texture.center[2] > texture.center[0] + 70, JSON.stringify(texture));
+        assert.ok(texture.rejected);
+        console.log("Chrome WebGL2 qualified the lit primitive, imported mesh, owned texture, 2D fallback and decoded MP4 pixels.");
     }
     const events = motionEvents(graphRun.id, 0);
     if (useGraphEngineer) {
