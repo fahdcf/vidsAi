@@ -23,5 +23,10 @@ const result = spawnSync(process.execPath, [npm, "ci"], {
 });
 if (result.error) throw result.error;
 if (result.status !== 0) process.exit(result.status ?? 1);
+const verification = spawnSync(process.execPath, ["--import", "tsx", "scripts/motion-check-resources.ts"], {
+    cwd: path.resolve(import.meta.dirname, ".."), stdio: "inherit", windowsHide: true,
+});
+if (verification.error) throw verification.error;
+if (verification.status !== 0) process.exit(verification.status ?? 1);
 await import("./motion-tools.mjs");
 await import("./motion-doctor.mjs");

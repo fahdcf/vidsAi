@@ -41,7 +41,7 @@ if (await sha256(destination).catch((error) => {
         if (process.env.MOTION_FFMPEG_SOURCE) {
             await copyFile(process.env.MOTION_FFMPEG_SOURCE, executable);
         } else {
-            const response = await fetch(spec.url, { signal: AbortSignal.timeout(120000) });
+            const response = await fetch(spec.url, { signal: AbortSignal.timeout(15 * 60_000) });
             if (!response.ok || !response.body) throw new Error(`FFmpeg download failed: HTTP ${response.status}.`);
             await pipeline(Readable.fromWeb(response.body), createWriteStream(archive, { flags: "wx" }));
             if (await sha256(archive) !== spec.archiveSha256) throw new Error("FFmpeg archive checksum mismatch.");

@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 export const motionProgramVersion = 1;
+export const motionProgramRendererVersion = 1;
 export const motionCompilerVersion = "5.8.2";
 export const motionSdkModule = "@vidsai/motion-sdk";
 const identifier = z.string().regex(/^[a-zA-Z][a-zA-Z0-9_-]{0,47}$/);
@@ -36,7 +37,7 @@ export const sceneProgramInput = z.object({
 });
 export const sceneProgram = sceneProgramInput.safeExtend({
     compiler: z.literal(motionCompilerVersion),
-    rendererVersion: z.literal(1),
+    rendererVersion: z.literal(motionProgramRendererVersion),
     dependencies: z.tuple([z.literal(`${motionSdkModule}@1`)]),
     code: z.string().min(1).max(32_768),
     sourceMap: z.string().min(1).max(32_768),

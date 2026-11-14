@@ -26,6 +26,7 @@ export async function prepareMotionFont(scene: MotionScene, signal: AbortSignal)
         let pending = loading.get(url);
         if (!pending) {
             pending = new FontFace(name, `url("${url}")`, { weight, style }).load().then((font) => {
+                if (font.status !== "loaded") throw new Error(`The required motion font ${name} could not load.`);
                 document.fonts.add(font);
             }).catch((error) => {
                 loading.delete(url);

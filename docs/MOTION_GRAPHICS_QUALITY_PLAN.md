@@ -167,7 +167,9 @@ C12 verifies static capability diagnostics, foreign asset rejection and stale re
 | Agent skills and tools | Update packaged skills, prompts, manifests, tools and resource checks | Server agent context and typed browser tool requests |
 | Export and verification | Existing browser exporter plus generated-scene/audio integration and grouped evaluation scripts | Browser export, development verification tools |
 
-- [ ] C13. Pin and bundle the selected interpreter/compiler/renderer versions, required fonts and helper modules. Extend `motion:setup`, the resource manifest and clean-install verification. Check font, SDK and generated-program compatibility before opening or exporting a project. Test from a clean checkout without this Codex session's private runtime paths.
+- [x] C13. Pin and bundle the selected interpreter/compiler/renderer versions, required fonts and helper modules. Extend `motion:setup`, the resource manifest and clean-install verification. Check font, SDK and generated-program compatibility before opening or exporting a project. Test from a clean checkout without this Codex session's private runtime paths.
+
+C13 checks exact installed and locked interpreter, compiler and renderer versions plus hashes for all bundled fonts. A fresh source archive in a temporary directory passed dependency installation, the production build, SDK worker verification and the Chrome and Edge capability checks. The optional FFmpeg development verifier was installed using the existing supported checksum-verified binary input after the public download timed out. Normal browser rendering uses the bundled application assets.
 
 ## D. Make the browser an active layout and validation tool
 

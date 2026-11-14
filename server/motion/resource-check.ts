@@ -3,6 +3,7 @@ import { motionComponentTypes, motionRendererVersion } from "../../shared/motion
 import { motionSceneSchema } from "../../shared/motion/schema";
 import { buildMotionPrompt, motionPromptRoles, motionSkillManifest, motionSkillSource } from "./prompts";
 import { motionToolManifest, type ToolRole } from "./tools";
+import { verifyMotionToolchain } from "./toolchain-check";
 
 const examplesSchema = z.array(z.object({
     brief: z.string().trim().min(10),
@@ -10,6 +11,7 @@ const examplesSchema = z.array(z.object({
 }).strict()).min(2);
 
 export function validateMotionResources() {
+    verifyMotionToolchain();
     const roles: ToolRole[] = ["referenceAnalyst", "director", "copywriter", "designer", "motionEngineer", "critic", "integrator", "editor"];
     const tools = new Set(roles.flatMap((role) => motionToolManifest(role).map(({ name }) => name)));
     if (new Set(motionSkillManifest.map(({ id }) => id)).size !== motionSkillManifest.length) throw new Error("Duplicate motion skill.");
