@@ -28,7 +28,7 @@ import { observeReferenceSheet, referenceObservationsSchema } from "./reference-
 import {
     integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionDraftBlockers, motionStoryboardSchema,
     motionCritiqueSchema, resolveMotionStoryboard, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
-    reviewMotionLayout,
+    reviewMotionLayout, motionRepairSchema,
     runMotionRepair, runMotionRevision, runReferenceAnalyst, type MotionBuild, type MotionCritique,
 } from "./agents";
 import {
@@ -586,13 +586,16 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             if (approximation) approximations.push({ sceneId: target, description: approximation });
             return { value: { plan, blockers, approximations, document: blockers.length ? null : compileMotionPlan(plan, context.document) } };
         }
-        const plan = storyboard();
         const previous = round === 1 ? null : build(round - 1);
-        const builds: MotionBuild[] = previous
+        const plan = previous ? { ...storyboard(), scenes: storyboard().scenes.map((scene) => {
+            const current = previous.plan.scenes.find(({ id }) => id === scene.id)!;
+            return { ...scene, start_frame: current.start_frame, end_frame: current.end_frame };
+        }) } : storyboard();
+        const builds: z.infer<typeof motionRepairSchema>[] = previous
             ? previous.plan.scenes.map((scene) => {
                 const repair = stepNames(round - 1).repair(scene.id);
                 return motionSteps(id).some(({ name, status }) => name === repair && status === "done")
-                    ? agentResult(id, repair, motionBuildSchema)
+                    ? agentResult(id, repair, motionRepairSchema)
                     : { scene, decision: "Kept the approved scene.", approximation: previous.approximations
                         ?.find(({ sceneId }) => sceneId === scene.id)?.description ?? null };
             }) : plan.scenes.map(({ id: sceneId }) => agentResult(id, `engineer:${sceneId}`, motionBuildSchema));
@@ -625,7 +628,9 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const previous = build(round);
         const scene = previous.plan.scenes.find(({ id }) => id === input.sceneId)!;
         const issues = previous.blockers?.length ? previous.blockers : agentResult(id, stepNames(round).critique, motionCritiqueSchema).issues;
-        const value = await runMotionRepair(context, scene, issues);
+        const value = await runMotionRepair(context, scene, issues, {
+            scenes: previous.plan.scenes, allowCuts: !previous.blockers?.length && issues.every(({ sceneId }) => sceneId === scene.id),
+        });
         return { value, summary: value.value.decision };
     }
     if (step.name === "publish") {

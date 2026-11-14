@@ -643,7 +643,8 @@ try {
         graphAssets = { vector: vectorAsset.id, image: (await image.json()).id };
     }
     const agentTools = process.argv.includes("--agent-tools");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools });
+    const replaceScene = process.argv.includes("--repair-replacement");
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -783,14 +784,27 @@ try {
         console.log("Unavailable visual review preserved the draft and required approval before opening it in the editor.");
     } else {
         const firstScene = document(project(graphProject)).tracks.motion_graphics[0];
-        if (componentCompatibility) assert.equal(firstScene.motionRate, 1.2);
+        if (replaceScene) {
+            assert.equal(firstScene.type, "graph");
+            assert.equal(firstScene.params.layers[0].text, graphic[0].params.headline);
+        } else if (componentCompatibility) assert.equal(firstScene.motionRate, 1.2);
         else assert.equal(firstScene.params.impactAt, 0.42);
         assert.ok(stages.includes("repair"));
     }
     const published = document(project(graphProject));
     assert.equal(published.tracks.motion_graphics[1].id, graphic[1].id);
     const scenes = published.tracks.motion_graphics;
-    assert.deepEqual(scenes.map(({ type }) => type), componentCompatibility ? ["graph", "graph"] : graphic.map(({ type }) => type));
+    const types = componentCompatibility ? ["graph", "graph"] : graphic.map(({ type }) => type);
+    if (replaceScene) {
+        types[0] = "graph";
+        const first = motionSteps(graphRun.id).find(({ name }) => name === "assemble");
+        const { plan } = JSON.parse(motionArtifact(graphRun.id, first.result_id).body.toString());
+        const cut = plan.scenes[0].end_frame + 5;
+        assert.deepEqual(scenes.map(({ start_frame, end_frame }) => [start_frame, end_frame]),
+            [[plan.scenes[0].start_frame, cut], [cut, plan.scenes[1].end_frame]]);
+        assert.equal(stages.filter((stage) => stage === "repair").length, 2);
+    }
+    assert.deepEqual(scenes.map(({ type }) => type), types);
     if (componentCompatibility) {
         const steps = motionSteps(graphRun.id);
         const stage = (name) => steps.find((step) => step.name === name);

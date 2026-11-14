@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Document } from "../../shared/contracts";
-import { compileMotionPlan, motionSceneExceedsBudget } from "../../shared/motion/compile";
+import { compileMotionPlan, motionPlanSchema, motionSceneExceedsBudget } from "../../shared/motion/compile";
 import { motionComponentTypes, describeMotionComponent } from "../../shared/motion/registry";
 import { graphAssetRefs, graphAuthoring, graphCopy } from "../../shared/motion/graph";
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
@@ -8,11 +8,13 @@ import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/mo
 import type { ReferenceSceneSpec } from "../../shared/motion/reference-spec";
 import { motionEvidenceFramesPerSheet, type MotionPreview, type ReferenceCropBounds } from "../../shared/motion/browser-tools";
 import { motionTimeMap, soundtrackLevelAt } from "../../shared/motion/time-map";
+import { applyMotionEdit, motionEditParameters } from "../../shared/motion/edit";
+import { resolveSceneProgramValues } from "../../shared/motion/scene-program";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./copy";
 import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema, graphSceneNotes, type GraphEngineerProposal } from "./graph-engineer";
-import { motionGraphAssets } from "./assets";
+import { motionGraphAssets, validateMotionAssetOwnership } from "./assets";
 import { motionThreeCost } from "../../shared/motion/three-scene";
 import { observeReferenceSheet } from "./reference-observer";
 import { mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
@@ -332,13 +334,24 @@ function sceneCopy(scene: MotionScene): string | null {
     }
 }
 
-function sameSceneCopy(a: MotionScene, b: MotionScene) {
-    if (sceneCopy(a) !== sceneCopy(b)) return false;
-    if (a.type === "kinetic_words" && b.type === "kinetic_words") return JSON.stringify(a.params.words) === JSON.stringify(b.params.words);
-    if (a.type === "easing" && b.type === "easing") return JSON.stringify(a.params.labels) === JSON.stringify(b.params.labels);
-    if (a.type === "identity" && b.type === "identity") return a.params.detail === b.params.detail && a.params.tag === b.params.tag;
-    if (a.type === "graph" && b.type === "graph") return JSON.stringify(graphCopy(a.params.layers)) === JSON.stringify(graphCopy(b.params.layers));
-    return true;
+function editableSceneCopy(scene: MotionScene) {
+    switch (scene.type) {
+        case "easing": return [scene.params.heading, ...scene.params.labels];
+        case "identity": return [scene.params.title, scene.params.detail, scene.params.tag];
+        case "kinetic_words": return scene.params.words;
+        case "graph": {
+            const program = scene.params.program;
+            const values = program ? resolveSceneProgramValues(program, scene.params.programValues) : {};
+            const textFields = program?.properties.filter(({ kind }) => kind === "text") ?? [];
+            return [...graphCopy(scene.params.layers), ...textFields.map(({ id }) => values[id])];
+        }
+        default: return [sceneCopy(scene)];
+    }
+}
+
+function protectedCopy(scene: MotionScene) {
+    return editableSceneCopy(scene).filter((part): part is string => typeof part === "string" && part.length > 0)
+        .map((part) => part.normalize("NFC")).sort();
 }
 
 function requireSceneSpan(scene: MotionScene, expected: MotionStoryboard["scenes"][number]) {
@@ -442,10 +455,13 @@ export async function runMotionEngineer(
     return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
 }
 
-export function integrateMotionScenes(document: Document, storyboard: MotionStoryboard, builds: readonly MotionBuild[]) {
-    const scenes = builds.map(({ scene }) => scene);
+export function integrateMotionScenes(document: Document, storyboard: MotionStoryboard, builds: readonly z.infer<typeof motionRepairSchema>[]) {
+    let scenes = builds.map(({ scene }) => scene);
     requireSceneIds(storyboard, scenes);
     for (const scene of scenes) requireSceneSpan(scene, storyboard.scenes.find(({ id }) => id === scene.id)!);
+    const cuts = builds.flatMap(({ scene, cut }) => cut ? [{ scene, cut }] : []);
+    if (cuts.length > 1) throw new Error("Only one timing repair may be applied per review round.");
+    for (const { scene, cut } of cuts) scenes = applyMotionRepairCut(document, scenes, scene.id, cut);
     const plan = { title: storyboard.title, scenes };
     const blockers = motionDraftBlockers(scenes);
     return { plan, document: blockers.length ? null : compileMotionPlan(plan, document), blockers };
@@ -549,9 +565,7 @@ export async function runMotionCritic(
             evidence, frame, seconds, observation: observations.find(({ time }) => Math.abs(time - seconds) < 0.5 / draft.fps),
             soundtrackLevel: soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, track),
         }));
-        const copy = scene.type === "easing" ? [scene.params.heading, ...scene.params.labels]
-            : scene.type === "identity" ? [scene.params.title, scene.params.detail, scene.params.tag]
-                : scene.type === "kinetic_words" ? scene.params.words : scene.type === "graph" ? graphCopy(scene.params.layers) : sceneCopy(scene);
+        const copy = editableSceneCopy(scene);
         const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
         const layout = preview.layout?.filter(({ sceneId }) => sceneId === id);
         const nodes = scene.type === "graph" ? [...scene.params.layers] : [];
@@ -617,21 +631,52 @@ export async function runMotionRevision(context: MotionAgentContext, scene: Moti
     return { ...result, value: { ...value, scene: apply(changes) } };
 }
 
-export function runMotionRepair(context: MotionAgentContext, scene: MotionScene, issues: readonly MotionCritique["issues"][number][]) {
+export const motionRepairSchema = motionBuildSchema.extend({
+    cut: motionEditParameters.set_motion_cut.optional(),
+});
+
+export function applyMotionRepairCut(document: Document, scenes: MotionScene[], owner: string, cut: z.infer<typeof motionEditParameters.set_motion_cut>) {
+    const index = scenes.findIndex(({ id }) => id === owner);
+    const scene = scenes[index];
+    const next = scenes[index + 1];
+    if (cut.id !== owner || !scene || !next || next.start_frame !== scene.end_frame ||
+        scenes.filter(({ start_frame }) => start_frame === scene.end_frame).length !== 1 || cut.frame === scene.end_frame) {
+        throw new Error("A timing repair must move the boundary shared by the assigned scene and its next scene.");
+    }
+    const candidate = { ...document, tracks: { ...document.tracks, motion_graphics: structuredClone(scenes) } };
+    applyMotionEdit(candidate, { tool: "set_motion_cut", params: cut });
+    const plan = { title: "Timing repair", scenes: candidate.tracks.motion_graphics };
+    return compileMotionPlan(plan, candidate).tracks.motion_graphics;
+}
+
+export function runMotionRepair(context: MotionAgentContext, scene: MotionScene, issues: readonly MotionCritique["issues"][number][],
+    timeline?: { scenes: MotionScene[]; allowCuts: boolean }) {
     const relevant = issues.filter(({ sceneId }) => sceneId === scene.id);
     if (!relevant.length || relevant.length > 8) throw new Error("A repair needs a bounded issue for this scene.");
+    const text = protectedCopy(scene);
+    const nextScene = timeline?.allowCuts ? timeline.scenes.find(({ start_frame }) => start_frame === scene.end_frame) : undefined;
     return runMotionAgent(context, "repair", "AGENT_COMPLEX", {
-        scene, issues: relevant, component: describeMotionComponent(scene.type),
-    }, motionBuildForScene(scene.type), {
-        constrainedOutput: scene.type !== "graph",
-        validate: ({ scene: next }) => {
-            motionSceneSchema.parse(next);
-            if (next.type !== scene.type || next.id !== scene.id ||
+        scene, issues: relevant, protectedCopy: text, component: describeMotionComponent(scene.type),
+        replacementComponents: describeMotionComponent("graph"),
+        availableCut: nextScene && { id: scene.id, current: scene.end_frame, first: scene.start_frame + 1, last: nextScene.end_frame - 1 },
+    }, nextScene ? motionRepairSchema : motionBuildSchema, {
+        constrainedOutput: false,
+        sceneId: scene.id,
+        validate: ({ scene: next, cut }: z.infer<typeof motionRepairSchema>) => {
+            if ((next.type !== scene.type && next.type !== "graph") || next.id !== scene.id ||
+                next.layer !== scene.layer ||
                 next.start_frame !== scene.start_frame || next.end_frame !== scene.end_frame ||
                 JSON.stringify(next.assets) !== JSON.stringify(scene.assets) ||
-                !sameSceneCopy(next, scene)) {
+                JSON.stringify(protectedCopy(next)) !== JSON.stringify(text)) {
                 throw new Error("The repair changed protected scene content.");
             }
+            if (timeline) {
+                const scenes = timeline.scenes.map((item) => item.id === next.id ? next : item);
+                if (cut && nextScene) applyMotionRepairCut(context.document, scenes, scene.id, cut);
+                else motionPlanSchema.shape.scenes.parse(scenes);
+            }
+            validateMotionAssetOwnership(Number(context.document.project_id),
+                { ...context.document, tracks: { ...context.document.tracks, motion_graphics: [next] } });
         },
     });
 }

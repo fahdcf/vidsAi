@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false } = {}) {
     const stages = [];
+    let replacementAttempts = 0;
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
     const labels = ["Get transcript", "Try it now"];
     const reasoning = "INTERNAL_MOCK_REASONING";
@@ -212,6 +213,17 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     break;
                 }
                 if (agentTools) assert.equal(toolResults[0].result.candidate.motionRate, 1.2);
+                if (replaceScene) {
+                    assert.equal(artifact.scene.type, "impact");
+                    assert.ok(artifact.availableCut);
+                    const layers = artifact.protectedCopy.map((text, index) => ({ id: `copy-${index}`, kind: "text",
+                        text, transform: { x: 0.5, y: 0.5 + index * 0.1 }, size: 0.08, color: "foreground", maxWidth: 0.8 }));
+                    if (++replacementAttempts === 1) layers[0].text = "Changed approved headline";
+                    value = { scene: { ...artifact.scene, type: "graph", params: { layers } }, approximation: null,
+                        decision: "Replaced the impact component with editable text and moved the cut.",
+                        cut: { id: artifact.scene.id, frame: artifact.availableCut.current + 5 } };
+                    break;
+                }
                 value = componentCompatibility ? { decision: "Sped up the entrance.", approximation: null, scene: { ...artifact.scene, motionRate: 1.2 } }
                     : { decision: "Moved the impact later.", approximation: null,
                         scene: { ...artifact.scene, params: { ...artifact.scene.params, impactAt: 0.42 } } };

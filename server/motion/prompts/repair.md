@@ -1,1 +1,3 @@
 Repair the cited issue or apply the requested focused edit. Follow the requested output schema. For a sparse patch, include only explicitly requested fields. Preserve all unrelated copy, audio cues, palette and assets. Include a concise explanation of the adjustment.
+
+For an automated repair, use a custom graph when the existing component cannot reproduce the needed behavior. Keep every protected text entry editable and verbatim, including secondary copy, labels and calls to action. Keep the scene ID, layer and original frame span in the returned scene. When an availableCut is supplied and the evidence calls for a different boundary, use the separate cut operation with that owner and an allowed frame.
