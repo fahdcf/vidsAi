@@ -47,6 +47,7 @@ const requestContext = z.object({
     input: z.unknown(),
     maxOutputTokens: z.number().int().positive(),
     toolResults: z.unknown().optional(),
+    projectMemory: z.unknown().optional(),
 }).strict();
 
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
@@ -72,6 +73,7 @@ export function buildMotionPrompt(role: MotionPromptRole, context: z.input<typeo
             .filter((line) => !line.startsWith("Skill version ") && !line.startsWith("Supported components ")).join("\n").trim()),
         "Return one final JSON object matching the request's output schema. Include only concise user-facing decisions when asked. Tool availability is controlled by VidsAI.",
         ...(toolsEnabled ? ["When additional evidence is necessary, return the toolRequest form in the output schema instead of the final artifact. Use only the listed request forms. Results from previous calls are in toolResults. Continue to a final artifact when you have enough evidence."] : []),
+        ...(checked.projectMemory ? ["Use projectMemory to preserve decisions already recorded for this revision. Check the current stage evidence for any change."] : []),
     ].join("\n\n");
     const prompt = JSON.stringify({ context: checked, tools, output: z.toJSONSchema(output, { io: "input", unrepresentable: "any" }) });
     if (prompt.length > 125_000 || instruction.length > 36_000) throw new Error("The motion prompt exceeds its context budget.");

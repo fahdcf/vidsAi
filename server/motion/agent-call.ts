@@ -16,6 +16,7 @@ export type MotionAgentContext = {
     onProgress?: MotionAgentProgress;
     speechTiming?: readonly SpeechSpan[];
     tools?: AgentToolSession;
+    projectMemory?: unknown;
 };
 export type MotionVisionImage = { mime: "image/jpeg" | "image/png"; bytes: Uint8Array };
 export class MotionAgentUnavailable extends Error {}
@@ -71,6 +72,7 @@ export async function runMotionAgent<T>(
     const prompt = buildMotionPrompt(role, {
         brief, revision: document.revision, width: document.width, height: document.height,
         fps: document.fps, frames: document.total_frames, input, maxOutputTokens: maxTokens,
+        projectMemory: context.projectMemory,
         toolResults: toolResults.length ? toolResults : undefined,
     }, output, requestSchema !== null);
     const promptTokens = Math.max(1, Math.ceil((prompt.prompt.length + prompt.instruction.length) / 3) + 2048 * images.length);

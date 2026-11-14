@@ -503,6 +503,31 @@ function agentTools(run: MotionRun, step: MotionStep): AgentToolSession {
     };
 }
 
+function projectMemory(run: MotionRun, step: MotionStep, snapshot: Document) {
+    const { sceneId = run.target_scene_id, round = 1 } = json<{ sceneId?: string; round?: number }>(step.input, {});
+    const completed = new Set(motionSteps(run.id).filter(({ status }) => status === "done").map(({ name }) => name));
+    const approved = completed.has("copy") ? agentResult(run.id, "copy", motionCopySchema).scenes : [];
+    const design = completed.has("design") ? agentResult(run.id, "design", motionDesignSchema).scenes : [];
+    const storyboard = completed.has("director") ? agentResult(run.id, "director", motionStoryboardSchema) : null;
+    const prior = round > 1 ? stepNames(round - 1).critique : undefined;
+    const latest = prior && completed.has(prior) ? motionCritiqueSchema.safeParse(result<{ value?: unknown }>(run.id, prior).value).data : undefined;
+    const selected = (id: string) => !sceneId || sceneId === id;
+    const scenes = storyboard?.scenes ?? snapshot.tracks.motion_graphics;
+    const evidence = completed.has("reference_spec") ? result<{ specs: z.infer<typeof referenceSceneSpecSchema>[] }>(run.id, "reference_spec").specs : [];
+    if (!scenes.length && !latest) return undefined;
+    return {
+        revision: snapshot.revision, timingMode: storyboard?.timingMode, artDirection: storyboard?.artDirection,
+        audioSource: snapshot.metadata.motion_audio_source,
+        sceneOrder: scenes.map(({ id, start_frame, end_frame }) => ({ id, start_frame, end_frame })),
+        approvedCopy: approved.filter(({ id }) => selected(id)).map(({ id, copy, parts }) => ({ id, copy, parts: parts?.slice(0, 8) })),
+        design: design.filter(({ id }) => selected(id)).map(({ id, palette, layout, font }) => ({ id, palette, layout, font })),
+        evidence: evidence.filter(({ sceneId }) => selected(sceneId)).map(({ sceneId, sourceSceneIndex, objects }) =>
+            ({ sceneId, sourceSceneIndex, objects: objects.slice(0, 5).map(({ id, text }) => ({ id, text: text?.value })) })),
+        findings: latest?.issues.filter(({ sceneId }) => selected(sceneId)).slice(0, 4) ?? [],
+        unresolved: latest?.unresolved.slice(0, 4) ?? [],
+    };
+}
+
 const executeStep: StepHandler = async (run, step, budget, signal) => {
     const { id } = run;
     const onProgress: MotionAgentProgress = (data) => {
@@ -535,7 +560,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         }
         return { value: payload };
     }
-    const context = { brief: run.brief, document: snapshot, budget, signal, onProgress, speechTiming, tools: agentTools(run, step) };
+    const context = { brief: run.brief, document: snapshot, budget, signal, onProgress, speechTiming,
+        tools: agentTools(run, step), projectMemory: step.lane === "provider" ? projectMemory(run, step, snapshot) : undefined };
     if (step.name === "audio_speech") {
         const { spans, summary } = await motionSpeechTiming(snapshot, budget, signal);
         return { value: { spans }, summary };

@@ -136,6 +136,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 })) };
                 break;
             case "motion-engineer": {
+                const memory = JSON.parse(prompt).context.projectMemory;
+                assert.ok(memory.sceneOrder.some(({ id }) => id === artifact.target.id));
+                assert.deepEqual(memory.approvedCopy.map(({ id }) => id), [artifact.target.id]);
+                assert.deepEqual(memory.design.map(({ id }) => id), [artifact.target.id]);
                 if (workspaceModule && artifact.target.id === graphic[1].id) {
                     const { revision } = JSON.parse(prompt).context;
                     const sceneId = artifact.target.id;
