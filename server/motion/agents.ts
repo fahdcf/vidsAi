@@ -498,7 +498,7 @@ export async function runMotionCritic(
         }));
         const copy = scene.type === "easing" ? [scene.params.heading, ...scene.params.labels]
             : scene.type === "identity" ? [scene.params.title, scene.params.detail, scene.params.tag]
-                : scene.type === "kinetic_words" ? scene.params.words : sceneCopy(scene);
+                : scene.type === "kinetic_words" ? scene.params.words : scene.type === "graph" ? graphCopy(scene.params.layers) : sceneCopy(scene);
         const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
         const layout = preview.layout?.filter(({ sceneId }) => sceneId === id);
         return { id, type, samples, palette, font, copy, vectorTrace, layout };

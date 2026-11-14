@@ -1,9 +1,11 @@
 import type { BrowserMotionInput, BrowserMotionReference, BrowserMotionTask } from "../../../../shared/motion/browser-tools";
 import { isFollowupSourceTime, motionEvidenceFramesPerSheet, motionPreviewFramesPerSheet } from "../../../../shared/motion/browser-tools";
 import type { Document } from "../../../../shared/contracts";
-import { prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
+import { MotionAssetLoadError, prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
 import { motionContinuityTarget } from "../../../../shared/motion/continuity";
 import { measureMotionFrame, motionLayoutFrames } from "../../../../shared/motion/layout-measure";
+import { diagnoseMotionLayout } from "../../../../shared/motion/layout-diagnostics";
+import { graphCopy } from "../../../../shared/motion/graph";
 import { soundtrackLevelAt } from "../../../../shared/motion/time-map";
 import { api } from "../api";
 import { analyzeReferenceFrames } from "./reference-analysis";
@@ -176,6 +178,7 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
     const target = composite.getContext("2d");
     if (!context || !target) throw new Error("Canvas 2D is unavailable.");
     const assets = new Map<string, Awaited<ReturnType<typeof prepareMotionSceneAssets>>>();
+    const missing = new Map<string, string>();
     const samples: MotionReferenceFrame[] = [];
     const layout: MeasuredLayout = [];
     try {
@@ -197,16 +200,34 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
             target.fillRect(0, 0, width, height);
             const frameLayout: MeasuredLayout = [];
             for (const [index, scene] of active.entries()) {
+                const unavailable = missing.get(scene.id);
+                if (unavailable) {
+                    frameLayout.push({ sceneId: scene.id, frame, elements: [], findings: diagnoseMotionLayout([], width, height,
+                        { settled: false, missingAssets: [unavailable] }) });
+                    continue;
+                }
                 let ready = assets.get(scene.id);
                 if (!ready) {
-                    ready = await prepareMotionSceneAssets(scene, draft.project_id, signal);
+                    try { ready = await prepareMotionSceneAssets(scene, draft.project_id, signal); }
+                    catch (error) {
+                        if (!(error instanceof MotionAssetLoadError)) throw error;
+                        missing.set(scene.id, error.assetId);
+                        frameLayout.push({ sceneId: scene.id, frame, elements: [], findings: diagnoseMotionLayout([], width, height,
+                            { settled: false, missingAssets: [error.assetId] }) });
+                        continue;
+                    }
                     assets.set(scene.id, ready);
                 }
                 const audioLevel = soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, soundtrack);
                 await ready.program?.prepare(frame - scene.start_frame, draft.fps);
                 signal.throwIfAborted();
                 const measured = measureMotionFrame({ ctx: context, scene, nextScene: targets[index], frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
-                frameLayout.push({ sceneId: scene.id, frame, elements: measured.filter((item) => item.kind === "text" || item.id !== scene.id)
+                const settled = frame === scene.end_frame - 1 && !(scene.type === "graph" && scene.params.continuity);
+                const requiredText = scene.type === "graph" && !scene.params.program &&
+                    scene.params.layers.every((node) => node.kind !== "group" && !node.animation?.length && !node.keyframes.length)
+                    ? graphCopy(scene.params.layers) : [];
+                const findings = diagnoseMotionLayout(measured, width, height, { settled, requiredText });
+                frameLayout.push({ sceneId: scene.id, frame, findings, elements: measured.filter((item) => item.kind === "text" || item.id !== scene.id)
                     .sort((a, b) => Number(b.kind === "text") - Number(a.kind === "text")).slice(0, 12).map((item) => {
                         const { left, top, right, bottom } = item.bounds;
                         return { id: item.id, kind: item.kind, bounds: [left / width, top / height, right / width, bottom / height],
@@ -217,7 +238,7 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
             layout.push(...frameLayout.slice(0, 32 - layout.length));
             const image = await composite.convertToBlob({ type: "image/jpeg", quality: 0.84 });
             signal.throwIfAborted();
-            if (image.size <= 160_000) {
+            if (image.size <= 160_000 && !missing.size) {
                 previewFrames.set(key, { image, layout: frameLayout });
                 if (previewFrames.size > 64) previewFrames.delete(previewFrames.keys().next().value!);
             }

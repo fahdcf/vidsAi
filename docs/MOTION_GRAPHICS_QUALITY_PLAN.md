@@ -174,12 +174,14 @@ C13 checks exact installed and locked interpreter, compiler and renderer version
 ## D. Make the browser an active layout and validation tool
 
 - [x] D1. Implement shared layout measurement using the same fonts and drawing rules as export. Return actual text bounds, wrapping, element extents and font sizes. Check the complete animated span where feasible, plus boundary and extremum samples for procedural effects.
-- [ ] D2. Add diagnostics for off-canvas content, clipping, unintended opaque occlusion, unreadable contrast, missing required text and missing assets. Account for intentional masks and entrance/exit effects to avoid false failures.
+- [x] D2. Add diagnostics for off-canvas content, clipping, unintended opaque occlusion, unreadable contrast, missing required text and missing assets. Account for intentional masks and entrance/exit effects to avoid false failures.
 - [ ] D3. Render a representative static layout per scene before animation authoring. Compare the hierarchy, spacing, colors, detail and content to its reference frame. Feed concrete bounding-box and visual evidence back to the designer for repair.
 - [ ] D4. Replace blanket slide/fade compilation with authored motion tracks. Validate readable holds, intentional transitions and required motion landmarks using short rendered sequences and event samples.
 - [ ] D5. Integrate the new primitives into cost estimation, asset limits, decoding cleanup, export cancellation and browser profiles. Count path segments, painted pixels, effect surfaces and overlapping work. Determine expanded limits through profiling before enabling them.
 
 D1 traces the actual Canvas renderer during preview. It captures wrapped text runs with glyph bounds and font size, and transformed extents for shapes and images. Curve control points provide conservative extents. The sampler identifies scene boundaries, track edges and selected extrema, then selects a bounded set for the browser preview and critic. The browser fixture confirmed that a submitted contact sheet included measured text bounds and font sizes.
+
+D2 attaches layout findings to browser review evidence. The geometric checks use a settled sample and conservative opaque coverage and contrast tests. Missing linked assets are reported with their IDs, and time-varying copy is reviewed against the scene's rendered samples. The regression fixtures verified that the measured checks caught the covered label, off-canvas headline and missing CTA.
 
 **Checkpoint 2, after C–D**
 

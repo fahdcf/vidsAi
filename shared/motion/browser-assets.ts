@@ -18,6 +18,12 @@ const styledMono = [
 ];
 const loading = new Map<string, Promise<void>>();
 
+export class MotionAssetLoadError extends Error {
+    constructor(readonly assetId: string, cause: unknown) {
+        super(`Motion asset ${assetId} could not load.`, { cause });
+    }
+}
+
 export async function prepareMotionFont(scene: MotionScene, signal: AbortSignal): Promise<ReadyMotionAssets> {
     signal.throwIfAborted();
     const faces: { name: string; url: string; weight?: string; style?: string }[] = Object.values(bundled);
@@ -61,30 +67,35 @@ export async function prepareMotionSceneAssets(
     try {
         for (const ref of scene.assets) {
             if (ref.kind === "image" && !imageIds.has(ref.id)) continue;
-            const saved = preloaded?.[ref.id];
-            const file = saved ? null : await readAsset(projectId, ref, signal);
-            if (ref.kind === "image") {
-                const image = saved?.kind === "image" ? saved.file : file;
-                if (!image || !image.size || image.size > motionAssetByteLimit.image) throw new Error("The graph image is unavailable or too large.");
-                const header = new Uint8Array(await image.slice(0, 256 * 1024).arrayBuffer());
-                const { width, height } = imageDimensions(header, image.size);
-                if (!width || !height || Math.max(width, height) > 4096 || width * height > 4_000_000) throw new Error("The graph image exceeds the pixel budget.");
+            try {
+                const saved = preloaded?.[ref.id];
+                const file = saved ? null : await readAsset(projectId, ref, signal);
+                if (ref.kind === "image") {
+                    const image = saved?.kind === "image" ? saved.file : file;
+                    if (!image || !image.size || image.size > motionAssetByteLimit.image) throw new Error("The graph image is unavailable or too large.");
+                    const header = new Uint8Array(await image.slice(0, 256 * 1024).arrayBuffer());
+                    const { width, height } = imageDimensions(header, image.size);
+                    if (!width || !height || Math.max(width, height) > 4096 || width * height > 4_000_000) throw new Error("The graph image exceeds the pixel budget.");
+                    signal.throwIfAborted();
+                    images[ref.id] = await createImageBitmap(image);
+                    signal.throwIfAborted();
+                } else if (ref.kind === "vectors") {
+                    if (saved?.kind === "vectors") vectors[ref.id] = saved.data;
+                    else if (file) vectors[ref.id] = parseMotionVectors(await file.text());
+                    else throw new Error("The vector asset type is incompatible.");
+                } else if (ref.id === scene.fontAssetId) {
+                    const font = saved?.kind === "font" ? saved.file : file;
+                    if (!font) throw new Error("The project font is unavailable.");
+                    const family = `VidsAI Project ${ref.id}`;
+                    const face = await new FontFace(family, await font.arrayBuffer()).load();
+                    signal.throwIfAborted();
+                    document.fonts.add(face);
+                    fonts.push(face);
+                    ready.fontFamily = `"${family}", ${ready.fontFamily}`;
+                }
+            } catch (error) {
                 signal.throwIfAborted();
-                images[ref.id] = await createImageBitmap(image);
-                signal.throwIfAborted();
-            } else if (ref.kind === "vectors") {
-                if (saved?.kind === "vectors") vectors[ref.id] = saved.data;
-                else if (file) vectors[ref.id] = parseMotionVectors(await file.text());
-                else throw new Error("The vector asset type is incompatible.");
-            } else if (ref.id === scene.fontAssetId) {
-                const font = saved?.kind === "font" ? saved.file : file;
-                if (!font) throw new Error("The project font is unavailable.");
-                const family = `VidsAI Project ${ref.id}`;
-                const face = await new FontFace(family, await font.arrayBuffer()).load();
-                signal.throwIfAborted();
-                document.fonts.add(face);
-                fonts.push(face);
-                ready.fontFamily = `"${family}", ${ready.fontFamily}`;
+                throw new MotionAssetLoadError(ref.id, error);
             }
         }
         signal.throwIfAborted();

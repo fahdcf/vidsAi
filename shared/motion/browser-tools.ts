@@ -53,6 +53,8 @@ export const previewSchema = z.object({
                 z.number().min(-1_000_000).max(1_000_000), z.number().min(-1_000_000).max(1_000_000)]),
             text: z.string().max(180).optional(), fontSize: z.number().min(0).max(4096).optional(),
         }).strict()).max(12),
+        findings: z.array(z.object({ id: motionSceneId, code: z.enum(["off_canvas", "clipped_text", "occluded_text", "low_contrast", "missing_text", "missing_asset"]),
+            detail: z.string().max(230) }).strict()).max(8).optional(),
     }).strict()).max(32).optional(),
 }).strict();
 export type MotionPreview = z.infer<typeof previewSchema>;

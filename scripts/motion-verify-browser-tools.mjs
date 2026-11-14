@@ -263,9 +263,11 @@ try {
         const checks = await page.evaluate(async () => {
             const { motionQualityCases } = await import("/scripts/fixtures/motion-quality-cases.ts");
             const { drawMotionFrame } = await import("/shared/motion/render.ts");
+            const { measureMotionFrame } = await import("/shared/motion/layout-measure.ts");
+            const { diagnoseMotionLayout } = await import("/shared/motion/layout-diagnostics.ts");
             const canvas = new OffscreenCanvas(640, 360);
             const ctx = canvas.getContext("2d");
-            function inspect(scene, audioLevel) {
+            function inspect(scene, audioLevel, requiredText) {
                 drawMotionFrame({ ctx, scene, frame: 59, fps: 30, width: 640, height: 360, audioLevel }, { fontFamily: "Arial" });
                 const pixels = ctx.getImageData(0, 0, 640, 360).data;
                 let white = 0, lowerWhite = 0;
@@ -274,10 +276,13 @@ try {
                     white++;
                     if (index >= 640 * 4 * 220) lowerWhite++;
                 }
-                return { white, lowerWhite, corner: Array.from(pixels.slice(0, 3)) };
+                const measured = measureMotionFrame({ ctx, scene, frame: 59, fps: 30, width: 640, height: 360, audioLevel }, { fontFamily: "Arial" });
+                const findings = diagnoseMotionLayout(measured, 640, 360, { settled: true, requiredText });
+                return { white, lowerWhite, corner: Array.from(pixels.slice(0, 3)), findings };
             }
             return Object.fromEntries(Object.entries(motionQualityCases).map(([key, fixture]) =>
-                [key, fixture.corrected ? [inspect(fixture.scene), inspect(fixture.corrected)] : [inspect(fixture.scene, 0), inspect(fixture.scene, 1)]]));
+                [key, fixture.corrected ? [inspect(fixture.scene, undefined, fixture.requiredCopy), inspect(fixture.corrected, undefined, fixture.requiredCopy)]
+                    : [inspect(fixture.scene, 0), inspect(fixture.scene, 1)]]));
         });
         assert.equal(checks.occludedLabel[0].white, 0);
         assert.ok(checks.occludedLabel[1].white > 0);
@@ -286,6 +291,11 @@ try {
         assert.ok(checks.missingCta[1].lowerWhite > 0);
         assert.deepEqual(checks.wrongComponent.map(({ corner }) => corner), [[255, 34, 0], [16, 16, 16]]);
         assert.ok(checks.audioReactive[1].white > checks.audioReactive[0].white * 2);
+        assert.ok(checks.occludedLabel[0].findings.some(({ code }) => code === "occluded_text"));
+        assert.ok(!checks.occludedLabel[1].findings.some(({ code }) => code === "occluded_text"));
+        assert.ok(checks.clippedHeadline[0].findings.some(({ code }) => code === "off_canvas"));
+        assert.ok(checks.missingCta[0].findings.some(({ code }) => code === "missing_text"));
+        assert.ok(!checks.missingCta[1].findings.some(({ code }) => code === "missing_text"));
         console.log("Browser fixtures reproduce covered labels, clipped copy, missing CTA and the wrong impact background.");
     }
     if (process.argv.includes("--graph-style")) {
