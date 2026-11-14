@@ -851,6 +851,11 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
         const invalid = await submit({ ...request, input: { ...input, source: source.replace("0.2, 0.1", '"bad", 0.1') } });
         assert.equal(invalid.status, 422);
         assert.ok((await invalid.json()).diagnostics.some(({ file, line, code }) => file === "scene.ts" && line === 3 && code === "TS2345"));
+        const forbidden = await submit({ ...request, input: { ...input, source: source.replace("    return", "    Date.now();\n    return") } });
+        assert.equal(forbidden.status, 422);
+        assert.ok((await forbidden.json()).diagnostics.some(({ line, code }) => line === 3 && code === "scene_capability"));
+        const foreignAsset = await submit({ ...request, input: { ...input, assets: [{ id: asset, handle: "other", kind: "image" }] } });
+        assert.equal(foreignAsset.status, 422);
         const response = await submit(request);
         assert.equal(response.status, 200, await response.clone().text());
         const { program, revision } = await response.json();
@@ -886,6 +891,28 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
             const edited = document(project(graphProject)).tracks.motion_graphics[0].params;
             assert.equal(edited.programValues.accent, "#17ff22");
             assert.equal(edited.program.buildHash, program.buildHash);
+            const frameAt = async (frame) => {
+                const playhead = graphPage.getByRole("slider", { name: "Playhead" });
+                await playhead.fill(String(frame));
+                const canvas = graphPage.locator(`canvas[data-motion-frame="${frame}"]`).first();
+                return canvas.evaluate(async (canvas) => {
+                    const rgba = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height).data;
+                    const digest = await crypto.subtle.digest("SHA-256", rgba);
+                    const row = Math.floor(canvas.height * 0.18);
+                    const covered = Array.from({ length: canvas.width }, (_, x) => x).filter((x) => {
+                        const i = (row * canvas.width + x) * 4;
+                        return rgba[i] < 80 && rgba[i + 1] > 215;
+                    });
+                    return { digest: [...new Uint8Array(digest)].join(","), center: (covered[0] + covered.at(-1)) / (2 * canvas.width), count: covered.length };
+                });
+            };
+            const frame = await frameAt(21);
+            assert.ok(frame.count > 0);
+            assert.notEqual((await frameAt(72)).digest, frame.digest);
+            assert.deepEqual(await frameAt(21), frame);
+            await graphPage.reload();
+            const reloaded = await frameAt(21);
+            assert.ok(Math.abs(reloaded.center - frame.center) < 0.003, JSON.stringify({ frame, reloaded }));
             await graphPage.getByRole("button", { name: "Export video", exact: true }).click();
             await graphPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 90_000 });
             const mp4 = await graphPage.getByRole("link", { name: "Download MP4", exact: true }).getAttribute("href");

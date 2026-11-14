@@ -8,6 +8,8 @@ import { motionSdkHelpers } from "../../shared/motion/scene-sdk";
 
 const filename = "/scene.ts";
 const sdkFile = "/motion-sdk.d.ts";
+const unavailableGlobals = new Set(["fetch", "XMLHttpRequest", "WebSocket", "Worker", "document", "navigator", "process",
+    "require", "WebAssembly", "Date", "performance", "eval", "Function", "globalThis", "setTimeout"]);
 const sdkTypes = `declare module "${motionSdkModule}" {
     export type MotionFrameInput = Readonly<{ version: 1; frame: number; fps: number;
         properties: Readonly<Record<string, string | number | boolean>>; assetHandles: readonly string[] }>;
@@ -47,6 +49,17 @@ export function compileSceneProgram(raw: SceneProgramInput): ProgramCompilation 
         exported.length !== 1 || exported[0].name?.text !== "frame") {
         const pos = source.getLineAndCharacterOfPosition(invalid?.getStart(source) ?? 0);
         return { program: null, diagnostics: [diagnostic("module_contract", "Export one frame function. Only type imports from the motion SDK and helper declarations are allowed.", pos.line + 1, pos.character + 1)] };
+    }
+    let forbidden: ts.Node | undefined;
+    function checkSyntax(node: ts.Node) {
+        if (forbidden) return;
+        if (node.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(node) && unavailableGlobals.has(node.text))) forbidden = node;
+        else ts.forEachChild(node, checkSyntax);
+    }
+    for (const statement of source.statements) if (!ts.isImportDeclaration(statement)) checkSyntax(statement);
+    if (forbidden) {
+        const pos = source.getLineAndCharacterOfPosition(forbidden.getStart(source));
+        return { program: null, diagnostics: [diagnostic("scene_capability", "Use the frame input and motion SDK for scene data and drawing.", pos.line + 1, pos.character + 1)] };
     }
     const check = `\nconst __vidsai_frame_check: (input: import("${motionSdkModule}").MotionFrameInput, sdk: import("${motionSdkModule}").MotionSceneSdk) => readonly import("${motionSdkModule}").MotionCommand[] = frame;`;
     const options: ts.CompilerOptions = { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS,
