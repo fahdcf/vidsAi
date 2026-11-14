@@ -442,6 +442,8 @@ try {
     addMotionStep(run.id, { name: "preview:1", lane: "browser", input: { round: 1 }, dependencies: ["assemble"] });
     const preview = await runTool();
     assert.equal(preview.payload.result.frames.length, draft.tracks.motion_graphics.length * 3);
+    assert.ok(preview.payload.result.layout.some(({ elements }) => elements.some(({ kind, text, bounds, fontSize }) =>
+        kind === "text" && text && fontSize > 0 && bounds[2] > bounds[0] && bounds[3] > bounds[1])));
     assert.equal(preview.payload.result.images.length, Math.ceil(preview.payload.result.frames.length / preview.payload.result.framesPerSheet));
     assert.ok(preview.payload.result.images[0].base64.length > 10_000);
     const renderedAgain = await page.evaluate(async (snapshot) =>

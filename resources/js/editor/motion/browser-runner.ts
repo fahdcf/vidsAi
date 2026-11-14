@@ -3,7 +3,7 @@ import { isFollowupSourceTime, motionEvidenceFramesPerSheet, motionPreviewFrames
 import type { Document } from "../../../../shared/contracts";
 import { prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
 import { motionContinuityTarget } from "../../../../shared/motion/continuity";
-import { drawMotionFrame } from "../../../../shared/motion/render";
+import { measureMotionFrame, motionLayoutFrames } from "../../../../shared/motion/layout-measure";
 import { soundtrackLevelAt } from "../../../../shared/motion/time-map";
 import { api } from "../api";
 import { analyzeReferenceFrames } from "./reference-analysis";
@@ -146,16 +146,22 @@ async function captureReference(reference: BrowserMotionReference, signal: Abort
     };
 }
 
-const previewFrames = new Map<string, Blob>();
+type MeasuredLayout = NonNullable<import("../../../../shared/motion/browser-tools").MotionPreview["layout"]>;
+const previewFrames = new Map<string, { image: Blob; layout: MeasuredLayout }>();
 
 async function renderPreview(draft: Document, signal: AbortSignal) {
     const scenes = [...draft.tracks.motion_graphics].sort((a, b) => a.layer - b.layer);
     const soundtrack = draft.tracks.audio.find(({ id }) => id === "motion-soundtrack");
-    const frames = [...new Set(scenes.flatMap(({ start_frame, end_frame }) => {
+    const frames = [...new Set(scenes.flatMap((scene) => {
+        const { start_frame, end_frame } = scene;
         const span = end_frame - start_frame - 1;
         const accents = draft.metadata.motion_cues?.filter(({ frame }) => frame > start_frame && frame < end_frame - 1);
         const middle = accents?.reduce<{ frame: number; confidence: number } | undefined>((best, cue) =>
             !best || cue.confidence > best.confidence ? cue : best, undefined)?.frame ?? start_frame + Math.floor(span / 2);
+        if (scene.type === "graph") {
+            const candidates = motionLayoutFrames(scene);
+            return [start_frame, middle, end_frame - 1, start_frame + candidates[Math.floor(candidates.length * 0.25)]];
+        }
         return [start_frame + Math.floor(span * 0.16), middle, start_frame + Math.floor(span * 0.86)];
     }))]
         .sort((a, b) => a - b);
@@ -171,6 +177,7 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
     if (!context || !target) throw new Error("Canvas 2D is unavailable.");
     const assets = new Map<string, Awaited<ReturnType<typeof prepareMotionSceneAssets>>>();
     const samples: MotionReferenceFrame[] = [];
+    const layout: MeasuredLayout = [];
     try {
         for (const frame of frames) {
             signal.throwIfAborted();
@@ -182,11 +189,13 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
             if (cached) {
                 previewFrames.delete(key);
                 previewFrames.set(key, cached);
-                samples.push({ requestedTime: time, sourceTime: time, image: cached });
+                layout.push(...cached.layout.slice(0, 32 - layout.length));
+                samples.push({ requestedTime: time, sourceTime: time, image: cached.image });
                 continue;
             }
             target.fillStyle = "#000";
             target.fillRect(0, 0, width, height);
+            const frameLayout: MeasuredLayout = [];
             for (const [index, scene] of active.entries()) {
                 let ready = assets.get(scene.id);
                 if (!ready) {
@@ -196,18 +205,25 @@ async function renderPreview(draft: Document, signal: AbortSignal) {
                 const audioLevel = soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, soundtrack);
                 await ready.program?.prepare(frame - scene.start_frame, draft.fps);
                 signal.throwIfAborted();
-                drawMotionFrame({ ctx: context, scene, nextScene: targets[index], frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
+                const measured = measureMotionFrame({ ctx: context, scene, nextScene: targets[index], frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
+                frameLayout.push({ sceneId: scene.id, frame, elements: measured.filter((item) => item.kind === "text" || item.id !== scene.id)
+                    .sort((a, b) => Number(b.kind === "text") - Number(a.kind === "text")).slice(0, 12).map((item) => {
+                        const { left, top, right, bottom } = item.bounds;
+                        return { id: item.id, kind: item.kind, bounds: [left / width, top / height, right / width, bottom / height],
+                            ...(item.text ? { text: item.text, fontSize: item.fontSize } : {}) };
+                    }) });
                 target.drawImage(canvas, 0, 0);
             }
+            layout.push(...frameLayout.slice(0, 32 - layout.length));
             const image = await composite.convertToBlob({ type: "image/jpeg", quality: 0.84 });
             signal.throwIfAborted();
             if (image.size <= 160_000) {
-                previewFrames.set(key, image);
+                previewFrames.set(key, { image, layout: frameLayout });
                 if (previewFrames.size > 64) previewFrames.delete(previewFrames.keys().next().value!);
             }
             samples.push({ requestedTime: time, sourceTime: time, image });
         }
-        return { frames, framesPerSheet: motionPreviewFramesPerSheet,
+        return { frames, layout, framesPerSheet: motionPreviewFramesPerSheet,
             images: await images(samples, signal, motionPreviewFramesPerSheet) };
     } finally {
         for (const ready of assets.values()) ready.release();

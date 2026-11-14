@@ -6,7 +6,7 @@ import { graphAssetRefs, graphAuthoring, graphCopy } from "../../shared/motion/g
 import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import type { ReferenceSceneSpec } from "../../shared/motion/reference-spec";
-import { motionEvidenceFramesPerSheet, type ReferenceCropBounds } from "../../shared/motion/browser-tools";
+import { motionEvidenceFramesPerSheet, type MotionPreview, type ReferenceCropBounds } from "../../shared/motion/browser-tools";
 import { motionTimeMap, soundtrackLevelAt } from "../../shared/motion/time-map";
 import { MotionAgentUnavailable, runMotionAgent, type MotionAgentContext, type MotionVisionImage } from "./agent-call";
 import { MotionBudgetError } from "./budget";
@@ -466,7 +466,7 @@ export type MotionCritique = z.infer<typeof motionCritiqueSchema>;
 export async function runMotionCritic(
     context: MotionAgentContext,
     draft: Document,
-    preview: { frames: readonly number[]; images: readonly MotionVisionImage[]; framesPerSheet?: number },
+    preview: { frames: readonly number[]; images: readonly MotionVisionImage[]; framesPerSheet?: number; layout?: MotionPreview["layout"] },
     reference: ReferenceAnalysis | null,
     targetSceneId?: string,
     observe = (_index: number, read: () => Promise<ReferenceAnalysis["observations"]>) => read(),
@@ -500,7 +500,8 @@ export async function runMotionCritic(
             : scene.type === "identity" ? [scene.params.title, scene.params.detail, scene.params.tag]
                 : scene.type === "kinetic_words" ? scene.params.words : sceneCopy(scene);
         const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
-        return { id, type, samples, palette, font, copy, vectorTrace };
+        const layout = preview.layout?.filter(({ sceneId }) => sceneId === id);
+        return { id, type, samples, palette, font, copy, vectorTrace, layout };
     });
     const review = await runMotionAgent(context, "visualCritic", "AGENT_COMPLEX", {
         fps: draft.fps, scenes, focused: Boolean(targetSceneId),

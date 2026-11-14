@@ -137,6 +137,10 @@ export function submitMotionBrowserTask(runId: string, accountId: number, taskId
         if (input.tool === "preview" && "frames" in value &&
             (value.frames.some((frame) => frame >= input.document.total_frames) ||
                 new Set(value.frames).size !== value.frames.length)) fail(422, "The preview sample frames are invalid.");
+        if (input.tool === "preview" && "layout" in value && value.layout?.some(({ sceneId, frame, elements }) =>
+            !value.frames.includes(frame) || !input.document.tracks.motion_graphics.some((scene) =>
+                scene.id === sceneId && scene.start_frame <= frame && frame < scene.end_frame) ||
+            elements.some(({ bounds }) => bounds[0] > bounds[2] || bounds[1] > bounds[3]))) fail(422, "The preview layout evidence is invalid.");
         if (input.tool === "reference_detail" && "samples" in value &&
             (value.bindingId !== input.reference.bindingId || (value.samples.length > 0 &&
                 JSON.stringify(value.samples) !== JSON.stringify(input.samples)))) {

@@ -28,6 +28,7 @@ export type ReadyMotionAssets = {
     images?: Readonly<Record<string, ImageBitmap>>;
     program?: BrowserMotionProgram;
     three?: BrowserMotionThree;
+    measurePaths?: boolean;
 };
 
 function drawGraphAsset({ ctx, scene }: MotionFrame, assets: ReadyMotionAssets, id: string, kind: "image" | "vectors",
@@ -70,6 +71,7 @@ function drawProgram(frame: MotionFrame, assets: ReadyMotionAssets, progress: nu
     if (!program) return;
     const unit = Math.min(width, height);
     for (const command of program.cached(frame.frame, frame.fps) ?? []) {
+        frame.measureElement?.(command.id ?? frame.scene.id, frame.renderOpacity ?? 1);
         ctx.save();
         try {
             ctx.translate(command.x * width, command.y * height);
@@ -97,7 +99,8 @@ function drawProgram(frame: MotionFrame, assets: ReadyMotionAssets, progress: nu
             } else if (command.kind === "path") {
                 ctx.scale(width, height);
                 ctx.fillStyle = paint;
-                ctx.fill(programPathGeometry(program, command.points));
+                if (assets.measurePaths) { drawMotionPath(ctx, command.points, 1, 1); ctx.fill(); }
+                else ctx.fill(programPathGeometry(program, command.points));
             } else {
                 const w = command.width * unit, h = command.height * unit;
                 ctx.fillStyle = paint;
@@ -139,6 +142,7 @@ function drawGraph(frame: MotionFrame, nodes: MotionGraphNode[], progress: numbe
     const localEnd = scene.end_frame - scene.start_frame - 1;
     const next = link && frame.nextScene?.id === link.nextSceneId && frame.frame > localEnd - link.frames ? frame.nextScene : undefined;
     for (const node of nodes) {
+        frame.measureElement?.(node.id, frame.renderOpacity ?? 1);
         const { reveal = 1, draw = 1, textReveal, deform = 0, ...tracks } = sampleGraphAnimation(node.animation, progress);
         const transform = { ...animatedTransform(node, progress, root), ...tracks };
         if (link && next && link.nodeIds.includes(node.id)) {
@@ -282,8 +286,8 @@ export function drawMotionFrame(frame: MotionFrame, assets: ReadyMotionAssets) {
     switch (scene.type) {
         case "graph":
             assets.three?.draw(ctx, width, height, progress);
-            drawGraph(frame, scene.params.layers, progress, assets);
-            drawProgram(frame, assets, progress);
+            drawGraph({ ...frame, renderOpacity: opacity }, scene.params.layers, progress, assets);
+            drawProgram({ ...frame, renderOpacity: opacity }, assets, progress);
             break;
         case "impact": drawImpact({ ...frame, scene }, progress, assets.fontFamily); break;
         case "kinetic_words": drawKineticWords({ ...frame, scene }, progress, assets.fontFamily); break;
@@ -293,6 +297,7 @@ export function drawMotionFrame(frame: MotionFrame, assets: ReadyMotionAssets) {
         case "liquid": drawLiquid({ ...frame, scene }, progress, assets.vectors); break;
         case "identity": drawIdentity({ ...frame, scene }, progress, assets.fontFamily); break;
     }
+    frame.measureElement?.(scene.id, opacity);
     finishMotionFrame(frame);
     if (opacity < 1) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);

@@ -15,6 +15,8 @@ export type MotionFrame<T extends MotionScene = MotionScene> = {
     height: number;
     audioLevel?: number;
     nextScene?: Extract<MotionScene, { type: "graph" }>;
+    measureElement?: (id: string, frameOpacity: number) => void;
+    renderOpacity?: number;
 };
 
 type Cost = { geometry: number; particles: number; vectors: number };

@@ -46,8 +46,16 @@ export function isFollowupSourceTime(sourceTime: number, time: number, interval:
 export const previewSchema = z.object({
     frames: z.array(z.number().int().nonnegative().max(7199)).min(1).max(32),
     framesPerSheet: z.literal(motionPreviewFramesPerSheet).optional(),
-    images: z.array(evidenceImage).min(1).max(4),
+    images: z.array(evidenceImage).min(1).max(6),
+    layout: z.array(z.object({ sceneId: motionSceneId, frame: z.number().int().min(0).max(7199),
+        elements: z.array(z.object({ id: motionSceneId, kind: z.enum(["text", "shape", "image"]),
+            bounds: z.tuple([z.number().min(-1_000_000).max(1_000_000), z.number().min(-1_000_000).max(1_000_000),
+                z.number().min(-1_000_000).max(1_000_000), z.number().min(-1_000_000).max(1_000_000)]),
+            text: z.string().max(180).optional(), fontSize: z.number().min(0).max(4096).optional(),
+        }).strict()).max(12),
+    }).strict()).max(32).optional(),
 }).strict();
+export type MotionPreview = z.infer<typeof previewSchema>;
 export const traceResultSchema = z.discriminatedUnion("status", [
     z.object({ status: z.literal("traced"), bindingId: z.uuid(), assetId: z.uuid() }).strict(),
     z.object({ status: z.literal("approximation"), bindingId: z.uuid() }).strict(),
