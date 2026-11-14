@@ -765,7 +765,7 @@ try {
             proposal.scenes.map(({ id, start_frame, end_frame }) => [id, start_frame, end_frame]));
         for (const [index, scene] of scenes.entries()) {
             if (graphAssets && index === 1) continue;
-            assert.ok(scene.params.layers.some(({ kind, keyframes }) => kind === "rect" && keyframes.length));
+            assert.ok(scene.params.layers.some(({ kind, animation }) => kind === "rect" && animation?.length));
             assert.ok(scene.params.layers.some(({ kind, text }) => kind === "text" && text === ["Get transcript", "Try it now"][index]));
         }
         console.log("The incompatible hook and closing card were published as editable custom graphs with their original copy and timing.");
@@ -1059,7 +1059,7 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
         const scene = published.tracks.motion_graphics[1];
         assert.equal(published.tracks.audio.length, 0);
         assert.equal(scene.type, "graph");
-        assert.ok(scene.params.layers.some((layer) => layer.kind === "text" && layer.text === "Get transcript" && layer.keyframes.length));
+        assert.ok(scene.params.layers.some((layer) => layer.kind === "text" && layer.text === "Get transcript" && layer.animation?.length));
         assert.equal(artifact.source === "graph_fallback", rejectGraphEngineer);
         if (rejectGraphEngineer) {
             assert.ok(scene.params.layers.length > 4);

@@ -395,7 +395,7 @@ export async function runMotionEngineer(
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
                 referenceFrames: describeReferenceFrames(details),
-                layout: "Compose with up to 20 flat editable shapes and text layers in paint order. x and y are center coordinates from 0 to 1. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Use reveal for a staggered slide and fade, expressed as progress through the scene. Prefer palette roles for brand colors. Use success, warning and danger for semantic states, or #RRGGBB for an exact source color. Use spans only when their text concatenates to the complete layer text.",
+                layout: "Prefer a version 1 composition with explicit property intervals. Preserve the static layout during the readable hold. Animate the specific objects and landmarks in the scene brief and reference evidence. Use a flat layers response only for simple or static layouts. Positions are normalized. Shape width, height and type size use the short canvas edge. Text maxWidth uses the canvas width. Prefer palette roles for brand colors, semantic status colors for status and #RRGGBB for exact source colors. Styled spans must concatenate to the complete layer text.",
             }, graphEngineerSchema, {
                 requestTimeoutMs: 35_000,
                 images: details.map(({ image }) => image),
@@ -529,7 +529,8 @@ export async function runMotionCritic(
                 : scene.type === "kinetic_words" ? scene.params.words : scene.type === "graph" ? graphCopy(scene.params.layers) : sceneCopy(scene);
         const vectorTrace = scene.type === "liquid" && scene.params.mode === "vectors" && scene.assets.some(({ kind }) => kind === "vectors");
         const layout = preview.layout?.filter(({ sceneId }) => sceneId === id);
-        return { id, type, samples, palette, font, copy, vectorTrace, layout };
+        const intervals = scene.type === "graph" ? scene.params.layers.flatMap((node) => (node.animation ?? []).map((track) => ({ id: node.id, ...track }))).slice(0, 16) : [];
+        return { id, type, samples, palette, font, copy, vectorTrace, layout, intervals };
     });
     const review = await runMotionAgent(context, "visualCritic", "AGENT_COMPLEX", {
         fps: draft.fps, scenes, focused: Boolean(targetSceneId),

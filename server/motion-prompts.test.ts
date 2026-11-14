@@ -57,8 +57,8 @@ test("an authored reveal begins at the supplied soundtrack cue", () => {
     const timing = { start: 30, end: 61, cueFrames: new Set([45]) };
     assert.ok("layers" in graph);
     const [layer] = compileEngineerGraph(graph.layers, timing).layers;
-    assert.equal(layer.keyframes[0].at, 0.5);
-    assert.equal(layer.keyframes[0].opacity, 0);
+    assert.equal(layer.animation?.find(({ property }) => property === "opacity")?.start, 0.5);
+    assert.equal(layer.animation?.find(({ property }) => property === "opacity")?.from, 0);
     assert.throws(() => compileEngineerGraph(graph.layers, { ...timing, cueFrames: new Set([44]) }), /available audio cue/);
 });
 

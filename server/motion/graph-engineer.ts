@@ -38,8 +38,10 @@ export function compileEngineerGraph(layers: readonly Layer[], timing?: { start:
         }
         const animated = reveal !== undefined;
         return { parentId: null, order: index, node: { ...shape, id: `layer-${index + 1}`, transform: { x, y: animated ? y + 0.035 : y, opacity: animated ? 0 : 1 },
-            keyframes: reveal === undefined ? [] : [...(reveal > 0 ? [{ at: reveal, opacity: 0 }] : []),
-                { at: Math.min(1, reveal + 0.12), y, opacity: 1, ease: "ease_out" }] } };
+            ...(reveal === undefined ? {} : { animation: [
+                { property: "y", start: reveal, end: Math.min(1, reveal + 0.12), from: y + 0.035, to: y, ease: "ease_out" },
+                { property: "opacity", start: reveal, end: Math.min(1, reveal + 0.12), from: 0, to: 1, ease: "ease_out" },
+            ] }) } };
     }) });
 }
 

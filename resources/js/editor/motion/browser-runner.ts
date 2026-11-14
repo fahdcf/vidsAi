@@ -3,7 +3,8 @@ import { isFollowupSourceTime, motionEvidenceFramesPerSheet, motionPreviewFrames
 import type { Document } from "../../../../shared/contracts";
 import { MotionAssetLoadError, prepareMotionSceneAssets } from "../../../../shared/motion/browser-assets";
 import { motionContinuityTarget } from "../../../../shared/motion/continuity";
-import { measureMotionFrame, motionLayoutFrames } from "../../../../shared/motion/layout-measure";
+import { measureMotionFrame } from "../../../../shared/motion/layout-measure";
+import { motionEventSamples } from "../../../../shared/motion/review-samples";
 import { diagnoseMotionLayout } from "../../../../shared/motion/layout-diagnostics";
 import { graphCopy } from "../../../../shared/motion/graph";
 import { soundtrackLevelAt } from "../../../../shared/motion/time-map";
@@ -157,15 +158,10 @@ async function renderPreview(draft: Document, signal: AbortSignal, staticLayout 
     const frames = [...new Set(scenes.flatMap((scene) => {
         const { start_frame, end_frame } = scene;
         if (staticLayout) return [end_frame - 1];
-        const span = end_frame - start_frame - 1;
         const accents = draft.metadata.motion_cues?.filter(({ frame }) => frame > start_frame && frame < end_frame - 1);
-        const middle = accents?.reduce<{ frame: number; confidence: number } | undefined>((best, cue) =>
-            !best || cue.confidence > best.confidence ? cue : best, undefined)?.frame ?? start_frame + Math.floor(span / 2);
-        if (scene.type === "graph") {
-            const candidates = motionLayoutFrames(scene);
-            return [start_frame, middle, end_frame - 1, start_frame + candidates[Math.floor(candidates.length * 0.25)]];
-        }
-        return [start_frame + Math.floor(span * 0.16), middle, start_frame + Math.floor(span * 0.86)];
+        const cue = accents?.reduce<{ frame: number; confidence: number } | undefined>((best, sample) =>
+            !best || sample.confidence > best.confidence ? sample : best, undefined)?.frame;
+        return motionEventSamples(scene, cue);
     }))]
         .sort((a, b) => a - b);
     if (!frames.length || frames.length > 32) throw new Error("The draft has no bounded motion preview.");
