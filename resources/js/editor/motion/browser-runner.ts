@@ -183,7 +183,8 @@ async function renderPreview(draft: Document, signal: AbortSignal, staticLayout 
             signal.throwIfAborted();
             const active = scenes.filter(({ start_frame, end_frame }) => frame >= start_frame && frame < end_frame);
             const targets = active.map((scene) => motionContinuityTarget(scene, scenes));
-            const key = await sha256(new TextEncoder().encode(JSON.stringify([draft.project_id, width, height, draft.fps, frame, active, targets])).buffer);
+            const audioLevel = soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, soundtrack);
+            const key = await sha256(new TextEncoder().encode(JSON.stringify([draft.project_id, width, height, draft.fps, frame, active, targets, audioLevel])).buffer);
             const time = frame / draft.fps;
             const cached = previewFrames.get(key);
             if (cached) {
@@ -215,8 +216,7 @@ async function renderPreview(draft: Document, signal: AbortSignal, staticLayout 
                     }
                     assets.set(scene.id, ready);
                 }
-                const audioLevel = soundtrackLevelAt(frame, draft.fps, draft.metadata.motion_audio_analysis, soundtrack);
-                await ready.program?.prepare(frame - scene.start_frame, draft.fps);
+                await ready.program?.prepare(frame - scene.start_frame, draft.fps, signal);
                 signal.throwIfAborted();
                 const measured = measureMotionFrame({ ctx: context, scene, nextScene: targets[index], frame: frame - scene.start_frame, fps: draft.fps, width, height, audioLevel }, ready);
                 const settled = frame === scene.end_frame - 1 && !(scene.type === "graph" && scene.params.continuity);

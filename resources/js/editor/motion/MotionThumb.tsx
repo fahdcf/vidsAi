@@ -24,7 +24,7 @@ export default function MotionThumb({ scene, projectId, width, height, fps }: {
                 try {
                     signal.throwIfAborted();
                     const frame = Math.floor((scene.end_frame - scene.start_frame - 1) * 0.66);
-                    await assets.program?.prepare(frame, fps);
+                    await assets.program?.prepare(frame, fps, signal);
                     signal.throwIfAborted();
                     drawMotionFrame({ ctx: context, scene, frame, fps, width: w, height: h }, assets);
                     target.dataset.motionThumbnail = scene.id;

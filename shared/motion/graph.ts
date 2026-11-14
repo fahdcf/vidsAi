@@ -192,3 +192,15 @@ export function graphShadowCount(nodes: readonly MotionGraphNode[]): number {
     return nodes.reduce((total, node) => total + (node.kind === "group" ? graphShadowCount(node.children)
         : "shadow" in node && node.shadow?.opacity ? 1 : 0), 0);
 }
+
+export function graphPaintPixels(nodes: readonly MotionGraphNode[], width: number, height: number, inheritedScale = 1): number {
+    const canvas = width * height, edge = Math.min(width, height);
+    return nodes.reduce((pixels, node) => {
+        const scale = inheritedScale * Math.max(node.transform.scale ?? 1, ...node.keyframes.map((key) => key.scale ?? 0),
+            ...(node.animation ?? []).filter(({ property }) => property === "scale").map(({ from, to, ease }) => Math.max(from, to) * (ease === "spring" ? 1.15 : 1)));
+        if (node.kind === "group") return pixels + graphPaintPixels(node.children, width, height, scale);
+        const box = node.kind === "text" ? node.maxWidth * width * (node.typography?.boxHeight ?? node.size * 2.5) * edge
+            : node.kind === "path" ? canvas : node.width * node.height * edge * edge;
+        return pixels + Math.min(canvas, Math.ceil(box * scale * scale));
+    }, 0);
+}

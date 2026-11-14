@@ -1,6 +1,6 @@
 import { getClipSequenceTiming, normalizeDocument, type Document } from "@vidsai/contracts";
 import { motionSceneCost } from "../../../../shared/motion/registry";
-import { graphShadowCount } from "../../../../shared/motion/graph";
+import { graphPaintPixels, graphShadowCount } from "../../../../shared/motion/graph";
 import { motionThreeCost } from "../../../../shared/motion/three-scene";
 
 export const browserRenderProfile = {
@@ -38,6 +38,8 @@ export const motionRenderProfile = {
     maxAssets: 12,
     maxActiveAssets: 6,
     maxSurfacePixels: 6_220_800,
+    maxPaintMultiples: 24,
+    maxDecodedImagePixels: 16_000_000,
     maxAssetBytes: 20 * 1024 * 1024,
 } as const;
 
@@ -176,19 +178,23 @@ export function validateBrowserRenderProfile(
             `Use no more than ${m.maxAssets} project assets inside motion scenes.`);
         const costs = motion.map((scene) => ({ scene, cost: motionSceneCost(scene),
             surfaces: 1 + (scene.transitionIn ? 0.25 : 0) + (scene.type === "graph" ? graphShadowCount(scene.params.layers) * 0.25 : 0),
+            paintedPixels: scene.type === "graph" ? graphPaintPixels(scene.params.layers, width, height) +
+                (scene.params.program ? 8 * width * height : 0) : width * height,
             three: scene.type === "graph" && scene.params.three ? motionThreeCost(scene.params.three) : null }));
         const overloaded = motion.some(({ start_frame: frame }) => {
             const totals = costs.filter(({ scene }) => scene.start_frame <= frame && frame < scene.end_frame)
-                .reduce((sum, { cost, scene, surfaces, three }) => ({
+                .reduce((sum, { cost, scene, surfaces, three, paintedPixels }) => ({
                     geometry: sum.geometry + cost.geometry,
                     particles: sum.particles + cost.particles,
                     vectors: sum.vectors + cost.vectors,
                     assets: sum.assets + scene.assets.length,
                     surfaces: sum.surfaces + surfaces,
+                    paintedPixels: sum.paintedPixels + paintedPixels,
                     threePixels: sum.threePixels + (three ? three.texturePixels + 2 * three.targetPixels : 0),
-                }), { geometry: 0, particles: 0, vectors: 0, assets: 0, surfaces: 0, threePixels: 0 });
+                }), { geometry: 0, particles: 0, vectors: 0, assets: 0, surfaces: 0, threePixels: 0, paintedPixels: 0 });
             return totals.geometry > m.maxGeometry || totals.particles > m.maxParticles || totals.vectors > m.maxVectorAssets ||
-                totals.assets > m.maxActiveAssets || width * height * totals.surfaces + totals.threePixels > m.maxSurfacePixels;
+                totals.assets > m.maxActiveAssets || totals.paintedPixels > m.maxPaintMultiples * width * height ||
+                width * height * totals.surfaces + totals.threePixels > m.maxSurfacePixels;
         });
         limit(overloaded, "motion_complexity", "Reduce overlapping motion, effects or assets to fit the browser render budget.");
     }

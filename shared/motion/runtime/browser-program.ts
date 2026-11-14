@@ -23,7 +23,8 @@ export async function prepareBrowserProgram(raw: SceneProgram, values: SceneProg
     let failure: Error | undefined;
     let closed = false;
     const key = (frame: number, fps: number) => `${fps}/${frame}`;
-    async function prepare(frame: number, fps: number): Promise<readonly ProgramCommand[]> {
+    async function prepare(frame: number, fps: number, evaluationSignal?: AbortSignal): Promise<readonly ProgramCommand[]> {
+        evaluationSignal?.throwIfAborted();
         if (closed || frame < 0 || frame >= duration || !Number.isInteger(frame)) throw new Error("The scene frame is unavailable.");
         for (;;) {
             if (failure) throw failure;
@@ -32,7 +33,7 @@ export async function prepareBrowserProgram(raw: SceneProgram, values: SceneProg
             if (!pending) {
                 const first = Math.floor(frame / batchSize) * batchSize;
                 const batch = Array.from({ length: Math.min(batchSize, duration - first) }, (_, index) => first + index);
-                pending = runtime.request({ ...request, frames: batch, fps }).then((result) => {
+                pending = runtime.request({ ...request, frames: batch, fps }, evaluationSignal).then((result) => {
                     if (!result.ok) {
                         const diagnostic = result.diagnostic;
                         throw new Error(diagnostic ? `${diagnostic.file}:${diagnostic.line}:${diagnostic.column} ${diagnostic.message}`
@@ -58,6 +59,7 @@ export async function prepareBrowserProgram(raw: SceneProgram, values: SceneProg
                 }).finally(() => { pending = undefined; });
             }
             await pending;
+            evaluationSignal?.throwIfAborted();
         }
     }
     return {

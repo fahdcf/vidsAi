@@ -183,6 +183,7 @@ export async function resolveBrowserAssets(
         for (const [index, overlay] of document.tracks.overlays.entries()) {
             overlay.src = await resolve(overlay.src, "image", `Overlay ${index + 1}`);
         }
+        let imagePixels = 0;
         for (const scene of document.tracks.motion_graphics) {
             for (const ref of scene.assets) {
                 if (Object.hasOwn(motionAssets, ref.id)) continue;
@@ -201,7 +202,11 @@ export async function resolveBrowserAssets(
                 if (ref.kind === "vectors") {
                     motionAssets[ref.id] = { kind: ref.kind, data: parseMotionVectors(await file.text()) };
                 } else {
-                    if (ref.kind === "image") await inspectBrowserMedia(file, "image", signal);
+                    if (ref.kind === "image") {
+                        const inspected = await inspectBrowserMedia(file, "image", signal);
+                        if (inspected.kind === "image") imagePixels += inspected.width * inspected.height;
+                        if (imagePixels > motionRenderProfile.maxDecodedImagePixels) throw new Error("Motion images exceed the decoded pixel budget.");
+                    }
                     motionAssets[ref.id] = { kind: ref.kind, file };
                 }
             }

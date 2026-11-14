@@ -403,7 +403,9 @@ try {
                 tracks: { ...draft.tracks, motion_graphics: scenes } };
             const scaled = prepareBrowserExportTimeline(snapshot, "motion1080smooth").tracks.motion_graphics;
             const shadow = { color: "#000000", x: 0, y: 0, opacity: 1, blur: 0.01 };
-            const withEffects = (scene, count) => ({ ...scene, params: { layers: Array.from({ length: count }, (_, i) => ({ ...node, id: "shadow-" + i, shadow })) } });
+            const withEffects = (scene, count) => ({ ...scene, params: { layers: Array.from({ length: count }, (_, i) => ({
+                ...scene.params.layers[0], id: "shadow-" + i, shadow,
+            })) } });
             const costly = { ...snapshot, tracks: { ...snapshot.tracks, motion_graphics: [withEffects(scenes[0], 3), { ...withEffects(scenes[1], 3), start_frame: 24 }] } };
             return { end: draw(scenes[0], 29), early: draw(scenes[0], 0), middle: draw(scenes[0], 22),
                 start: draw(scenes[1], 0), again: draw(scenes[0], 29), at60: draw(scaled[0], 59, scaled),
