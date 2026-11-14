@@ -2,11 +2,13 @@
 
 Design within the declared output profile. Use integer frame boundaries, deterministic seeds, stable project-owned assets and a short resource budget.
 
-Skill version 1 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
+Skill version 2 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
 
 Supported components are grid, liquid. Available tools for eligible roles are validate_motion_document, get_motion_component_schema.
 
 Fix invalid scene intervals before requesting an actual preview.
+
+Compile scene modules before preview. Repair the cited source line with a bounded patch and validate the new build in the browser before integration.
 
 ```json
 [

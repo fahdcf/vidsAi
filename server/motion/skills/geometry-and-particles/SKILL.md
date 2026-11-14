@@ -2,11 +2,13 @@
 
 Use bounded geometry counts. Add depth through scale, perspective and speed differences. Prefer a radial reveal and a clear focal point.
 
-Skill version 1 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
+Skill version 2 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
 
 Supported components are grid, tunnel. Available tools for eligible roles are get_motion_component_schema, build_motion_scene.
 
 Reduce overlapping complexity when a scene exceeds its browser budget.
+
+Use deterministic scene modules for procedural animation that depends on frame time. For the bounded 3D subset use the documented primitive, lighting and camera controls, with owned textures and a stable 2D readable layer.
 
 ```json
 [

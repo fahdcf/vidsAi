@@ -5,7 +5,10 @@ import { motionRendererVersion } from "../../shared/motion/registry";
 import { motionToolManifest, type ToolRole } from "./tools";
 
 const skillManifest = z.object({
-    version: z.literal(1),
+    version: z.literal(2),
+    schemaVersion: z.literal(1),
+    capabilities: z.array(z.object({ id: z.string(), skill: z.string(),
+        examples: z.array(z.string()).max(4), terms: z.array(z.string()).min(1) }).strict()).min(7),
     skills: z.array(z.object({
         id: z.string().regex(/^[a-z-]+$/),
         name: z.string(),
@@ -19,6 +22,8 @@ const skillManifest = z.object({
 }).strict().parse(JSON.parse(readFileSync(new URL("./skills/manifest.json", import.meta.url), "utf8")));
 
 export const motionSkillManifest = skillManifest.skills;
+export const motionCapabilityManifest = { version: skillManifest.version, schemaVersion: skillManifest.schemaVersion,
+    capabilities: skillManifest.capabilities };
 const definitions = {
     referenceAnalyst: { filename: "reference-analyst", toolRole: "referenceAnalyst", skills: ["reference-analysis", "liquid-and-vector-tracing"] },
     referenceSpec: { filename: "reference-spec", toolRole: "referenceAnalyst", skills: ["reference-analysis", "responsive-layout"] },

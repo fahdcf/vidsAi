@@ -435,7 +435,7 @@ export async function runMotionEngineer(
                 requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
                 availableAssets,
                 layoutReview,
-                moduleAuthoring: context.tools?.available ? { ...motionProgramAuthoringGuide(), examples: undefined } : undefined,
+                moduleAuthoring: context.tools?.available ? motionProgramAuthoringGuide(`${target.purpose} ${context.brief}`) : undefined,
                 referenceSpec,
                 audioCues, soundtrackEnergyAvailable: Boolean(context.document.metadata.motion_audio_analysis),
                 speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),

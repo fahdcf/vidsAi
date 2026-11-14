@@ -2,11 +2,13 @@
 
 Inspect actual preview pixels at representative timestamps. Judge readability, hierarchy, palette, pacing and brief adherence. Propose bounded repairs tied to a scene ID.
 
-Skill version 1 requires renderer version 1 and component version 1. Input contract RenderedPreview. Output contract MotionOperations.
+Skill version 2 requires renderer version 1 and component version 1. Input contract RenderedPreview. Output contract MotionOperations.
 
 Supported components are identity, graph. Available tools for eligible roles are validate_motion_document, patch_motion_scene.
 
 Request another preview when the relevant animation moment is missing.
+
+Compare matched source and generated tiles using the supplied labels, timing, text and object identities. Cite generated evidence for every proposed repair.
 
 ```json
 [

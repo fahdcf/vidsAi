@@ -2,11 +2,13 @@
 
 Compose for the requested aspect ratio. Reflow the mark and text in portrait and keep the primary message within the safe area.
 
-Skill version 1 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
+Skill version 2 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
 
 Supported components are identity, kinetic_words. Available tools for eligible roles are get_motion_component_schema, patch_motion_scene.
 
 Correct overflow through wrapping, shorter approved copy or a smaller type size.
+
+Compose product UI around a single primary action. Use aligned URL and transcript rows, then give the CTA its own shape, editable label, and readable hold. Measure the label at the hold.
 
 ```json
 [

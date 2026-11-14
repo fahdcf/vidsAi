@@ -1,6 +1,7 @@
 import { motionSdkHelpers } from "../../shared/motion/scene-sdk";
 import { motionProgramVersion, motionSdkModule } from "../../shared/motion/scene-program";
 import { motionThreeCapability } from "../../shared/motion/three-scene";
+import { motionCapabilityManifest } from "./prompts";
 
 const rectPath = `[{ op: "M", x: -0.09, y: -0.09 }, { op: "L", x: 0.09, y: -0.09 }, { op: "L", x: 0.09, y: 0.09 }, { op: "L", x: -0.09, y: 0.09 }, { op: "Z" }]`;
 const gradient = `{ x0: -0.1, y0: 0, x1: 0.1, y1: 0, stops: [{ at: 0, color: "#ff5566" }, { at: 1, color: "#5577ff" }] }`;
@@ -35,13 +36,23 @@ export function motionExampleSource(body: string) {
         `export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {\n    ${body}\n}`;
 }
 
-export function motionProgramAuthoringGuide() {
+export function motionProgramAuthoringGuide(intent?: string) {
+    const words = new Set(intent?.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? []);
+    const capabilities = intent ? motionCapabilityManifest.capabilities
+        .map((capability) => ({ capability, score: capability.terms.filter((term) => words.has(term)).length }))
+        .filter(({ score }) => score > 0).sort((a, b) => b.score - a.score).slice(0, 3).map(({ capability }) => capability)
+        : motionCapabilityManifest.capabilities;
+    const selected = [...new Set(capabilities.flatMap(({ examples }) => examples))];
+    const examples = intent ? selected.slice(0, 3).flatMap((id) => motionProgramExamples.find((example) => example.id === id) ?? [])
+        : motionProgramExamples;
     return {
         version: motionProgramVersion, module: motionSdkModule,
         prompt: "Write one pure frame function. Use editable graph layers for ordinary layouts and keyframes. Use a TypeScript module for procedural commands. All coordinates are normalized, drawing order follows the returned array, and every command needs a stable unique ID. Read properties from input.properties and use only declared asset handles.",
         helpers: Object.values(motionSdkHelpers).map(({ signature }) => signature),
-        adapters: { three: motionThreeCapability },
-        examples: motionProgramExamples.map(({ id, helper, body, failure, repair, expected, broken: [from, to] }) => ({
+        resources: { version: motionCapabilityManifest.version, schemaVersion: motionCapabilityManifest.schemaVersion,
+            capabilities: capabilities.map(({ id, skill }) => ({ id, skill })) },
+        adapters: !intent || capabilities.some(({ id }) => id === "bounded-three") ? { three: motionThreeCapability } : undefined,
+        examples: examples.map(({ id, helper, body, failure, repair, expected, broken: [from, to] }) => ({
             id, helper, expected, source: motionExampleSource(body), failure, failingSource: motionExampleSource(body.replace(from, to)), repair,
         })),
     };

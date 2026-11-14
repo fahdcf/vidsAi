@@ -5,6 +5,7 @@ import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, mot
 import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
 import { validateMotionResources } from "./motion/resource-check";
+import { motionProgramAuthoringGuide } from "./motion/program-examples";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
 import { referenceClock, referenceTimeAt } from "../shared/motion/time-map";
 import { compileEngineerGraph, graphEngineerSchema } from "./motion/graph-engineer";
@@ -64,6 +65,12 @@ test("an authored reveal begins at the supplied soundtrack cue", () => {
 
 test("the packaged prompts, skills, schemas and tools are available", () => {
     assert.deepEqual(validateMotionResources(), { skills: 9, prompts: 8, examples: 18 });
+    const guide = motionProgramAuthoringGuide("Product interface button with waveform");
+    assert.equal(guide.resources.version, 2);
+    assert.equal(guide.resources.schemaVersion, 1);
+    assert.equal(guide.examples[0].id, "ui-button");
+    assert.equal(guide.adapters, undefined);
+    assert.ok(motionProgramAuthoringGuide("3D camera").adapters?.three);
 });
 
 test("untrusted attachment text stays in the context and cannot enable a tool", () => {

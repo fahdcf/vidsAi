@@ -1,5 +1,15 @@
 {
-  "version": 1,
+  "version": 2,
+  "schemaVersion": 1,
+  "capabilities": [
+    {"id":"product-ui","skill":"responsive-layout","examples":["ui-button","waveform"],"terms":["interface","product","button","transcript","ui"]},
+    {"id":"mixed-typography","skill":"kinetic-typography","examples":["text-layout","type-reveal"],"terms":["type","typography","text","headline","caption"]},
+    {"id":"procedural-animation","skill":"geometry-and-particles","examples":["particles","spring","curve"],"terms":["procedural","particle","oscillate","spring","pulse"]},
+    {"id":"soundtrack-sync","skill":"audio-and-pacing","examples":["waveform","spring"],"terms":["audio","beat","soundtrack","waveform","music","voice"]},
+    {"id":"code-diagnostics","skill":"browser-rendering","examples":["mask","chart"],"terms":["compile","diagnostic","patch","module","code"]},
+    {"id":"reference-comparison","skill":"visual-critique","examples":["text-layout","vector-path"],"terms":["reference","compare","fidelity","layout","evidence"]},
+    {"id":"bounded-three","skill":"geometry-and-particles","examples":[],"terms":["3d","three","camera","depth","mesh"]}
+  ],
   "skills": [
     {
       "id": "reference-analysis",
@@ -42,7 +52,7 @@
     {
       "id": "kinetic-typography",
       "name": "Kinetic typography",
-      "version": 1,
+      "version": 2,
       "rendererVersion": 1,
       "input": "MotionPlan",
       "output": "MotionScene",
@@ -58,7 +68,7 @@
     {
       "id": "geometry-and-particles",
       "name": "Geometry and particles",
-      "version": 1,
+      "version": 2,
       "rendererVersion": 1,
       "input": "MotionPlan",
       "output": "MotionScene",
@@ -90,7 +100,7 @@
     {
       "id": "responsive-layout",
       "name": "Responsive layout",
-      "version": 1,
+      "version": 2,
       "rendererVersion": 1,
       "input": "MotionPlan",
       "output": "MotionScene",
@@ -106,7 +116,7 @@
     {
       "id": "audio-and-pacing",
       "name": "Audio and pacing",
-      "version": 1,
+      "version": 2,
       "rendererVersion": 1,
       "input": "MotionCues",
       "output": "MotionScene",
@@ -122,7 +132,7 @@
     {
       "id": "browser-rendering",
       "name": "Browser rendering",
-      "version": 1,
+      "version": 2,
       "rendererVersion": 1,
       "input": "MotionPlan",
       "output": "MotionScene",
@@ -138,7 +148,7 @@
     {
       "id": "visual-critique",
       "name": "Visual critique",
-      "version": 1,
+      "version": 2,
       "rendererVersion": 1,
       "input": "RenderedPreview",
       "output": "MotionOperations",

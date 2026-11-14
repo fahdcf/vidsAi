@@ -2,11 +2,13 @@
 
 Choose short readable phrases, a clear type hierarchy and generous safe areas. Use type fit and masked reveals. Preserve Arabic shaping and the user’s language.
 
-Skill version 1 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
+Skill version 2 requires renderer version 1 and component version 1. Input contract MotionPlan. Output contract MotionScene.
 
 Supported components are kinetic_words, impact. Available tools for eligible roles are get_motion_component_schema, patch_motion_scene.
 
 Reduce the number of words or lengthen the scene if copy has too little hold time.
+
+Use styled spans for weight and emphasis within the same editable text. Preserve the exact reading order, line wraps, and direction in Arabic and long labels.
 
 ```json
 [
