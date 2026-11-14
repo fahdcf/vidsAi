@@ -242,6 +242,7 @@ async function renderPreview(draft: Document, signal: AbortSignal, staticLayout 
             samples.push({ requestedTime: time, sourceTime: time, image });
         }
         return { frames, layout, framesPerSheet: motionPreviewFramesPerSheet,
+            frameHashes: await Promise.all(samples.map(async ({ image }) => sha256(await image.arrayBuffer()))),
             images: await images(samples, signal, motionPreviewFramesPerSheet) };
     } finally {
         for (const ready of assets.values()) ready.release();

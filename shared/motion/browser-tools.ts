@@ -47,6 +47,7 @@ export const previewSchema = z.object({
     frames: z.array(z.number().int().nonnegative().max(7199)).min(1).max(32),
     framesPerSheet: z.literal(motionPreviewFramesPerSheet).optional(),
     images: z.array(evidenceImage).min(1).max(6),
+    frameHashes: z.array(evidenceImage.shape.sha256).min(1).max(32).optional(),
     layout: z.array(z.object({ sceneId: motionSceneId, frame: z.number().int().min(0).max(7199),
         elements: z.array(z.object({ id: motionSceneId, kind: z.enum(["text", "shape", "image"]),
             bounds: z.tuple([z.number().min(-1_000_000).max(1_000_000), z.number().min(-1_000_000).max(1_000_000),
@@ -56,7 +57,7 @@ export const previewSchema = z.object({
         findings: z.array(z.object({ id: motionSceneId, code: z.enum(["off_canvas", "clipped_text", "occluded_text", "low_contrast", "missing_text", "missing_asset"]),
             detail: z.string().max(230) }).strict()).max(8).optional(),
     }).strict()).max(32).optional(),
-}).strict();
+}).strict().refine(({ frameHashes, frames }) => !frameHashes || frameHashes.length === frames.length);
 export type MotionPreview = z.infer<typeof previewSchema>;
 export const traceResultSchema = z.discriminatedUnion("status", [
     z.object({ status: z.literal("traced"), bindingId: z.uuid(), assetId: z.uuid() }).strict(),

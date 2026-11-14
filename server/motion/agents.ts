@@ -506,6 +506,8 @@ export const motionCritiqueSchema = z.object({
     scores: z.object({ readability: score, hierarchy: score, palette: score, motion: score, pacing: score, brief: score }).strict(),
     issues: z.array(critiqueIssue).max(8),
     unresolved: z.array(z.string().trim().min(1).max(240)).max(8),
+    repairs: z.array(z.object({ issueIndex: z.number().int().min(0).max(7), evidence: critiqueIssue.shape.evidence.unwrap(),
+        outcome: z.enum(["improved", "unchanged", "regressed", "uncertain"]) }).strict()).max(8).optional(),
 }).strict();
 const visualReviewSchema = motionCritiqueSchema.extend({ issues: z.array(critiqueIssue).max(3),
     unresolved: z.array(z.string().trim().min(1).max(240)).max(3) });
@@ -521,6 +523,8 @@ export async function runMotionCritic(
     observe = (_index: number, read: () => Promise<ReferenceAnalysis["observations"]>) => read(),
     referenceFrames: readonly ReferenceFrame[] = [],
     specs: readonly ReferenceSceneSpec[] = [],
+    previous?: { issues: MotionCritique["issues"]; preview: Pick<MotionPreview, "frames" | "framesPerSheet">;
+        images: MotionVisionImage[] },
 ) {
     const size = preview.framesPerSheet ?? motionEvidenceFramesPerSheet;
     if (!preview.frames.length || preview.frames.length > 32 ||
@@ -553,7 +557,7 @@ export async function runMotionCritic(
     const sources = referenceFrames.filter(({ crop, sceneId }) => !crop &&
         tiles.some(({ sceneIds }) => sceneIds.includes(sceneId)))
         .filter((sample, index, all) => all.findIndex(({ sceneId }) => sceneId === sample.sceneId) === index)
-        .slice(0, 8 - sheets.length);
+        .slice(0, Math.max(0, 8 - sheets.length - (previous?.images.length ?? 0)));
     const referenceImages = sources.map(({ sceneId, time }, index) => ({
         sceneId, sourceSeconds: time, imageNumber: sheets.length + index + 1, evidence: `reference:${sheets.length + index + 1}`,
         pairedGenerated: tiles.filter(({ sceneIds }) => sceneIds.includes(sceneId)).map(({ evidence }) => evidence),
@@ -577,23 +581,37 @@ export async function runMotionCritic(
         return { id, type, start_frame, end_frame, samples, palette, font, copy, vectorTrace, layout, intervals, objects,
             sourceObjects: specs.find(({ sceneId }) => sceneId === id)?.objects, sceneChecks };
     });
+    const priorIssues = previous?.issues.map(({ sceneId, issue, repair }, issueIndex) => ({ issueIndex, sceneId, issue, repair }));
+    const previousSheets = previous?.images.slice(0, 8 - sheets.length - sources.length).map((image, index) => {
+        const size = previous.preview.framesPerSheet ?? motionEvidenceFramesPerSheet;
+        return { image, imageNumber: sheets.length + sources.length + index + 1,
+            frames: previous.preview.frames.slice(index * size, (index + 1) * size) };
+    }) ?? [];
+    const reviewSchema = visualReviewSchema.extend({ issues: z.array(critiqueIssue.required({ evidence: true })).max(3) });
     const review = await runMotionAgent(context, "visualCritic", "MEDIA_UNDERSTANDING", {
         fps: draft.fps, scenes, focused: Boolean(targetSceneId),
         generatedSheets: sheets.map(({ tiles }, index) => ({ imageNumber: index + 1, tiles })),
         referenceImages,
+        priorIssues,
+        previousSheets: previousSheets.map(({ imageNumber, frames }) => ({ imageNumber, frames })),
         soundtrack: { timeMap: motionTimeMap(draft, reference?.interval ?? null).soundtrack,
             sampledCues: draft.metadata.motion_cues?.filter(({ frame }) => preview.frames.includes(frame)) ?? [],
             speechTiming: context.speechTiming },
         reference: targetSceneId ? null : reference?.scenes.map(({ supportedType, palette, motionLandmarks }) =>
             ({ supportedType, palette, motionLandmarks })) ?? null,
-    }, visualReviewSchema.extend({ issues: z.array(critiqueIssue.required({ evidence: true })).max(3) }), {
-        images: [...sheets.map(({ image }) => image), ...sources.map(({ image }) => image)],
+    }, priorIssues?.length ? reviewSchema.required({ repairs: true }) : reviewSchema, {
+        images: [...sheets.map(({ image }) => image), ...sources.map(({ image }) => image), ...previousSheets.map(({ image }) => image)],
         requestTimeoutMs: 25_000,
-        validate: ({ issues }) => {
+        validate: ({ issues, repairs }) => {
             for (const { sceneId, frame, evidence } of issues) {
                 if (!tiles.some((tile) => tile.frame === frame && tile.evidence === evidence && tile.sceneIds.includes(sceneId))) {
                     throw new Error("A visual critique issue must identify observed scene evidence.");
                 }
+            }
+            if (priorIssues?.length && (repairs?.length !== priorIssues.length || !priorIssues.every(({ issueIndex, sceneId }) =>
+                repairs.some((repair) => repair.issueIndex === issueIndex &&
+                    tiles.some((tile) => tile.evidence === repair.evidence && tile.sceneIds.includes(sceneId)))))) {
+                throw new Error("Every prior issue needs a distinct repair verdict and a cited tile for the assigned scene.");
             }
         },
     });

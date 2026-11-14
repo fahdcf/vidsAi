@@ -644,7 +644,10 @@ try {
     }
     const agentTools = process.argv.includes("--agent-tools");
     const replaceScene = process.argv.includes("--repair-replacement");
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene });
+    const ineffectiveRepair = process.argv.includes("--ineffective-repair");
+    const regressedRepair = process.argv.includes("--regressed-repair");
+    const rejectedRepair = ineffectiveRepair || regressedRepair;
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene, ineffectiveRepair, regressedRepair });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -661,10 +664,10 @@ try {
         const graph = new MotionOrchestrator();
         let checkedBeforeRetry;
         let retriedTool = false;
-        for (let tick = 0; tick < 60 && motionRun(graphRun.id).status !== "ready"; tick++) {
+        for (let tick = 0; tick < 60 && !["ready", "failed"].includes(motionRun(graphRun.id).status); tick++) {
             await graph.tick(graphRun.id);
             const current = motionRun(graphRun.id);
-            assert.notEqual(current.status, "failed", current.error);
+            if (!rejectedRepair) assert.notEqual(current.status, "failed", current.error);
             if (current.status === "waiting_for_browser") {
                 if (agentTools && !retriedTool && motionSteps(graphRun.id).some(({ name, status }) =>
                     name.startsWith("agent_tool:render_scene:") && status === "pending")) {
@@ -707,7 +710,7 @@ try {
     } finally {
         restore();
     }
-    assert.equal(motionRun(graphRun.id).status, "ready");
+    assert.equal(motionRun(graphRun.id).status, rejectedRepair ? "failed" : "ready");
     const specStep = motionSteps(graphRun.id).find(({ name }) => name === "reference_spec");
     const specification = JSON.parse(motionArtifact(graphRun.id, specStep.result_id).body.toString());
     assert.equal(specification.source, rejectSpec ? "observations" : "vision");
@@ -764,7 +767,20 @@ try {
         }
         console.log(`${detail.crops.length} source-resolution crops were saved with matching scene IDs and timestamps.`);
     }
-    if (rejectCritic || rejectCriticAfterRepair) {
+    if (rejectedRepair) {
+        const step = motionSteps(graphRun.id).find(({ name }) => name === "compare:2");
+        const decision = JSON.parse(motionArtifact(graphRun.id, step.result_id).body.toString());
+        assert.equal(decision.retainedRound, 1);
+        assert.deepEqual(decision.findings, ["Impact settles early"]);
+        assert.equal(decision.targets[0].changed, regressedRepair);
+        assert.equal(motionRunDraft(motionRun(graphRun.id)).plan.scenes[0].params.impactAt, graphic[0].params.impactAt);
+        assert.equal(motionSteps(graphRun.id).some(({ name }) => name === "assemble:3"), false);
+        await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);
+        await graphPage.getByRole("list", { name: "Visual review findings" }).getByText("Impact settles early").waitFor();
+        await graphPage.getByRole("button", { name: "Open saved partial draft", exact: true }).click();
+        await graphPage.waitForURL("**/projects/*/editor");
+        console.log("The rejected repair preserved the prior draft and its actionable review finding.");
+    } else if (rejectCritic || rejectCriticAfterRepair) {
         assert.equal(document(project(graphProject)).tracks.motion_graphics.length, 0);
         await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);
         await graphPage.getByText("Ready for manual review", { exact: true }).waitFor();

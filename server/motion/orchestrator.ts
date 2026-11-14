@@ -88,6 +88,7 @@ const stepNames = (round: number) => ({
     assemble: round === 1 ? "assemble" : `assemble:${round}`,
     preview: `preview:${round}`,
     critique: `critique:${round}`,
+    compare: `compare:${round}`,
     repair: (id: string) => `repair:${round}:${id}`,
 });
 
@@ -192,7 +193,7 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
     }
     let previousFindings: string[] = [];
     for (let round = 1; round <= maxRounds; round++) {
-        const { assemble, preview, critique, repair } = stepNames(round);
+        const { assemble, preview, critique, compare, repair } = stepNames(round);
         if (!done(assemble)) return;
         const { blockers = [] } = result<BuildArtifact>(id, assemble);
         let issues = blockers;
@@ -207,6 +208,18 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             reviewUnavailable = review.source === "review_unavailable";
             if (!reviewUnavailable) ({ issues, unresolved } = motionCritiqueSchema.parse(review.value));
             dependency = critique;
+        }
+        if (round > 1 && done(stepNames(round - 1).critique)) {
+            add({ name: compare, lane: "local", dependencies: [dependency], input: { round } });
+            if (!done(compare)) return;
+            const comparison = result<{ retainedRound: number; findings: string[] }>(id, compare);
+            if (comparison.retainedRound !== round) {
+                add({ name: "publish", lane: "local", dependencies: [compare], input: {
+                    round: comparison.retainedRound, issues: comparison.findings, reviewUnavailable,
+                } });
+                return;
+            }
+            dependency = compare;
         }
         if (issues.length && round < maxRounds && !run.target_scene_id) {
             previousFindings = [...unresolved, ...issues.map(({ issue }) => issue)];
@@ -612,10 +625,13 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             (previewSchema.parse(result(id, name)).layout ?? []).filter(({ findings }) => findings?.length)
                 .map(({ sceneId, frame, findings }) => ({ sceneId, frame, findings }))) : [];
         try {
+            const prior = round > 1 && motionSteps(id).some(({ name, status }) => name === stepNames(round - 1).critique && status === "done")
+                ? agentResult(id, stepNames(round - 1).critique, motionCritiqueSchema) : null;
+            const previous = prior?.issues.length ? previewSchema.parse(result(id, stepNames(round - 1).preview)) : null;
             const value = await runMotionCritic(context, draft,
                 { ...preview, images: imageBytes(preview.images), sceneChecks }, reference(), run.target_scene_id ?? undefined,
                 (index, read) => cachedObservations(id, step, `${step.name}:observations:${preview.images[index].sha256}`, signal, read),
-                details(), referenceSpecs());
+                details(), referenceSpecs(), previous && prior ? { issues: prior.issues, preview: previous, images: imageBytes(previous.images) } : undefined);
             return { value, summary: value.value.decision };
         } catch (error) {
             signal.throwIfAborted();
@@ -623,6 +639,44 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             return { value: { source: "review_unavailable" },
                 summary: "Automated visual review could not finish. Review the saved preview before applying the draft." };
         }
+    }
+    if (step.name === stepNames(round).compare) {
+        const earlier = stepNames(round - 1);
+        const current = stepNames(round);
+        const before = build(round - 1);
+        const candidate = build(round);
+        const prior = agentResult(id, earlier.critique, motionCritiqueSchema);
+        const later = candidate.document ? result<{ value?: unknown }>(id, current.critique).value : undefined;
+        const review = motionCritiqueSchema.safeParse(later).data;
+        const previousPreview = previewSchema.parse(result(id, earlier.preview));
+        const nextPreview = candidate.document ? previewSchema.parse(result(id, current.preview)) : null;
+        const targets = [...new Set(prior.issues.map(({ sceneId }) => sceneId))].map((sceneId) => {
+            const previous = before.plan.scenes.find(({ id }) => id === sceneId);
+            const next = candidate.plan.scenes.find(({ id }) => id === sceneId);
+            const samples = (preview: typeof previousPreview, scene: typeof previous) => {
+                if (!scene) return [];
+                const size = preview.framesPerSheet ?? 12;
+                return preview.frames.flatMap((frame, index) => frame >= scene.start_frame && frame < scene.end_frame
+                    ? [preview.frameHashes?.[index] ?? preview.images[Math.floor(index / size)]?.sha256] : []);
+            };
+            const changed = nextPreview && JSON.stringify(samples(previousPreview, previous)) !== JSON.stringify(samples(nextPreview, next)) &&
+                JSON.stringify(previous) !== JSON.stringify(next);
+            const remaining = review?.issues.filter((item) => item.sceneId === sceneId) ?? [];
+            return { sceneId, changed: Boolean(changed), remaining: remaining.map(({ issue }) => issue) };
+        });
+        const worsened = review && (Object.entries(prior.scores).some(([key, value]) => review.scores[key as keyof typeof review.scores] < value) ||
+            review.issues.some((issue) => issue.priority === "blocking" &&
+                !prior.issues.some((item) => item.sceneId === issue.sceneId && item.priority === issue.priority)));
+        const improvement = review && !worsened &&
+            review.repairs?.some(({ outcome, issueIndex }) => outcome === "improved" &&
+                targets.some(({ sceneId, changed }) => changed && sceneId === prior.issues[issueIndex]?.sceneId)) &&
+            review.repairs.every(({ outcome }) => outcome !== "regressed") &&
+            review.issues.length < prior.issues.length && review.unresolved.length <= prior.unresolved.length;
+        const retainedRound = improvement ? round : round - 1;
+        const findings = [...prior.unresolved, ...prior.issues.map(({ issue }) => issue)];
+        const reason = !review ? "The latest repair could not be reviewed." : worsened ? "The latest repair regressed a reviewed requirement."
+            : !improvement ? "The latest repair did not improve the cited issue." : "The repair improved the reviewed draft.";
+        return { value: { retainedRound, targets, findings, reason }, summary: reason };
     }
     if (step.name.startsWith("repair:")) {
         const previous = build(round);
@@ -681,8 +735,15 @@ function applyStepOutput(run: MotionRun, step: MotionStep, output: StepOutput) {
 }
 
 export function motionRunDraft(run: MotionRun) {
-    const steps = motionSteps(run.id).filter(({ name, status }) =>
+    const all = motionSteps(run.id);
+    const comparison = all.filter(({ name, status }) => name.startsWith("compare:") && status === "done").at(-1);
+    const best = comparison ? result<{ retainedRound: number }>(run.id, comparison.name).retainedRound : undefined;
+    const steps = all.filter(({ name, status }) =>
         (name === "assemble" || name.startsWith("assemble:")) && status === "done").reverse();
+    if (best !== undefined) {
+        const draft = result<BuildArtifact>(run.id, stepNames(best).assemble);
+        if (draft.document) return { document: draft.document, plan: draft.plan, startingRevision: run.starting_revision };
+    }
     for (const { name } of steps) {
         const draft = result<BuildArtifact>(run.id, name);
         if (draft.document) return { document: draft.document, plan: draft.plan, startingRevision: run.starting_revision };

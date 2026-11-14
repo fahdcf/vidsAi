@@ -33,6 +33,7 @@ export function motionStageName(name: string) {
         case "preview": return "Browser preview render";
         case "critique": return "Visual critic";
         case "repair": return "Scene repair";
+        case "compare": return "Compare repair with previous draft";
         case "revise": return "Focused scene revision";
         case "publish": return "Save the draft";
         default: return "Motion stage";

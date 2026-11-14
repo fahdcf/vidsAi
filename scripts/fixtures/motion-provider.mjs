@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false } = {}) {
     const stages = [];
     let replacementAttempts = 0;
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
@@ -187,7 +187,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 break;
             }
             case "visual-critic":
-                assert.equal(message.length, 1 + artifact.generatedSheets.length + artifact.referenceImages.length);
+                assert.equal(message.length, 1 + artifact.generatedSheets.length + artifact.referenceImages.length + artifact.previousSheets.length);
                 assert.ok(artifact.generatedSheets.every(({ imageNumber, tiles }) => tiles.every((tile, index) =>
                     tile.evidence === `generated:${imageNumber}:${index + 1}`)));
                 assert.ok(artifact.referenceImages.every(({ evidence, imageNumber, sceneId, pairedGenerated }) =>
@@ -198,7 +198,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 if ((!agentTools && rejectCritic) || (rejectCriticAfterRepair && stages.includes("repair"))) { value = null; break; }
                 {
                     const round = stages.includes("repair") ? 2 : 1;
-                    value = { decision: "Reviewed the browser frames.", scores: { readability: 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
+                    value = { decision: "Reviewed the browser frames.", scores: { readability: regressedRepair && round > 1 ? 3 : 5, hierarchy: 4, palette: 5, motion: 4, pacing: 4, brief: 5 },
+                    ...(artifact.priorIssues?.length ? { repairs: artifact.priorIssues.map(({ issueIndex, sceneId }) => ({
+                        issueIndex, outcome: "improved", evidence: artifact.scenes.find(({ id }) => id === sceneId).samples[0].evidence,
+                    })) } : {}),
                     issues: round === 1
                         ? [{ sceneId: graphic[0].id, frame: artifact.scenes[0].samples[0].frame,
                             evidence: agentTools && rejectCritic ? "generated:99:99" : artifact.scenes[0].samples[0].evidence, priority: "polish",
@@ -213,6 +216,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     break;
                 }
                 if (agentTools) assert.equal(toolResults[0].result.candidate.motionRate, 1.2);
+                if (ineffectiveRepair) {
+                    value = { decision: "Kept the existing scene.", approximation: null, scene: artifact.scene };
+                    break;
+                }
                 if (replaceScene) {
                     assert.equal(artifact.scene.type, "impact");
                     assert.ok(artifact.availableCut);
