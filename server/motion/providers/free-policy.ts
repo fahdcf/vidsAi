@@ -7,6 +7,7 @@ const endpointCatalog = z.object({ data: z.object({ id: z.string(), endpoints: z
     tag: z.string(),
     pricing: prices,
 })) }) });
+const account = z.object({ data: z.object({ is_free_tier: z.boolean(), limit_remaining: z.number().nullable().optional() }) });
 const allowlist = z.array(z.object({ model: z.string(), providerSlug: z.string() }).strict()).max(12);
 const zero = (value: number | string) => typeof value === "number" ? value === 0 : /^0(?:\.0+)?$/.test(value);
 const freePrices = (pricing: z.infer<typeof prices>) => pricing.prompt !== undefined && pricing.completion !== undefined &&
@@ -34,8 +35,10 @@ export async function freeProviderRouting(provider: MotionProvider, signal: Abor
     };
     const [author, slug] = provider.model.split("/");
     try {
-        const [models, endpoints] = await Promise.all([get("https://openrouter.ai/api/v1/models"),
-            get(`https://openrouter.ai/api/v1/models/${encodeURIComponent(author)}/${encodeURIComponent(slug)}/endpoints`)]);
+        const [models, endpoints, key] = await Promise.all([get("https://openrouter.ai/api/v1/models"),
+            get(`https://openrouter.ai/api/v1/models/${encodeURIComponent(author)}/${encodeURIComponent(slug)}/endpoints`),
+            get("https://openrouter.ai/api/v1/key")]);
+        if (!account.parse(key).data.is_free_tier) throw denied();
         const listed = priceCatalog.parse(models).data.find(({ id }) => id === provider.model);
         const choices = endpointCatalog.parse(endpoints).data;
         const endpoint = choices.id === provider.model ? choices.endpoints.find(({ tag }) => tag === provider.providerSlug) : undefined;

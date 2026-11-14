@@ -110,6 +110,7 @@ export function publicMotionInventory(env: NodeJS.ProcessEnv = process.env, evid
         enabled: env.NVIDIA_PROVIDER_ENABLED === "true",
         optionalProviders: optionalMotionProviders(env).map(({ alias, adapter, credential, capabilities }) => ({
             alias, adapter, credentialsConfigured: Boolean(credential), declaredCapabilities: capabilities ?? [],
+            reachable: "unverified", freeEligibility: "unverified", taskQualification: "unverified", productionEligibility: "unverified",
         })),
         routes: Object.fromEntries(motionRoutes.map((route) => [
             route, motionRouteProviders(route, env).map(({ alias }) => alias),

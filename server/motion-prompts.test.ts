@@ -190,6 +190,7 @@ test("optional chat requires zero prices for the exact model and endpoint before
     let completionPrice = "0.01";
     let sent = 0;
     t.mock.method(globalThis, "fetch", async (url: string | URL, init: RequestInit) => {
+        if (String(url).endsWith("/key")) return Response.json({ data: { is_free_tier: true } });
         if (String(url).endsWith("/endpoints")) return Response.json({ data: { id: model,
             endpoints: [{ tag: providerSlug, pricing: { prompt: "0", completion: completionPrice } }] } });
         if (String(url).endsWith("/models")) return Response.json({ data: [{ id: model, pricing: { prompt: "0", completion: "0" } }] });

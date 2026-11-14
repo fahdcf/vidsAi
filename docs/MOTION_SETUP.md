@@ -48,3 +48,8 @@ node scripts/studio-ui-check.cjs
 The authenticated product journey passed through Create, chat, Review, Style, Editor, reopen, and browser export. Mock specialists generated and repaired a seven-scene plan from real browser reference samples and rendered preview sheets. The resulting MP4 decoded at 1280×720 with H.264 video, AAC audio, and 450 frames. Reload recovery, cancellation, retry, and a concurrent edit during export passed. Private evidence is in `../runtime/motion-verification/product-jtxKQe/`, including the MP4, decode log, and desktop and compact screenshots.
 
 The mixed-media fixture checked motion, footage, captions, a logo overlay, audio fades, and impact cue alignment. The legacy footage fixture passed in Chrome and Edge at desktop and compact widths, including browser export. The full server suite passed 27 tests.
+### Optional inference providers
+
+Optional routes report declared capabilities and credential presence independently of endpoint reachability, free eligibility, task qualification, and production eligibility. The OpenRouter adapter verifies the key's free-tier status alongside model and endpoint prices before it can send a prompt. Account request-limit and reset behavior still need a real free account test. Gemini remains out of routing under the zero-price policy. Reference images are disabled by default for optional providers, and adding a route does not enable it in production.
+
+OpenRouter documents its [free model limits](https://openrouter.ai/collections/free-models) and [key status endpoint](https://openrouter.ai/docs/api/api-reference/api-keys/get-current-key). Google publishes separate [free-tier data handling and prices](https://ai.google.dev/gemini-api/docs/pricing).
