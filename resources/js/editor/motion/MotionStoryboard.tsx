@@ -17,9 +17,11 @@ export function motionSceneCopy(scene: Scene) {
     }
 }
 
-export default function MotionStoryboard({ draft, storyboard, canRevise, onPreview, onRevise }: {
-    draft: Document | null; storyboard: MotionRunView["storyboard"]; canRevise: boolean;
+export default function MotionStoryboard({ draft, storyboard, canRevise, canRecover, recovery, onPreview, onRevise, onRecover }: {
+    draft: Document | null; storyboard: MotionRunView["storyboard"]; canRevise: boolean; canRecover: boolean;
+    recovery?: MotionRunView["sceneRecovery"];
     onPreview: (frame: number) => void; onRevise: (id: string, index: number) => void;
+    onRecover: (id: string, index: number, guidance: string) => void;
 }) {
     const scenes = draft?.tracks.motion_graphics.map((scene) => ({
         ...scene, copy: motionSceneCopy(scene), purpose: storyboard?.scenes.find(({ id }) => id === scene.id)?.purpose,
@@ -31,7 +33,11 @@ export default function MotionStoryboard({ draft, storyboard, canRevise, onPrevi
         {storyboard?.referenceIntent && <p className="muted">
             {storyboard.referenceIntent === "match" ? "Reference match" : "Reference inspired"} · {storyboard.timingMode === "source" ? "Source cuts" : "Custom timing"}
         </p>}
-        <ol>{scenes.map((scene, index) => <li key={scene.id}>
+        <ol>{scenes.map((scene, index) => {
+            const notes = recovery?.find(({ sceneId }) => sceneId === scene.id);
+            const guidance = notes?.issues.map(({ repair }) => repair).join("\n") ||
+                (notes?.approximation ? `Replace this approximation with editable motion that matches the reference. ${notes.approximation}` : "");
+            return <li key={scene.id}>
             <details>
                 <summary><span>Scene {index + 1} · {motionSceneLabel[scene.type as keyof typeof motionSceneLabel] ?? "Motion scene"}</span>
                     <span className="muted">{((scene.end_frame - scene.start_frame) / (draft?.fps ?? 30)).toFixed(1)}s</span></summary>
@@ -39,6 +45,10 @@ export default function MotionStoryboard({ draft, storyboard, canRevise, onPrevi
                     {scene.purpose && <p>{scene.purpose}</p>}
                     {typeof scene.referenceSceneIndex === "number" && <p className="muted">Reference scene {scene.referenceSceneIndex + 1}</p>}
                     {scene.copy && <p className="motion-scene-copy">{scene.copy}</p>}
+                    {notes?.approximation && <p className="notice warning">{notes.approximation}</p>}
+                    {notes?.issues.length ? <ul aria-label={`Scene ${index + 1} recovery`}>
+                        {notes.issues.map(({ issue, repair }, item) => <li key={item}>{issue} {repair}</li>)}
+                    </ul> : null}
                     {"palette" in scene && <div className="motion-scene-palette" aria-label="Scene palette">
                         {Object.entries(scene.palette).map(([name, color]) => <span key={name} style={{ backgroundColor: color }}
                             aria-label={`${name} ${color}`} title={`${name} ${color}`} />)}
@@ -46,9 +56,12 @@ export default function MotionStoryboard({ draft, storyboard, canRevise, onPrevi
                     {draft && <div className="motion-scene-actions">
                         <button type="button" className="small" onClick={() => onPreview(scene.start_frame)}>Preview scene</button>
                         {canRevise && <button type="button" className="small" onClick={() => onRevise(scene.id, index)}>Revise this scene</button>}
+                        {canRecover && guidance && <button type="button" className="small"
+                            onClick={() => onRecover(scene.id, index, guidance)}>Use recovery notes</button>}
                     </div>}
                 </div>
             </details>
-        </li>)}</ol>
+        </li>;
+        })}</ol>
     </section>;
 }

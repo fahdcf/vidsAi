@@ -253,13 +253,18 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
         }
     }
 
-    async function applyDraft(partial: boolean) {
+    async function applyDraft(partial: boolean, recovery?: { id: string; index: number; guidance: string }) {
         if (!run || sending) return;
         setSending(true);
         setControlError("");
         try {
             await api(motionRunUrl(run.id) + "/apply", { expectedRevision: run.startingRevision, partial });
-            if (partial || run.reviewUnavailable) window.location.assign(`/projects/${projectId}/editor`);
+            if (recovery) {
+                setTarget({ id: recovery.id, index: recovery.index });
+                setMessage(recovery.guidance);
+                composer.current?.focus();
+                refresh.current();
+            } else if (partial || run.reviewUnavailable) window.location.assign(`/projects/${projectId}/editor`);
             else refresh.current();
         } catch (error) {
             setControlError(error instanceof Error ? error.message : "The draft could not be applied.");
@@ -391,9 +396,25 @@ export default function MotionChat({ projectId, name, runId, seconds, pendingSet
             {run && !setup && <MotionProgress run={run} browserError={browserError} />}
             {draft && <MotionPreview draft={draft} playerRef={player} />}
             <MotionStoryboard draft={draft} storyboard={run?.storyboard ?? null}
-                canRevise={run?.status === "ready" || Boolean(run?.draftApplied && run.editorAvailable)}
+                canRevise={Boolean(run?.editorAvailable && (run.status === "ready" || run.draftApplied))}
+                canRecover={Boolean(draft && run && !sending && !sessionExpired &&
+                    (run.draftApplied || ["failed", "cancelled"].includes(run.status) || (run.status === "ready" && run.needsApproval)))}
+                recovery={run?.sceneRecovery}
                 onPreview={(frame) => { player.current?.seekTo(frame); player.current?.play(); }}
-                onRevise={(id, index) => { setTarget({ id, index }); composer.current?.focus(); }} />
+                onRevise={(id, index) => {
+                    setTarget({ id, index });
+                    composer.current?.focus();
+                }}
+                onRecover={(id, index, guidance) => {
+                    if (!run) return;
+                    if (!run.draftApplied) {
+                        void applyDraft(run.status !== "ready", { id, index, guidance });
+                        return;
+                    }
+                    setTarget({ id, index });
+                    setMessage(guidance);
+                    composer.current?.focus();
+                }} />
         </aside>
         </div>
         {before && draft && run?.needsApproval && <details className="panel motion-compare"

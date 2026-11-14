@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 
-export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false } = {}) {
+export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false, rejectRepair = false } = {}) {
     const stages = [];
     let replacementAttempts = 0;
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
@@ -211,6 +211,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 }
                 break;
             case "repair":
+                if (rejectRepair) { value = null; break; }
                 if (agentTools && !toolResults.length) {
                     value = { toolRequest: { name: "patch_scene", args: { sceneId: artifact.scene.id, patch: { motionRate: 1.2 } } } };
                     break;

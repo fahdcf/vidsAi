@@ -646,8 +646,9 @@ try {
     const replaceScene = process.argv.includes("--repair-replacement");
     const ineffectiveRepair = process.argv.includes("--ineffective-repair");
     const regressedRepair = process.argv.includes("--regressed-repair");
-    const rejectedRepair = ineffectiveRepair || regressedRepair;
-    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene, ineffectiveRepair, regressedRepair });
+    const rejectRepair = process.argv.includes("--repair-unavailable");
+    const rejectedRepair = ineffectiveRepair || regressedRepair || rejectRepair;
+    const { stages, reasoning, restore } = mockMotionProviders(graphic, { rejectReferenceOutline, rejectCopywriter, rejectGraphEngineer, rejectCritic, rejectCriticAfterRepair, rejectDetailVision, rejectSpec, referenceMapping, referenceFollowup, componentCompatibility, graphAssets, agentTools, replaceScene, ineffectiveRepair, regressedRepair, rejectRepair });
     let rejectedFollowup = false;
     if (referenceFollowup) await graphPage.route(`**/motion-runs/${graphRun.id}/browser/*`, async (route) => {
         if (route.request().method() === "PUT") {
@@ -777,8 +778,18 @@ try {
         assert.equal(motionSteps(graphRun.id).some(({ name }) => name === "assemble:3"), false);
         await graphPage.goto(target + `/projects/${graphProject}/motion?run=${graphRun.id}`);
         await graphPage.getByRole("list", { name: "Visual review findings" }).getByText("Impact settles early").waitFor();
-        await graphPage.getByRole("button", { name: "Open saved partial draft", exact: true }).click();
-        await graphPage.waitForURL("**/projects/*/editor");
+        await graphPage.getByRole("button", { name: "Open saved partial draft", exact: true }).waitFor();
+        if (rejectRepair) {
+            const repair = motionSteps(graphRun.id).find(({ name }) => name.startsWith("repair:1:"));
+            assert.equal(JSON.parse(motionArtifact(graphRun.id, repair.result_id).body.toString()).source, "repair_unavailable");
+            await graphPage.getByText("Scene 1 · Impact", { exact: true }).click();
+            await graphPage.getByRole("button", { name: "Use recovery notes" }).click();
+            await graphPage.getByText("Revising scene 1", { exact: false }).waitFor();
+            assert.equal(await graphPage.getByRole("textbox", { name: "Message" }).inputValue(), "Move impact later");
+        } else {
+            await graphPage.getByRole("button", { name: "Open saved partial draft", exact: true }).click();
+            await graphPage.waitForURL("**/projects/*/editor");
+        }
         console.log("The rejected repair preserved the prior draft and its actionable review finding.");
     } else if (rejectCritic || rejectCriticAfterRepair) {
         assert.equal(document(project(graphProject)).tracks.motion_graphics.length, 0);

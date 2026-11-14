@@ -16,6 +16,7 @@ export type MotionRunView = {
     pendingSetup: MotionSetupRequirements | null;
     replacementRunId: string | null;
     draftVersion: string | null;
+    sceneRecovery?: { sceneId: string; approximation?: string; issues: { issue: string; repair: string }[] }[];
     draftApplied: boolean;
     needsApproval: boolean;
     reviewUnavailable: boolean;

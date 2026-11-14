@@ -2,7 +2,8 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { db, project } from "../database";
 import { document } from "../document";
-import { MotionOrchestrator, isActiveMotionRun, motionNeedsApproval, motionReviewUnavailable, motionRunQuality, motionRunStoryboard } from "./orchestrator";
+import { MotionOrchestrator, isActiveMotionRun, motionDraftVersion, motionNeedsApproval, motionReviewUnavailable,
+    motionRunQuality, motionRunStoryboard, motionSceneRecovery } from "./orchestrator";
 import { motionConversation, motionEvents, motionSnapshot, motionSteps, ownedMotionRun, type MotionRun } from "./store";
 import { pendingMotionSetup } from "./setup";
 import { motionReference } from "./references";
@@ -37,11 +38,12 @@ export function motionRunView(run: MotionRun, after = 0) {
         error: run.error,
         pendingSetup: pendingMotionSetup(run.id),
         replacementRunId: replaced?.replacement_run_id ?? null,
-        draftVersion: steps.filter(({ name, status }) => (name === "assemble" || name.startsWith("assemble:")) && status === "done").at(-1)?.result_id ?? null,
+        draftVersion: motionDraftVersion(run, steps),
         draftApplied: Boolean(applied),
         needsApproval: motionNeedsApproval(run, reviewUnavailable),
         reviewUnavailable,
         quality: motionRunQuality(run, steps),
+        sceneRecovery: isActiveMotionRun(run) ? [] : motionSceneRecovery(run, steps),
         timeMap: motionTimeMap(snapshot, metadata?.success ? metadata.data.interval : null),
         editorAvailable: document(project(run.project_id)).tracks.motion_graphics.length > 0,
         canRetry: ["failed", "cancelled"].includes(run.status) && !replaced && !applied &&

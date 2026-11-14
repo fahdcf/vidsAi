@@ -222,6 +222,14 @@ function defineGraph(run: MotionRun, steps: readonly MotionStep[], maxRounds: nu
             dependency = compare;
         }
         if (issues.length && round < maxRounds && !run.target_scene_id) {
+            const failed = round > 1 && steps.some(({ name, status }) => name.startsWith(`repair:${round - 1}:`) &&
+                status === "done" && result<{ source?: string }>(id, name).source === "repair_unavailable");
+            if (failed) {
+                add({ name: "publish", lane: "local", dependencies: [dependency], input: {
+                    round, issues: [...unresolved, ...issues.map(({ issue }) => issue)], reviewUnavailable: false,
+                } });
+                return;
+            }
             previousFindings = [...unresolved, ...issues.map(({ issue }) => issue)];
             const sceneIds = [...new Set(issues.map(({ sceneId }) => sceneId))];
             for (const sceneId of sceneIds) {
@@ -607,10 +615,11 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const builds: z.infer<typeof motionRepairSchema>[] = previous
             ? previous.plan.scenes.map((scene) => {
                 const repair = stepNames(round - 1).repair(scene.id);
-                return motionSteps(id).some(({ name, status }) => name === repair && status === "done")
-                    ? agentResult(id, repair, motionRepairSchema)
-                    : { scene, decision: "Kept the approved scene.", approximation: previous.approximations
-                        ?.find(({ sceneId }) => sceneId === scene.id)?.description ?? null };
+                const repaired = motionSteps(id).some(({ name, status }) => name === repair && status === "done")
+                    ? result<{ value?: unknown }>(id, repair).value : undefined;
+                const earlier = previous.approximations?.find(({ sceneId }) => sceneId === scene.id)?.description ?? null;
+                return repaired ? motionRepairSchema.parse(repaired)
+                    : { scene, decision: "Kept the earlier editable scene.", approximation: earlier };
             }) : plan.scenes.map(({ id: sceneId }) => agentResult(id, `engineer:${sceneId}`, motionBuildSchema));
         const value = integrateMotionScenes(context.document, plan, builds);
         const approximations = builds.flatMap(({ scene, approximation }) => approximation ? [{ sceneId: scene.id, description: approximation }] : []);
@@ -682,10 +691,18 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const previous = build(round);
         const scene = previous.plan.scenes.find(({ id }) => id === input.sceneId)!;
         const issues = previous.blockers?.length ? previous.blockers : agentResult(id, stepNames(round).critique, motionCritiqueSchema).issues;
-        const value = await runMotionRepair(context, scene, issues, {
-            scenes: previous.plan.scenes, allowCuts: !previous.blockers?.length && issues.every(({ sceneId }) => sceneId === scene.id),
-        });
-        return { value, summary: value.value.decision };
+        try {
+            const value = await runMotionRepair(context, scene, issues, {
+                scenes: previous.plan.scenes, allowCuts: !previous.blockers?.length && issues.every(({ sceneId }) => sceneId === scene.id),
+            });
+            return { value, summary: value.value.decision };
+        } catch (error) {
+            signal.throwIfAborted();
+            if (!previous.document || (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError))) throw error;
+            const index = previous.plan.scenes.findIndex(({ id }) => id === scene.id);
+            return { value: { source: "repair_unavailable", sceneId: scene.id },
+                summary: `Scene ${index + 1} could not be repaired automatically. The saved draft retains its earlier scene and review notes.` };
+        }
     }
     if (step.name === "publish") {
         const { plan, document, approximations = [] } = build(round);
@@ -734,21 +751,39 @@ function applyStepOutput(run: MotionRun, step: MotionStep, output: StepOutput) {
     changeMotionRunStatus(run, "ready");
 }
 
-export function motionRunDraft(run: MotionRun) {
-    const all = motionSteps(run.id);
+function selectedMotionAssembly(run: MotionRun, all = motionSteps(run.id)) {
     const comparison = all.filter(({ name, status }) => name.startsWith("compare:") && status === "done").at(-1);
     const best = comparison ? result<{ retainedRound: number }>(run.id, comparison.name).retainedRound : undefined;
     const steps = all.filter(({ name, status }) =>
         (name === "assemble" || name.startsWith("assemble:")) && status === "done").reverse();
-    if (best !== undefined) {
-        const draft = result<BuildArtifact>(run.id, stepNames(best).assemble);
-        if (draft.document) return { document: draft.document, plan: draft.plan, startingRevision: run.starting_revision };
-    }
-    for (const { name } of steps) {
-        const draft = result<BuildArtifact>(run.id, name);
-        if (draft.document) return { document: draft.document, plan: draft.plan, startingRevision: run.starting_revision };
-    }
-    return null;
+    return (best !== undefined ? steps.find(({ name }) => name === stepNames(best).assemble) : undefined)
+        ?? steps.find(({ name }) => result<BuildArtifact>(run.id, name).document);
+}
+
+export function motionDraftVersion(run: MotionRun, steps: MotionStep[]) {
+    return selectedMotionAssembly(run, steps)?.result_id ?? null;
+}
+
+export function motionRunDraft(run: MotionRun) {
+    const step = selectedMotionAssembly(run);
+    if (!step) return null;
+    const draft = result<BuildArtifact>(run.id, step.name);
+    return draft.document ? { document: draft.document, plan: draft.plan, startingRevision: run.starting_revision } : null;
+}
+
+export function motionSceneRecovery(run: MotionRun, steps: MotionStep[]) {
+    const assembly = selectedMotionAssembly(run, steps);
+    if (!assembly) return [];
+    const suffix = assembly.name === "assemble" ? "1" : assembly.name.split(":")[1];
+    const critique = steps.find(({ name, status }) => name === `critique:${suffix}` && status === "done");
+    const review = critique && motionCritiqueSchema.safeParse(result<{ value?: unknown }>(run.id, critique.name).value);
+    const { approximations = [] } = result<BuildArtifact>(run.id, assembly.name);
+    const issues = review?.success ? review.data.issues : [];
+    return [...new Set([...issues.map(({ sceneId }) => sceneId), ...approximations.map(({ sceneId }) => sceneId)])].map((sceneId) => ({
+        sceneId,
+        approximation: approximations.find((item) => item.sceneId === sceneId)?.description,
+        issues: issues.filter((item) => item.sceneId === sceneId).map(({ issue, repair }) => ({ issue, repair })),
+    }));
 }
 
 export function motionRunStoryboard(run: MotionRun) {
@@ -784,7 +819,8 @@ export function motionRunQuality(run: MotionRun, steps = motionSteps(run.id)): M
         return { generation: "rendered", review: output.reviewUnavailable ? "unavailable" : output.issues?.length ? "issues" : "passed",
             findings: output.issues?.length ? output.issues : output.reviewUnavailable ? priorFindings() : [], approximations: [] };
     }
-    const assembly = steps.filter(({ name, status }) => (name === "assemble" || name.startsWith("assemble:")) && status === "done").at(-1);
+    const assembly = selectedMotionAssembly(run, steps) ??
+        steps.filter(({ name, status }) => (name === "assemble" || name.startsWith("assemble:")) && status === "done").at(-1);
     if (!assembly) return null;
     const build = result<BuildArtifact>(run.id, assembly.name);
     const preview = assembly.name.replace("assemble", "preview") + (assembly.name === "assemble" ? ":1" : "");
