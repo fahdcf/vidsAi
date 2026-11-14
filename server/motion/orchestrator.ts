@@ -288,8 +288,8 @@ export function motionBrowserInput(run: MotionRun, step: MotionStep): BrowserMot
             : agentResult(run.id, `engineer:${sceneId}`, motionBuildSchema).scene;
         const scene = alternate && original.type === "graph" ? motionSceneSchema.parse({
             ...original, params: { ...original.params, layers: original.params.layers.map((layer) => ({
-                ...layer, transform: { ...layer.transform, x: 0.5 + (layer.transform.x - 0.5) * 0.82,
-                    y: Math.max(0.07, Math.min(0.93, 0.42 + (layer.transform.y - 0.5) * 0.82)) },
+                ...layer, transform: { ...layer.transform, x: 0.5 + ((layer.transform.x ?? 0.5) - 0.5) * 0.82,
+                    y: Math.max(0.07, Math.min(0.93, 0.42 + ((layer.transform.y ?? 0.5) - 0.5) * 0.82)) },
             })) },
         }) : original;
         const snapshot = motionSnapshot(run);
