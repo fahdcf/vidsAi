@@ -24,7 +24,7 @@ const historical = historicalSchema.parse(JSON.parse(readFileSync(new URL("../..
 
 export const motionRoutes = ["AGENT_COMPLEX", "WRITING", "MEDIA_UNDERSTANDING"] as const;
 export type MotionRoute = typeof motionRoutes[number];
-export type MotionCapability = "text" | "image" | "thinking" | "stream";
+export type MotionCapability = "text" | "image" | "thinking" | "stream" | "audio" | "structured" | "tools";
 export type MotionEvidence = {
     model: string;
     endpoint: string;
@@ -40,7 +40,30 @@ export type MotionProvider = {
     endpoint: string | null;
     functionId: string | null;
     credential: string | undefined;
+    adapter?: "nvidia" | "openrouter" | "gemini";
+    mediaAllowed?: boolean;
+    capabilities?: readonly MotionCapability[];
 };
+
+const optionalRoutes = z.array(z.object({
+    alias: z.string().regex(/^(openrouter|gemini)_[a-z0-9_]{1,32}$/),
+    adapter: z.enum(["openrouter", "gemini"]),
+    model: z.string().regex(/^[a-z0-9][a-z0-9_./:-]{1,120}$/i),
+    capabilities: z.array(z.enum(["text", "image", "thinking", "stream", "audio", "structured", "tools"])).max(7),
+    mediaAllowed: z.boolean().default(false),
+}).strict()).max(12);
+
+export function optionalMotionProviders(env: NodeJS.ProcessEnv = process.env): MotionProvider[] {
+    if (!env.MOTION_OPTIONAL_PROVIDER_ROUTES) return [];
+    const entries = optionalRoutes.parse(JSON.parse(env.MOTION_OPTIONAL_PROVIDER_ROUTES));
+    if (new Set(entries.map(({ alias }) => alias)).size !== entries.length) throw new Error("Optional provider aliases must be unique.");
+    return entries.map(({ adapter, alias, model, capabilities, mediaAllowed }) => ({
+        adapter, alias, id: model, model, capabilities, mediaAllowed, family: "chat", functionId: null,
+        endpoint: adapter === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions"
+            : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        credential: env[adapter === "openrouter" ? "OPENROUTER_API_KEY" : "GEMINI_API_KEY"]?.trim(),
+    }));
+}
 
 export function configuredMotionProviders(env: NodeJS.ProcessEnv = process.env): MotionProvider[] {
     return Object.entries(catalog.models).flatMap(([alias, entry]) => {
@@ -53,6 +76,7 @@ export function configuredMotionProviders(env: NodeJS.ProcessEnv = process.env):
             || entry.endpoint
             || null;
         return [{
+            adapter: "nvidia",
             alias,
             id,
             model: id === entry.catalogId ? entry.apiModel ?? id : id,
@@ -82,6 +106,9 @@ const capabilities = ["text", "image", "thinking", "stream"] as const;
 export function publicMotionInventory(env: NodeJS.ProcessEnv = process.env, evidence: readonly MotionEvidence[] = []) {
     return {
         enabled: env.NVIDIA_PROVIDER_ENABLED === "true",
+        optionalProviders: optionalMotionProviders(env).map(({ alias, adapter, credential, capabilities }) => ({
+            alias, adapter, credentialsConfigured: Boolean(credential), declaredCapabilities: capabilities ?? [],
+        })),
         routes: Object.fromEntries(motionRoutes.map((route) => [
             route, motionRouteProviders(route, env).map(({ alias }) => alias),
         ])),

@@ -119,7 +119,10 @@ async function* streamPackets(body: ReadableStream<Uint8Array>, signal: AbortSig
 }
 
 export async function requestMotionJson<T>(provider: MotionProvider, request: MotionChatRequest<T>) {
-    const options = models[provider.model];
+    const adapter = provider.adapter ?? "nvidia";
+    const supported = provider.capabilities ?? [];
+    const options = adapter === "nvidia" ? models[provider.model]
+        : { images: supported.includes("image") && provider.mediaAllowed === true, thinking: supported.includes("thinking") };
     if (!options || provider.family !== "chat" || !provider.endpoint || !provider.credential ||
         (request.images?.length && !options.images) || (request.mode === "deep" && !options.thinking)) {
         throw new MotionProviderError("unsupported", "This route does not support the requested motion capability.");
@@ -128,6 +131,10 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
         throw new MotionProviderError("unsupported", "The motion endpoint must be a configured HTTPS chat endpoint.");
     }
+    const fixedEndpoint = adapter === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions"
+        : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+    if (adapter !== "nvidia" && (provider.endpoint !== fixedEndpoint ||
+        (request.stream && !supported.includes("stream")))) throw new MotionProviderError("unsupported", "Optional provider capability is unavailable.");
     const images = request.images ?? [];
     if (images.length > 8 || images.reduce((total, image) => total + image.bytes.byteLength, 0) > 4 * 1024 * 1024) {
         throw new MotionProviderError("unsupported", "Reference images exceeded the provider request limit.");
@@ -148,7 +155,8 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         : undefined;
     const stream = request.stream === true;
     const conciseReasoning = request.reasoning ? request.reasoning === "standard" : request.conciseReasoning;
-    const reasoningEffort = motionReasoningEffort(provider.model, request.mode, conciseReasoning);
+    const reasoningEffort = adapter === "nvidia" ? motionReasoningEffort(provider.model, request.mode, conciseReasoning)
+        : adapter === "gemini" && request.mode === "deep" ? conciseReasoning ? "low" : "high" : undefined;
     let firstTokenMs: number | undefined;
     let reasoningObserved = false;
     let content = "";
@@ -167,12 +175,14 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
                 temperature: request.temperature,
                 stream,
                 ...(reasoningEffort ? { reasoning_effort: reasoningEffort }
-                    : options.thinking ? { chat_template_kwargs: { enable_thinking: request.mode === "deep" } } : {}),
-                ...(provider.model === ultra && request.mode === "deep" && conciseReasoning
+                    : adapter === "nvidia" && options.thinking ? { chat_template_kwargs: { enable_thinking: request.mode === "deep" } } : {}),
+                ...(adapter === "openrouter" && options.thinking ? { reasoning: { enabled: request.mode === "deep",
+                    ...(request.mode === "deep" ? { effort: conciseReasoning ? "low" : "high" } : {}) } } : {}),
+                ...(adapter === "nvidia" && provider.model === ultra && request.mode === "deep" && conciseReasoning
                     ? { chat_template_kwargs: { enable_thinking: true, medium_effort: true,
                         reasoning_budget: Math.min(1400, request.maxTokens - 1) } } : {}),
-                ...(provider.model === superVl && stream ? { stream_options: { include_usage: true } } : {}),
-                ...(provider.model === superVl && request.constrainedOutput ? { response_format: { type: "json_schema",
+                ...((provider.model === superVl || adapter !== "nvidia") && stream ? { stream_options: { include_usage: true } } : {}),
+                ...((provider.model === superVl || supported.includes("structured")) && request.constrainedOutput ? { response_format: { type: "json_schema",
                     json_schema: { name: "motion_artifact", strict: true,
                         schema: z.toJSONSchema(request.schema, { io: "input", unrepresentable: "any" }) } } } : {}),
             }),
