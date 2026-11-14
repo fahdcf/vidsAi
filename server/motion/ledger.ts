@@ -26,6 +26,14 @@ export function motionElapsed(run: MotionRun, now = Date.now()) {
     return { active, waiting };
 }
 
+export function motionRunUsage(runId: string) {
+    return db.prepare(`
+        SELECT s.name AS stage,b.provider,COUNT(*) AS attempts,SUM(b.tokens) AS accountedTokens
+        FROM motion_budget_reservations b JOIN motion_steps s ON s.id=b.step_id
+        WHERE b.run_id=? GROUP BY s.name,b.provider ORDER BY MIN(b.id)
+    `).all(runId) as { stage: string; provider: string; attempts: number; accountedTokens: number }[];
+}
+
 export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: MotionLimits): MotionModelBudget {
     let slot = 0;
     return {

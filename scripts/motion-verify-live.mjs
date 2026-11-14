@@ -35,6 +35,10 @@ const { db, project } = await import("../server/database.ts");
 const { document } = await import("../server/document.ts");
 const { motionRun, motionSteps } = await import("../server/motion/store.ts");
 const { motionRunDraft } = await import("../server/motion/orchestrator.ts");
+const { motionRunUsage } = await import("../server/motion/ledger.ts");
+const { motionLimits } = await import("../server/motion/budget.ts");
+const limits = motionLimits();
+const productLimits = motionLimits({});
 const server = app.listen(Number(url.port), "127.0.0.1");
 await once(server, "listening");
 const jobs = startMotionJobs();
@@ -67,9 +71,16 @@ async function saveReport() {
         .map(({ type, data, created_at }) => ({ type, data: JSON.parse(data), createdAt: created_at }));
     const draft = motionRunDraft(current);
     const snapshot = document(project(state.projectId));
+    const reservations = motionRunUsage(state.runId);
+    const outcomes = events.filter(({ type, data }) => type === "provider_progress" && ["accepted", "rejected"].includes(data.state));
+    const experimental = Object.entries(productLimits).some(([key, value]) => limits[key] > value);
     const report = { origin, ...state, status: current.status, error: current.error,
         publishedRevision: snapshot.revision, startingRevision: current.starting_revision,
         stages: motionSteps(state.runId).map(({ name, lane, status, attempts, error }) => ({ name, lane, status, attempts, error })),
+        usage: { budgetClass: experimental ? "experimental" : "product", limits, reservations,
+            attempts: reservations.reduce((total, item) => total + item.attempts, 0),
+            accountedTokens: reservations.reduce((total, item) => total + item.accountedTokens, 0),
+            rejected: outcomes.filter(({ data }) => data.state === "rejected").length },
         events, finalDocument: snapshot.tracks.motion_graphics.length ? snapshot : null, reviewDraft: draft?.document ?? null };
     await writeFile(path.join(evidence, "live-run.json"), JSON.stringify(report, null, 2));
     return report;

@@ -48,6 +48,7 @@ const { addMotionStep, createMotionRun, motionArtifact, motionEvents, motionRun,
 const { finishMotionStep, startMotionStep, MotionOrchestrator, queueMotionFeedback, retryMotionRun, motionRunDraft } =
     await import("../server/motion/orchestrator.ts");
 const { motionBenchmark } = await import("./fixtures/motion-benchmark.ts");
+const { motionRunUsage } = await import("../server/motion/ledger.ts");
 
 const api = app.listen(0, "127.0.0.1");
 await once(api, "listening");
@@ -1193,6 +1194,9 @@ export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {
         assert.ok(events.some(({ data }) => data.role === "referenceAnalyst" && data.artifactFailure === "token_limit"));
     }
     assert.ok(events.some(({ data }) => data.outcome === "invalid_output"));
+    const usage = motionRunUsage(graphRun.id);
+    assert.ok(usage.some(({ stage, attempts }) => stage === "director" && attempts >= 1));
+    assert.ok(usage.every(({ accountedTokens, attempts }) => accountedTokens >= 600 * attempts));
     assert.ok(events.some(({ data }) => data.role === "visualCritic" && data.reasoningObserved));
     if (workspaceModule) assert.ok(events.some(({ data }) => data.role === "motionEngineer" &&
         data.requestedReasoning === "extended" && data.reasoningEffort === "high" && data.outcome === "tool_requested"));
