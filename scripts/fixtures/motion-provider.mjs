@@ -140,6 +140,10 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.ok(memory.sceneOrder.some(({ id }) => id === artifact.target.id));
                 assert.deepEqual(memory.approvedCopy.map(({ id }) => id), [artifact.target.id]);
                 assert.deepEqual(memory.design.map(({ id }) => id), [artifact.target.id]);
+                if (process.argv.includes("--component-fallback") && artifact.target.id === graphic[0].id) {
+                    value = null;
+                    break;
+                }
                 if (workspaceModule && artifact.target.id === graphic[1].id) {
                     const { revision } = JSON.parse(prompt).context;
                     const sceneId = artifact.target.id;

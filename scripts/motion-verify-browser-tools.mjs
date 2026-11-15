@@ -603,6 +603,7 @@ try {
     const rejectReferenceOutline = process.argv.includes("--reference-fallback");
     const rejectCopywriter = process.argv.includes("--copy-fallback");
     const rejectGraphEngineer = process.argv.includes("--engineer-fallback");
+    const componentFallback = process.argv.includes("--component-fallback");
     const useGraphEngineer = rejectGraphEngineer || process.argv.includes("--graph-engineer");
     const rejectCritic = process.argv.includes("--review-fallback");
     const rejectCriticAfterRepair = process.argv.includes("--review-after-repair-fallback");
@@ -820,8 +821,13 @@ try {
         const quality = document(project(graphProject)).metadata.motion_generation.quality;
         assert.equal(quality.review, "unavailable");
         assert.deepEqual(quality.findings, rejectCriticAfterRepair ? ["Impact settles early"] : []);
-        assert.equal(quality.generation, rejectGraphEngineer ? "approximated" : "rendered");
-        assert.deepEqual(quality.approximations.map(({ sceneId }) => sceneId), rejectGraphEngineer ? [graphic[1].id] : []);
+        assert.equal(quality.generation, rejectGraphEngineer || componentFallback ? "approximated" : "rendered");
+        assert.deepEqual(quality.approximations.map(({ sceneId }) => sceneId),
+            [...(componentFallback ? [graphic[0].id] : []), ...(rejectGraphEngineer ? [graphic[1].id] : [])]);
+        if (componentFallback) {
+            const scene = document(project(graphProject)).tracks.motion_graphics[0];
+            assert.equal(scene.params.headline, graphic[0].params.headline);
+        }
         console.log("Unavailable visual review preserved the draft and required approval before opening it in the editor.");
     } else {
         const firstScene = document(project(graphProject)).tracks.motion_graphics[0];

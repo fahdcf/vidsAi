@@ -451,7 +451,7 @@ export async function runMotionEngineer(
             return { ...result, value: { decision, approximation, scene: compile(result.value) } };
         } catch (error) {
             context.signal.throwIfAborted();
-            if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;
+            if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
             const title = wording || target.purpose.slice(0, 180).trim();
             return { source: "graph_fallback" as const, value: {
                 scene: makeScene(fallbackEngineerGraph(title, target.purpose, notes)),
@@ -470,20 +470,35 @@ export async function runMotionEngineer(
         }
         return parts?.length ? motionSceneSchema.parse(applyCopyParts(scene, parts)) : scene;
     };
-    const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
-        target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference, artDirection,
-        referenceSpec,
-        layoutReview,
-        referenceFrames: describeReferenceFrames(details),
-        audioCues,
-        speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
-    }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
-        validate: ({ scene }) => { buildScene(scene); },
-        sceneId: target.id,
-        images: details.map(({ image }) => image),
-        requestTimeoutMs: details.length ? 45_000 : undefined,
-    }));
-    return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
+    try {
+        const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
+            target, approvedCopy: wording, copyParts: parts, styling, assets, component: describeMotionComponent(target.type), reference, artDirection,
+            referenceSpec,
+            layoutReview,
+            referenceFrames: describeReferenceFrames(details),
+            audioCues,
+            speechTiming: context.speechTiming?.filter(({ startFrame, endFrame }) => endFrame > target.start_frame && startFrame < target.end_frame),
+        }, motionEngineerSchema(target.type, target.end_frame - target.start_frame), {
+            validate: ({ scene }) => { buildScene(scene); },
+            sceneId: target.id,
+            images: details.map(({ image }) => image),
+            requestTimeoutMs: details.length ? 45_000 : undefined,
+        }));
+        return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
+    } catch (error) {
+        context.signal.throwIfAborted();
+        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
+        const { id, type, start_frame, end_frame } = target;
+        const fallback = motionSceneSchema.parse({ ...styling, id, type, start_frame, end_frame, assets, componentVersion: 1,
+            params: describeMotionComponent(type).defaults });
+        const selected = parts && validCopyParts(type, parts) ? parts
+            : storyboardCopyParts(type, wording, context.brief.trim().slice(0, 140));
+        return { source: "component_fallback" as const, value: {
+            scene: motionSceneSchema.parse(applyCopyParts(fallback, selected)),
+            decision: "Saved an editable component approximation because the scene model did not complete.",
+            approximation: "This scene uses component defaults with the approved copy. Its custom motion still needs review.",
+        } };
+    }
 }
 
 export function integrateMotionScenes(document: Document, storyboard: MotionStoryboard, builds: readonly z.infer<typeof motionRepairSchema>[]) {
