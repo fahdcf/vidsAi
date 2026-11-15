@@ -29,6 +29,9 @@ db.transaction(() => {
     if (!(db.pragma("table_info(motion_runs)") as { name: string }[]).some(({ name }) => name === "target_scene_id")) {
         db.exec("ALTER TABLE motion_runs ADD COLUMN target_scene_id TEXT");
     }
+    if (!(db.pragma("table_info(motion_budget_reservations)") as { name: string }[]).some(({ name }) => name === "reported_tokens")) {
+        db.exec("ALTER TABLE motion_budget_reservations ADD COLUMN reported_tokens INTEGER CHECK (reported_tokens > 0)");
+    }
 }).immediate();
 if (
     !(db.pragma("table_info(project_assets)") as any[]).some(

@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS motion_budget_reservations (
     slot INTEGER NOT NULL,
     provider TEXT NOT NULL,
     tokens INTEGER NOT NULL CHECK(tokens > 0),
+    reported_tokens INTEGER CHECK (reported_tokens > 0),
     created_at INTEGER NOT NULL,
     UNIQUE(step_id,lease_token,slot)
 );

@@ -28,7 +28,7 @@ test("optional motion work leaves budget for scene authoring, direct review and 
         const step = motionSteps(run.id).find((item) => item.name === name)!;
         return stepMotionBudget(run, startMotionStep(run, step, 30_000)!, limits);
     };
-    stage("director").reserveModel(60_000, 10_000, "provider").release();
+    stage("director").reserveModel(60_000, 10_000, "provider").release(70_000);
     assert.throws(() => stage("layout_review").reserveModel(40_000, 5_000, "provider"), /preserving budget for scene authoring/);
     stage("engineer:opening").reserveModel(20_000, 5_000, "provider").release();
     stage("engineer:closing").reserveModel(20_000, 5_000, "provider").release();
@@ -39,6 +39,9 @@ test("optional motion work leaves budget for scene authoring, direct review and 
     const usage = motionRunUsage(run.id);
     assert.deepEqual(usage.map(({ stage }) => stage), ["director", "engineer:opening", "engineer:closing", "critique:1", "repair:1:opening"]);
     assert.equal(usage.reduce((total, row) => total + row.accountedTokens, 0), 154_000);
+    assert.equal(usage.reduce((total, row) => total + row.reportedTokens, 0), 70_000);
+    assert.equal(usage.reduce((total, row) => total + row.unreportedAccountedTokens, 0), 84_000);
+    assert.equal(usage.reduce((total, row) => total + row.attemptsWithReportedUsage, 0), 1);
 });
 
 test("motion creation is atomic, account-scoped, and idempotent during uploads", () => {

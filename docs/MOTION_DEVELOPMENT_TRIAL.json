@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "light-product",
+  "sha256": "cf63422c88e8165504b5f2ad9766a7a0499fc492bd04848952db796d11c62522",
+  "format": "16:9",
+  "seconds": 5,
+  "audio": "silent",
+  "brief": "Recreate the five-second landscape product animation with editable objects and lettering. Show the cream background, terracotta Ember bottle sliding in from the right, and the exact text Carry less., Built for the daily refill., Explore Ember and EMBER / 01. Match the reference timing and final readable hold. Keep the video silent.",
+  "mustRead": ["Carry less.", "Built for the daily refill.", "Explore Ember", "EMBER / 01"],
+  "landmarks": [
+    {"seconds": 1.2, "description": "Bottle reaches the right side and the headline is readable"},
+    {"seconds": 2, "description": "The subtitle is fully visible"},
+    {"seconds": 3.25, "description": "The call to action is fully visible"}
+  ]
+}

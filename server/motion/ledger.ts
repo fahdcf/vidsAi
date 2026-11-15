@@ -28,10 +28,13 @@ export function motionElapsed(run: MotionRun, now = Date.now()) {
 
 export function motionRunUsage(runId: string) {
     return db.prepare(`
-        SELECT s.name AS stage,b.provider,COUNT(*) AS attempts,SUM(b.tokens) AS accountedTokens
+        SELECT s.name AS stage,b.provider,COUNT(*) AS attempts,SUM(b.tokens) AS accountedTokens,
+               COUNT(b.reported_tokens) AS attemptsWithReportedUsage,COALESCE(SUM(b.reported_tokens),0) AS reportedTokens,
+               SUM(CASE WHEN b.reported_tokens IS NULL THEN b.tokens ELSE 0 END) AS unreportedAccountedTokens
         FROM motion_budget_reservations b JOIN motion_steps s ON s.id=b.step_id
         WHERE b.run_id=? GROUP BY s.name,b.provider ORDER BY MIN(b.id)
-    `).all(runId) as { stage: string; provider: string; attempts: number; accountedTokens: number }[];
+    `).all(runId) as { stage: string; provider: string; attempts: number; accountedTokens: number;
+        attemptsWithReportedUsage: number; reportedTokens: number; unreportedAccountedTokens: number }[];
 }
 
 export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: MotionLimits): MotionModelBudget {
@@ -109,7 +112,8 @@ export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: Motio
                     if (released) return;
                     released = true;
                     if (actual !== undefined && Number.isSafeInteger(actual) && actual > 0) {
-                        db.prepare("UPDATE motion_budget_reservations SET tokens=? WHERE id=?").run(actual, reserved.id);
+                        db.prepare("UPDATE motion_budget_reservations SET tokens=?,reported_tokens=? WHERE id=?")
+                            .run(actual, actual, reserved.id);
                     }
                 },
                 backoff(ms) {

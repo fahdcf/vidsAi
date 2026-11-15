@@ -15,7 +15,9 @@ const manifestPath = new URL("../docs/MOTION_HELD_OUT_EVALUATION.json", import.m
 const protocol = await readFile(manifestPath);
 const manifest = JSON.parse(protocol);
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
-const extra = filter === "depth-cube" ? await readFile(new URL("../docs/MOTION_HELD_OUT_3D.json", import.meta.url)) : null;
+const development = filter === "light-product";
+const supplemental = filter === "depth-cube" ? "MOTION_HELD_OUT_3D.json" : development ? "MOTION_DEVELOPMENT_TRIAL.json" : null;
+const extra = supplemental ? await readFile(new URL(`../docs/${supplemental}`, import.meta.url)) : null;
 if (extra) manifest.cases.push(JSON.parse(extra));
 const cases = manifest.cases.filter(({ id }) => !filter || id === filter);
 assert.ok(cases.length, "Unknown held-out case.");
@@ -24,7 +26,7 @@ for (const entry of cases) {
     assert.equal(sha256(await readFile(entry.file)), entry.sha256, `Frozen reference changed for ${entry.id}.`);
 }
 const protocolSha256 = sha256(extra ? Buffer.concat([protocol, extra]) : protocol);
-const planned = cases.flatMap((entry) => Array.from({ length: manifest.protocol.runsPerCase }, (_, index) => ({
+const planned = cases.flatMap((entry) => Array.from({ length: development ? 1 : manifest.protocol.runsPerCase }, (_, index) => ({
     entry, attempt: index + 1,
 })));
 console.log(JSON.stringify({ protocolSha256, attempts: planned.map(({ entry, attempt }) => ({ case: entry.id, attempt })) }));
@@ -33,10 +35,11 @@ if (!options.includes("--live")) process.exit(0);
 const root = path.resolve(import.meta.dirname, "../../runtime");
 const output = path.join(root, "motion-verification");
 await mkdir(output, { recursive: true });
-const evidence = await mkdtemp(path.join(output, "held-out-"));
+const evidence = await mkdtemp(path.join(output, development ? "development-motion-" : "held-out-"));
 process.env.NODE_SKIP_LEGACY_IMPORT = "1";
 process.env.NODE_DATABASE_PATH = path.join(evidence, "test.sqlite");
 process.env.NODE_MEDIA_ROOT = path.join(evidence, "media");
+await import("../server/env.ts");
 const { motionLimits } = await import("../server/motion/budget.ts");
 const defaults = motionLimits({});
 const limits = motionLimits();
@@ -62,7 +65,7 @@ const results = [];
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const gitRevision = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout?.trim() || null;
 const writeReport = () => writeFile(path.join(evidence, "results.json"),
-    JSON.stringify({ gitRevision, protocolSha256, limits, attempts: results }, null, 2));
+    JSON.stringify({ gitRevision, protocolSha256, scope: development ? "development" : "held-out", budgetClass: "product", limits, attempts: results }, null, 2));
 console.log(`Evidence directory ${evidence}`);
 try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 980 }, acceptDownloads: true });

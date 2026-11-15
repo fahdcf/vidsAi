@@ -80,6 +80,8 @@ async function saveReport() {
         usage: { budgetClass: experimental ? "experimental" : "product", limits, reservations,
             attempts: reservations.reduce((total, item) => total + item.attempts, 0),
             accountedTokens: reservations.reduce((total, item) => total + item.accountedTokens, 0),
+            reportedTokens: reservations.reduce((total, item) => total + item.reportedTokens, 0),
+            unreportedAccountedTokens: reservations.reduce((total, item) => total + item.unreportedAccountedTokens, 0),
             rejected: outcomes.filter(({ data }) => data.state === "rejected").length },
         events, finalDocument: snapshot.tracks.motion_graphics.length ? snapshot : null, reviewDraft: draft?.document ?? null };
     await writeFile(path.join(evidence, "live-run.json"), JSON.stringify(report, null, 2));

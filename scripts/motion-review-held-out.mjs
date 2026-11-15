@@ -10,9 +10,11 @@ const protocol = await readFile(new URL("../docs/MOTION_HELD_OUT_EVALUATION.json
 const { cases, protocol: rubric } = JSON.parse(protocol);
 const results = JSON.parse(await readFile(path.join(runDirectory, "results.json")));
 const digest = (data) => createHash("sha256").update(data).digest("hex");
-if (results.attempts.some((run) => run.case === "depth-cube")) {
-    const extra = await readFile(new URL("../docs/MOTION_HELD_OUT_3D.json", import.meta.url));
-    assert.equal(results.protocolSha256, digest(Buffer.concat([protocol, extra])), "The 3D evaluation protocol changed.");
+const supplemental = results.attempts.some((run) => run.case === "depth-cube") ? "MOTION_HELD_OUT_3D.json"
+    : results.scope === "development" ? "MOTION_DEVELOPMENT_TRIAL.json" : null;
+if (supplemental) {
+    const extra = await readFile(new URL(`../docs/${supplemental}`, import.meta.url));
+    assert.equal(results.protocolSha256, digest(Buffer.concat([protocol, extra])), "The supplemental evaluation protocol changed.");
     cases.push(JSON.parse(extra));
 } else assert.equal(results.protocolSha256, digest(protocol), "The evaluation protocol changed.");
 const { ffmpeg: tool } = JSON.parse(await readFile(new URL("../motion-toolchain.json", import.meta.url)));
