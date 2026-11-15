@@ -42,6 +42,19 @@ export function observedSceneBoundaries(observations: readonly Observation[]) {
     });
 }
 
+export function observedChangeBoundaries(observations: readonly Observation[],
+    changes: NonNullable<ReferenceAnalysis["measured"]["candidateChanges"]>) {
+    const readable = observations.filter(({ copy, confidence }) => confidence >= 0.75 && normalizedCopy(copy))
+        .sort((a, b) => a.time - b.time);
+    return readable.flatMap((current, index) => {
+        const previous = readable[index - 1];
+        if (!previous || sameCopy(normalizedCopy(previous.copy), normalizedCopy(current.copy))) return [];
+        const change = changes.filter(({ time, before }) => time > previous.time && before <= current.time && time <= current.time + 0.25)
+            .sort((a, b) => b.score - a.score)[0];
+        return change ? [Math.min(change.time, current.time)] : [];
+    });
+}
+
 type Target = MotionStoryboard["scenes"][number];
 type OutputClock = Parameters<typeof referenceClock>[1];
 

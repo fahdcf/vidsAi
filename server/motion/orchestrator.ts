@@ -31,7 +31,7 @@ import {
     integrateMotionScenes, motionBuildSchema, motionCopySchema, motionDesignSchema, motionDraftBlockers, motionStoryboardSchema,
     motionCritiqueSchema, resolveMotionStoryboard, runMotionCopywriter, runMotionCritic, runMotionDesigner, runMotionDirector, runMotionEngineer,
     reviewMotionLayout, motionRepairSchema,
-    runMotionRepair, runMotionRevision, runReferenceAnalyst, type MotionBuild, type MotionCritique,
+    measuredReferenceAnalysis, runMotionRepair, runMotionRevision, runReferenceAnalyst, type MotionBuild, type MotionCritique,
 } from "./agents";
 import {
     addMotionStep, appendMotionEvent, appendMotionMessage, createMotionRun, motionArtifact, motionRun, motionSnapshot,
@@ -566,7 +566,8 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
         const { spans, summary } = await motionSpeechTiming(snapshot, budget, signal);
         return { value: { spans }, summary };
     }
-    const input = json<{ round?: number; sceneId?: string; issues?: string[]; reviewUnavailable?: boolean }>(step.input, {});
+    const input = json<{ round?: number; sceneId?: string; issues?: string[]; reviewUnavailable?: boolean;
+        reuseSavedReference?: boolean }>(step.input, {});
     const round = input.round ?? 1;
     const reference = (): ReferenceAnalysis | null => {
         if (!run.reference_binding_id) return null;
@@ -609,11 +610,11 @@ const executeStep: StepHandler = async (run, step, budget, signal) => {
             (await observeReferenceSheet(imageBytes(capture.images), capture.measured.timestamps, budget, signal, onProgress)).observations);
         const value = await runReferenceAnalyst(context, { ...metadata, measured: capture.measured, observations });
         return { value, summary: value.source === "measured_fallback"
-            ? "The scene outline model did not finish. Continuing with browser cut estimates and sustained changes in the saved visual observations."
+            ? "The scene outline model did not finish. Continuing with browser cut estimates and changes in the saved visual observations."
             : `Analyzed ${capture.measured.timestamps.length} reference samples.` };
     }
     if (step.name === "director") {
-        const value = await runMotionDirector(context, reference());
+        const value = await runMotionDirector(context, reference(), input.reuseSavedReference === true);
         return { value, summary: value.value.summary };
     }
     if (step.name === "reference_spec") {
@@ -1071,6 +1072,22 @@ export function retryMotionRun(runId: string, accountId: number) {
         if (!p || document(p).revision !== run.starting_revision ||
             (run.reference_binding_id && motionReference(run.project_id)?.bindingId !== run.reference_binding_id)) {
             fail(409, "Start a new revision with the current project and reference.");
+        }
+        const failedDirector = steps.find(({ name, status, error }) => name === "director" && status === "failed" &&
+            error === "The director stage could not produce a valid artifact within the configured routes.");
+        const analyzed = steps.find(({ name, status }) => name === "reference_analysis" && status === "done");
+        if (failedDirector && run.reference_binding_id && analyzed) {
+            const saved = result<{ source?: string; value: ReferenceAnalysis }>(runId, "reference_analysis");
+            if (saved.source === "measured_fallback" && saved.value.scenes.length === 1) {
+                const analysis = measuredReferenceAnalysis(saved.value);
+                if (analysis.scenes.length > 1) {
+                    saveMotionReferenceAnalysis(run.project_id, { bindingId: run.reference_binding_id, analysis });
+                    const artifact = writeMotionArtifact(runId, analyzed.name, Buffer.from(JSON.stringify({ ...saved, value: analysis })));
+                    db.prepare("UPDATE motion_steps SET result_id=? WHERE id=?").run(artifact.id, analyzed.id);
+                }
+            }
+            db.prepare("UPDATE motion_steps SET input=? WHERE id=?")
+                .run(JSON.stringify({ reuseSavedReference: true }), failedDirector.id);
         }
         const failedCritique = steps.find(({ name, status }) => name.startsWith("critique:") && status === "failed");
         if (failedCritique) {

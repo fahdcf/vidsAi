@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, motionStoryboardSchema } from "./motion/agents";
+import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, motionStoryboardSchema, runMotionDirector } from "./motion/agents";
+import { MotionBudgetError } from "./motion/budget";
+import { motionBenchmark } from "../scripts/fixtures/motion-benchmark";
 import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
 import { optionalMotionProviders } from "./motion/providers/inventory";
@@ -29,6 +31,28 @@ test("a reference match adopts source cuts while inspired edits retain their cho
         assert.equal(mapped.timingMode, "custom");
         assert.deepEqual(mapped.scenes, plan.scenes);
     }
+});
+
+test("the director can preserve observed copy and cuts when no model returns a storyboard", async () => {
+    const reference = measuredReferenceAnalysis({ kind: "video", interval: { start: 2, end: 7 },
+        measured: { timestamps: [3, 6], palette: [], candidateCuts: [{ time: 4, score: 0.8, before: 3, after: 6 }] },
+        observations: [{ time: 3, copy: "Opening label", layout: "Text in a link field", confidence: 0.9 },
+            { time: 6, copy: "Final label", layout: "Text on a closing card", confidence: 0.9 }] });
+    const context = { brief: "Recreate the reference", document: { ...motionBenchmark(true), total_frames: 150 },
+        signal: new AbortController().signal,
+        budget: { reserveModel() { throw new MotionBudgetError("Fixture provider unavailable", "provider"); } } };
+    const fallback = await runMotionDirector(context, reference);
+    assert.ok("source" in fallback && fallback.source === "reference_fallback");
+    assert.equal(fallback.value.timingMode, "source");
+    assert.deepEqual(fallback.value.scenes.map(({ type, copy, start_frame, end_frame, referenceSceneIndex }) =>
+        ({ type, copy, start_frame, end_frame, referenceSceneIndex })), [
+        { type: "graph", copy: "Opening label", start_frame: 0, end_frame: 60, referenceSceneIndex: 0 },
+        { type: "graph", copy: "Final label", start_frame: 60, end_frame: 150, referenceSceneIndex: 1 },
+    ]);
+    const saved = await runMotionDirector({ ...context, budget: { reserveModel() { assert.fail("Retry must reuse the saved analysis"); } } },
+        reference, true);
+    assert.deepEqual(saved, fallback);
+    await assert.rejects(runMotionDirector(context, null), /Fixture provider unavailable|No qualified model/);
 });
 
 test("reference specifications require distinct source times for motion", () => {
@@ -149,6 +173,22 @@ test("reference fallback separates sustained sections on a shared background", (
     assert.ok(analysis.scenes.every(({ evidence }) => evidence.length >= 2));
     assert.equal(analysis.scenes[1].copy, null);
     assert.ok(analysis.scenes.every(({ supportedType }) => supportedType === null));
+});
+
+test("reference fallback uses measured changes when sparse copy confirms a different section", () => {
+    const observations = [
+        { time: 1, copy: "Open the project", layout: "Headline", confidence: 0.9 },
+        { time: 1.5, copy: "Open the project and edit", layout: "Added line", confidence: 0.9 },
+        { time: 4, copy: "Transcript tools", layout: "Interface", confidence: 0.9 },
+        { time: 5.9, copy: "Get started", layout: "Closing card", confidence: 0.9 },
+    ];
+    const analysis = measuredReferenceAnalysis({ kind: "video", interval: { start: 0, end: 7 }, observations,
+        measured: { timestamps: observations.map(({ time }) => time), palette: [], candidateCuts: [], candidateChanges: [
+            { time: 1.3, before: 1.1, after: 1.5, score: 0.6 },
+            { time: 3, before: 2.8, after: 3.2, score: 0.5 },
+            { time: 6, before: 5.8, after: 6.2, score: 0.45 },
+        ] } });
+    assert.deepEqual(analysis.scenes.map(({ timing }) => timing?.end), [3, 5.9, 7]);
 });
 
 test("copy recovery keeps quoted headlines, word punctuation and multi-word labels", () => {

@@ -17,7 +17,7 @@ import { authoredModuleProposal, compileEngineerGraph, fallbackEngineerGraph, gr
 import { motionGraphAssets, validateMotionAssetOwnership } from "./assets";
 import { motionThreeCost } from "../../shared/motion/three-scene";
 import { observeReferenceSheet } from "./reference-observer";
-import { hasCompleteSceneSpecification, mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
+import { hasCompleteSceneSpecification, mapStoryboardToReference, observedChangeBoundaries, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
 import { motionProgramAuthoringGuide } from "./program-examples";
 
 const frame = z.number().int().nonnegative().max(7200);
@@ -156,7 +156,9 @@ export function measuredReferenceAnalysis(evidence: ReferenceEvidence): Referenc
         if (!interval || cuts.length === 9) break;
         if (time > interval.start && time < interval.end && cuts.every((cut) => Math.abs(time - cut) >= 0.25)) cuts.push(time);
     }
-    for (const time of observedSceneBoundaries(observations)) {
+    const observedCuts = observedSceneBoundaries(observations);
+    const estimatedCuts = cuts.length === 2 && !observedCuts.length ? observedChangeBoundaries(observations, measured.candidateChanges ?? []) : observedCuts;
+    for (const time of estimatedCuts) {
         if (interval && cuts.length < 9 && time > interval.start && time < interval.end &&
             cuts.every((cut) => Math.abs(cut - time) >= 0.5)) cuts.push(time);
     }
@@ -171,7 +173,7 @@ export function measuredReferenceAnalysis(evidence: ReferenceEvidence): Referenc
                 end: timing?.end ?? null, sample, palette: measured.palette.map(({ color }) => color), motion: null,
                 approximation: "Scene type was not confirmed. Use the sampled observations and the creative brief." };
         }),
-        unresolved: ["The scene outline model did not complete. Segment boundaries are estimated from measured cuts and sustained changes in observed text."],
+        unresolved: ["The scene outline model did not complete. Segment boundaries are estimated from measured visual changes and observed text."],
     });
 }
 
@@ -201,9 +203,37 @@ export async function runReferenceAnalyst(
     }
 }
 
-export async function runMotionDirector(context: MotionAgentContext, reference: ReferenceAnalysis | null) {
-    const result = await runMotionAgent(context, "director", "AGENT_COMPLEX", {
-        reference,
+export async function runMotionDirector(context: MotionAgentContext, reference: ReferenceAnalysis | null, reuseSavedReference = false) {
+    const { document, signal } = context;
+    const fromReference = (analysis: ReferenceAnalysis) => {
+        const segments = analysis.scenes.slice(0, analysis.interval ? document.total_frames : 1);
+        const boundary = (index: number) => Math.round(index * document.total_frames / segments.length);
+        const summary = "Continuing with an estimated storyboard from the saved reference. Review the timing and copy in the draft.";
+        const scenes = segments.map((scene, index) => {
+            const observed = scene.evidence.reduce((best, sample) => sample.confidence > best.confidence ? sample : best);
+            const layout = analysis.observations.find(({ time }) => time === observed.time)?.layout;
+            return { id: `reference-${index + 1}`, type: scene.supportedType ?? "graph" as const,
+                start_frame: boundary(index), end_frame: boundary(index + 1),
+                referenceSceneIndex: index, purpose: (layout || scene.title).slice(0, 200), copy: scene.copy ?? "" };
+        });
+        const proposed = motionStoryboardSchema.parse({
+            title: "Reference recreation", summary, look: "reference",
+            referenceIntent: "match", timingMode: "source", scenes,
+        });
+        return { source: "reference_fallback" as const, value: mapStoryboardToReference(proposed, analysis, document) };
+    };
+    signal.throwIfAborted();
+    if (reference && reuseSavedReference) return fromReference(reference);
+    const input = {
+        reference: reference && {
+            kind: reference.kind, interval: reference.interval, unresolved: reference.unresolved,
+            scenes: reference.scenes.map(({ title, timing, supportedType, copy, palette, motionLandmarks, approximation }) =>
+                ({ title, timing, supportedType, copy, palette, motionLandmarks, approximation })),
+            observations: reference.scenes.flatMap(({ evidence }) => {
+                const strongest = [...evidence].sort((a, b) => b.confidence - a.confidence).slice(0, 2);
+                return reference.observations.filter(({ time }) => strongest.some((sample) => sample.time === time));
+            }),
+        },
         components: motionComponentTypes.map((type) => {
             const { name, description } = describeMotionComponent(type);
             return { type, name, description };
@@ -213,17 +243,25 @@ export async function runMotionDirector(context: MotionAgentContext, reference: 
         soundtrackRhythm: context.document.metadata.motion_audio_analysis?.rhythm,
         soundtrackSilence: context.document.metadata.motion_audio_analysis?.silence,
         speechTiming: context.speechTiming,
-    }, motionStoryboardSchema, {
-        validate: ({ scenes, artDirection }) => {
-            if (scenes.at(-1)?.end_frame !== context.document.total_frames) throw new Error("Storyboard duration is incorrect.");
-            if (artDirection?.uncertainSceneId && !scenes.some(({ id }) => id === artDirection.uncertainSceneId)) {
-                throw new Error("The styleframe study must target a scene in this storyboard.");
-            }
-            if (scenes.some(({ referenceSceneIndex }) => typeof referenceSceneIndex === "number" &&
-                (!reference || referenceSceneIndex >= reference.scenes.length))) throw new Error("Storyboard points to a missing reference scene.");
-        },
-    });
-    return reference ? { ...result, value: mapStoryboardToReference(result.value, reference, context.document) } : result;
+    };
+    try {
+        const result = await runMotionAgent(context, "director", "AGENT_COMPLEX", input, motionStoryboardSchema, {
+            validate: ({ scenes, artDirection }) => {
+                if (scenes.at(-1)?.end_frame !== document.total_frames) throw new Error("Storyboard duration is incorrect.");
+                if (artDirection?.uncertainSceneId && !scenes.some(({ id }) => id === artDirection.uncertainSceneId)) {
+                    throw new Error("The styleframe study must target a scene in this storyboard.");
+                }
+                if (scenes.some(({ referenceSceneIndex }) => typeof referenceSceneIndex === "number" &&
+                    (!reference || referenceSceneIndex >= reference.scenes.length))) throw new Error("Storyboard points to a missing reference scene.");
+            },
+        });
+        return reference ? { ...result, value: mapStoryboardToReference(result.value, reference, document) } : result;
+    } catch (error) {
+        signal.throwIfAborted();
+        if (!reference || (!(error instanceof MotionAgentUnavailable) &&
+            !(error instanceof MotionBudgetError && error.scope === "provider"))) throw error;
+        return fromReference(reference);
+    }
 }
 
 export async function runMotionCopywriter(context: MotionAgentContext, storyboard: MotionStoryboard, exactCopy: readonly string[] = []) {
