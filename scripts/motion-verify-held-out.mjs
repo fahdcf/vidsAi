@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
@@ -64,8 +64,23 @@ const browser = await chromium.launch({ channel: process.env.MOTION_TEST_BROWSER
 const results = [];
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const gitRevision = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout?.trim() || null;
-const writeReport = () => writeFile(path.join(evidence, "results.json"),
-    JSON.stringify({ gitRevision, protocolSha256, scope: development ? "development" : "held-out", budgetClass: "product", limits, attempts: results }, null, 2));
+const reportPath = path.join(evidence, "results.json");
+async function writeReport() {
+    const pending = `${reportPath}.tmp`;
+    await writeFile(pending, JSON.stringify({ gitRevision, protocolSha256, scope: development ? "development" : "held-out",
+        budgetClass: "product", limits, attempts: results }, null, 2));
+    await rename(pending, reportPath);
+}
+
+function usageEvidence(runId) {
+    const diagnostics = db.prepare("SELECT data FROM motion_events WHERE run_id=? AND type='provider_progress' ORDER BY id")
+        .all(runId).map(({ data }) => JSON.parse(data));
+    return {
+        usage: motionRunUsage(runId),
+        rejectedProviderAttempts: diagnostics.filter(({ state }) => state === "rejected")
+            .map(({ role, step, model, outcome, artifactFailure, elapsedMs }) => ({ role, step, model, outcome, artifactFailure, elapsedMs })),
+    };
+}
 console.log(`Evidence directory ${evidence}`);
 try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 980 }, acceptDownloads: true });
@@ -99,9 +114,17 @@ try {
             await writeReport();
             console.log(`${label} started ${runId}`);
             const deadline = Date.now() + limits.activeMs + 60_000;
+            let nextCheckpoint = Date.now() + 15_000;
             let current = motionRun(runId);
             while (!["ready", "failed", "cancelled"].includes(current.status)) {
                 if (Date.now() >= deadline) throw new Error("Run exceeded the evaluation deadline.");
+                if (Date.now() >= nextCheckpoint) {
+                    record.progress = { status: current.status, elapsedMs: Date.now() - started,
+                        stages: motionSteps(runId).map(({ name, status, attempts }) => ({ name, status, attempts })),
+                        ...usageEvidence(runId) };
+                    await writeReport();
+                    nextCheckpoint = Date.now() + 15_000;
+                }
                 await pause(1200);
                 current = motionRun(runId);
             }
@@ -109,14 +132,11 @@ try {
             record.error = current.error;
             record.generationMs = Date.now() - started;
             const stages = motionSteps(runId);
-            const diagnostics = db.prepare("SELECT data FROM motion_events WHERE run_id=? AND type='provider_progress' ORDER BY id")
-                .all(runId).map(({ data }) => JSON.parse(data));
             const draft = motionRunDraft(current);
             record.quality = motionRunQuality(current, stages);
-            record.usage = motionRunUsage(runId);
+            Object.assign(record, usageEvidence(runId));
+            delete record.progress;
             record.retriedStages = stages.filter(({ attempts }) => attempts > 1).map(({ name, attempts }) => ({ name, attempts }));
-            record.rejectedProviderAttempts = diagnostics.filter(({ state }) => state === "rejected")
-                .map(({ role, step, model, outcome, artifactFailure, elapsedMs }) => ({ role, step, model, outcome, artifactFailure, elapsedMs }));
             record.automaticFirstDraft = stages.find(({ name, status }) => name === "assemble" && status === "done")?.result_id ?? null;
             record.firstDraftReview = stages.find(({ name, status }) => name === "critique:1" && status === "done")?.result_id ?? null;
             for (const [artifactId, suffix] of [[record.automaticFirstDraft, "first-draft"], [record.firstDraftReview, "first-review"]]) {
