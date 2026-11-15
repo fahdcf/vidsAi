@@ -222,6 +222,8 @@ test("optional chat requires zero prices for the exact model and endpoint before
     });
     const request = { instruction: "Return JSON", prompt: "Synthetic test", mode: "off" as const, maxTokens: 100,
         timeoutMs: 1000, signal: AbortSignal.timeout(3_000), schema: z.object({ value: z.string() }) };
+    await assert.rejects(requestMotionJson({ ...provider, capabilities: [] }, request), /capability/);
+    await assert.rejects(requestMotionJson(provider, { ...request, constrainedOutput: true }), /capability/);
     await assert.rejects(requestMotionJson(provider, request), /verified zero-price/);
     await assert.rejects(requestMotionJson(gemini, request), /verified zero-price/);
     assert.equal(sent, 0);

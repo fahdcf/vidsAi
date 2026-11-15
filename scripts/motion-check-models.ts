@@ -1,12 +1,13 @@
 import "../server/env";
-import { mkdir, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { runtime } from "../server/env";
 import { MotionRunBudget, motionLimits } from "../server/motion/budget";
 import { MotionProviderError, requestMotionJson } from "../server/motion/providers/chat";
 import {
-    motionRouteProviders, publicMotionInventory,
+    motionRouteProviders, optionalMotionProviders, publicMotionInventory,
     type MotionCapability, type MotionEvidence, type MotionProvider,
 } from "../server/motion/providers/inventory";
 
@@ -126,11 +127,99 @@ async function live() {
     if (!result.passed) process.exitCode = 1;
 }
 
+const optionalChecks = [
+    { capability: "text" },
+    { capability: "structured", constrainedOutput: true },
+    { capability: "image", image: true },
+    { capability: "stream", stream: true },
+    { capability: "thinking", stream: true, mode: "deep" },
+] as const satisfies readonly {
+    capability: MotionCapability;
+    constrainedOutput?: boolean;
+    image?: boolean;
+    stream?: boolean;
+    mode?: "deep";
+}[];
+
+async function checkOptional(alias: string) {
+    const provider = optionalMotionProviders().find((candidate) => candidate.alias === alias);
+    if (!provider?.credential) throw new Error("No optional motion route with credentials matches that alias.");
+    const budget = new MotionRunBudget(motionLimits());
+    const declared = new Set(provider.capabilities);
+    const attempts: Record<string, unknown>[] = [];
+    let halted = false;
+    for (const check of optionalChecks) {
+        const { capability } = check;
+        const supported = declared.has("text") && declared.has(capability);
+        const image = "image" in check;
+        const stream = "stream" in check;
+        const constrainedOutput = "constrainedOutput" in check;
+        if (halted || !supported || (image && !provider.mediaAllowed) || (stream && !declared.has("stream"))) {
+            attempts.push({ capability, outcome: halted ? "rate_limit_skipped" : !supported ? "undeclared"
+                : image ? "media_disabled" : "stream_required" });
+            continue;
+        }
+        const mode = "mode" in check ? check.mode : "off";
+        const marker = constrainedOutput ? randomUUID() : "motion-ready";
+        const maxTokens = mode === "deep" ? 2048 : 256;
+        const estimatedPromptTokens = image ? 2048 : 512;
+        const started = performance.now();
+        let reservation: ReturnType<MotionRunBudget["reserveModel"]> | undefined;
+        let tokens: number | undefined;
+        const request = { instruction: "Return one JSON object.", mode, stream, maxTokens, constrainedOutput,
+            signal: AbortSignal.timeout(65_000) };
+        try {
+            reservation = budget.reserveModel(estimatedPromptTokens, maxTokens);
+            const timeouts = { timeoutMs: Math.min(reservation.timeoutMs, 60_000),
+                firstTokenTimeoutMs: Math.min(reservation.firstTokenTimeoutMs, 25_000) };
+            const result = image ? await requestMotionJson(provider, {
+                ...request, ...timeouts,
+                prompt: 'Identify the object color and shape as {"color":"...","shape":"..."}.',
+                images: [{ bytes: redPng, mime: "image/png" }],
+                schema: visionSchema,
+            }) : await requestMotionJson(provider, {
+                ...request, ...timeouts, prompt: 'Return {"marker":"motion-ready"}.',
+                schema: z.object({ marker: z.literal(marker) }).strict(),
+            });
+            tokens = result.usage?.total_tokens;
+            attempts.push({ capability, mode, maxTokens, latencyMs: result.latencyMs, firstTokenMs: result.firstTokenMs,
+                outcome: mode !== "deep" || result.reasoningObserved ? "qualified" : "reasoning_unconfirmed",
+                reportedTokens: tokens ?? null, accountedTokens: tokens ?? estimatedPromptTokens + maxTokens });
+        } catch (error) {
+            const failure = error instanceof MotionProviderError ? error : undefined;
+            tokens = failure?.artifact?.totalTokens;
+            halted = failure?.status === 429;
+            attempts.push({ capability, mode, maxTokens, latencyMs: Math.round(performance.now() - started),
+                outcome: failure?.code ?? "budget_or_timeout", status: failure?.status,
+                artifactFailure: failure?.artifact?.reason, reportedTokens: tokens ?? null,
+                accountedTokens: reservation ? tokens ?? estimatedPromptTokens + maxTokens : 0 });
+        } finally {
+            reservation?.release(tokens);
+        }
+    }
+    for (const capability of ["audio", "tools"] as const) {
+        attempts.push({ capability, outcome: declared.has(capability) ? "probe_unavailable" : "undeclared" });
+    }
+    const passed = attempts[0]?.outcome === "qualified" &&
+        attempts.every(({ outcome }) => outcome === "qualified" || outcome === "undeclared");
+    const folder = path.join(runtime, "motion-verification");
+    await mkdir(folder, { recursive: true });
+    const directory = await mkdtemp(path.join(folder, "optional-model-qualification-"));
+    const report = path.join(directory, "results.json");
+    const result = { checkedAt: new Date().toISOString(), alias, adapter: provider.adapter, model: provider.model,
+        endpoint: provider.endpoint, providerSlug: provider.providerSlug, passed, attempts, budget: budget.summary() };
+    await writeFile(report, JSON.stringify(result, null, 2));
+    console.log(JSON.stringify({ report, ...result }, null, 2));
+    if (!passed) process.exitCode = 1;
+}
+
 if (process.argv.length === 2) {
     console.log(JSON.stringify(publicMotionInventory(), null, 2));
 } else if (process.argv.length === 3 && process.argv[2] === "--live") {
     await live();
+} else if (process.argv.length === 4 && process.argv[2] === "--live" && /^--optional=[a-z0-9_]+$/.test(process.argv[3])) {
+    await checkOptional(process.argv[3].slice("--optional=".length));
 } else {
-    console.error("Use npm run motion:check-models, or add -- --live to qualify the configured routes.");
+    console.error("Use npm run motion:check-models, -- --live for configured routes, or -- --live --optional=alias for a single optional route.");
     process.exitCode = 1;
 }

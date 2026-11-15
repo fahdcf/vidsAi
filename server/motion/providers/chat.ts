@@ -136,6 +136,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     const fixedEndpoint = adapter === "openrouter" ? "https://openrouter.ai/api/v1/chat/completions"
         : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
     if (adapter !== "nvidia" && (provider.endpoint !== fixedEndpoint ||
+        !supported.includes("text") || (request.constrainedOutput && !supported.includes("structured")) ||
         (request.stream && !supported.includes("stream")))) throw new MotionProviderError("unsupported", "Optional provider capability is unavailable.");
     const routing = await freeProviderRouting(provider, request.signal).catch(() => {
         request.signal.throwIfAborted();
