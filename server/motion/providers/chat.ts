@@ -46,14 +46,17 @@ type MotionChatRequest<T> = {
     timeoutMs: number;
     firstTokenTimeoutMs?: number;
     signal: AbortSignal;
-    onFirstToken?: (elapsedMs: number) => void;
+    onFirstToken?: (elapsedMs: number, streamed: boolean) => void;
 };
 
 export class MotionProviderError extends Error {
     constructor(
         readonly code: "unsupported" | "http" | "invalid_output" | "transport" | "first_token_timeout" | "request_timeout",
         message: string, readonly status?: number, readonly retryAfterMs?: number,
-        readonly artifact?: { reason: "token_limit" | "incomplete" | "unfinished_reasoning" | "json" | "schema"; totalTokens?: number },
+        readonly artifact?: {
+            reason: "token_limit" | "incomplete" | "unfinished_reasoning" | "empty_response" | "provider_error" | "json" | "schema";
+            totalTokens?: number;
+        },
     ) {
         super(message);
     }
@@ -65,6 +68,7 @@ const messageSchema = z.object({
     reasoning_content: z.string().nullish(),
 });
 const responseSchema = z.object({
+    error: z.unknown().optional(),
     choices: z.array(z.object({
         message: messageSchema.optional(),
         delta: messageSchema.optional(),
@@ -165,6 +169,10 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     let content = "";
     let finishReason: string | undefined;
     let usage: Packet["usage"];
+    let streamed = false;
+    const invalidArtifact = (reason: NonNullable<MotionProviderError["artifact"]>["reason"]) =>
+        new MotionProviderError("invalid_output", "The model did not return a valid final JSON artifact.",
+            undefined, undefined, { reason, totalTokens: usage?.total_tokens });
     try {
         const response = await fetch(endpoint, {
             method: "POST",
@@ -196,18 +204,23 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
             throw new MotionProviderError("http", `Motion provider returned HTTP ${response.status}.`, response.status,
                 response.status === 429 || response.headers.has("Retry-After") ? providerRetryDelay(response.headers.get("Retry-After")) : undefined);
         }
-        const packets = stream && response.body
-            ? streamPackets(response.body, signal)
+        const responseType = response.headers.get("Content-Type")?.split(";")[0].trim().toLowerCase() ?? "";
+        const jsonResponse = responseType === "application/json" || responseType.endsWith("+json");
+        const readStream = stream && !jsonResponse && response.body;
+        const packets = readStream
+            ? streamPackets(readStream, signal)
             : [packetFrom(await response.text())];
         for await (const packet of packets) {
             usage = packet.usage ?? usage;
+            if (packet.error != null) throw invalidArtifact("provider_error");
+            streamed ||= Boolean(readStream);
             const choice = packet.choices?.[0];
             const message = choice?.delta ?? choice?.message;
             const reasoning = Boolean(message?.reasoning_content || message?.reasoning);
             if (firstTokenMs === undefined && (reasoning || message?.content)) {
                 firstTokenMs = Math.round(performance.now() - started);
                 clearTimeout(firstTokenTimer);
-                request.onFirstToken?.(firstTokenMs);
+                request.onFirstToken?.(firstTokenMs, streamed);
             }
             reasoningObserved ||= reasoning;
             content += message?.content ?? "";
@@ -224,9 +237,6 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     } finally {
         clearTimeout(firstTokenTimer);
     }
-    const invalidArtifact = (reason: NonNullable<MotionProviderError["artifact"]>["reason"]) =>
-        new MotionProviderError("invalid_output", "The model did not return a valid final JSON artifact.",
-            undefined, undefined, { reason, totalTokens: usage?.total_tokens });
     if (finishReason && finishReason !== "stop") {
         throw invalidArtifact(finishReason === "length" ? "token_limit" : "incomplete");
     }
@@ -238,10 +248,12 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         content = content.slice(end + "</think>".length).trimStart();
     }
     reasoningObserved ||= (usage?.completion_tokens_details?.reasoning_tokens ?? 0) > 0;
+    if (!content.trim()) throw invalidArtifact("empty_response");
     let parsed: unknown;
     try { parsed = JSON.parse(content.trim().replace(/^\x60\x60\x60(?:json)?\s*|\s*\x60\x60\x60$/g, "")); }
     catch { throw invalidArtifact("json"); }
     const checked = request.schema.safeParse(parsed);
     if (!checked.success) throw invalidArtifact("schema");
-    return { value: checked.data, requestedMode: request.mode, reasoningObserved, firstTokenMs, latencyMs: Math.round(performance.now() - started), usage };
+    return { value: checked.data, requestedMode: request.mode, reasoningObserved, streamed, firstTokenMs,
+        latencyMs: Math.round(performance.now() - started), usage };
 }

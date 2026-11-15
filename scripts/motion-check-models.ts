@@ -65,9 +65,9 @@ async function live() {
                 timeoutMs: reservation.timeoutMs,
                 firstTokenTimeoutMs: reservation.firstTokenTimeoutMs,
                 signal: controller.signal,
-                onFirstToken: () => {
+                onFirstToken: (_elapsedMs: number, streamed: boolean) => {
                     receivedToken = true;
-                    if (cancel) controller.abort();
+                    if (cancel && streamed) controller.abort();
                 },
             };
             const result = image ? await requestMotionJson(provider, {
@@ -81,15 +81,15 @@ async function live() {
                 schema: planSchema,
             });
             actualTokens = result.usage?.total_tokens;
-            observe(provider, [capability, "stream"], "qualified");
+            observe(provider, result.streamed ? [capability, "stream"] : [capability], "qualified");
             observe(provider, ["thinking"], result.reasoningObserved ? "qualified" : "reachable");
             attempts.push({
                 role, model: provider.alias, requestedMode: result.requestedMode,
-                reasoningObserved: result.reasoningObserved, finalJsonValid: true,
+                reasoningObserved: result.reasoningObserved, streamed: result.streamed, finalJsonValid: true,
                 latencyMs: result.latencyMs, firstTokenMs: result.firstTokenMs,
                 usage: result.usage, outcome: result.reasoningObserved ? "qualified" : "reasoning_unconfirmed",
             });
-            return !cancel && result.reasoningObserved;
+            return !cancel && result.reasoningObserved && result.streamed;
         } catch (error) {
             const cancelled = cancel && receivedToken && controller.signal.aborted && (error as Error).name === "AbortError";
             const code = error instanceof MotionProviderError ? error.code
@@ -183,7 +183,8 @@ async function checkOptional(alias: string) {
             });
             tokens = result.usage?.total_tokens;
             attempts.push({ capability, mode, maxTokens, latencyMs: result.latencyMs, firstTokenMs: result.firstTokenMs,
-                outcome: mode !== "deep" || result.reasoningObserved ? "qualified" : "reasoning_unconfirmed",
+                outcome: capability === "stream" && !result.streamed ? "stream_unconfirmed"
+                    : mode === "deep" && !result.reasoningObserved ? "reasoning_unconfirmed" : "qualified",
                 reportedTokens: tokens ?? null, accountedTokens: tokens ?? estimatedPromptTokens + maxTokens });
         } catch (error) {
             const failure = error instanceof MotionProviderError ? error : undefined;

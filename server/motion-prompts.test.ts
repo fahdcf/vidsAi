@@ -193,6 +193,31 @@ test("the structured route keeps thinking enabled and classifies an incomplete r
     });
 });
 
+test("provider chat distinguishes a complete JSON response, an empty stream and a provider error", async (t) => {
+    const model = { alias: "super_vl", id: "test", model: "nvidia/nemotron-3.5-super-vl-120b-a12b",
+        family: "chat", endpoint: "https://example.test/v1/chat/completions", functionId: null, credential: "test-only" };
+    const request = { instruction: "Return JSON", prompt: "Sample", mode: "off" as const, stream: true, maxTokens: 100,
+        timeoutMs: 1000, signal: new AbortController().signal, schema: z.object({ value: z.string() }) };
+    const frame = (packet: object) => `data: ${JSON.stringify(packet)}\n\n`;
+    const responses = [
+        Response.json({ choices: [{ message: { content: '{"value":"ok"}' }, finish_reason: "stop" }], usage: { total_tokens: 20 } }),
+        new Response(frame({ usage: { total_tokens: 30 } })),
+        new Response(frame({ error: { message: "private provider payload" }, usage: { total_tokens: 40 } })),
+    ];
+    t.mock.method(globalThis, "fetch", async () => responses.shift()!);
+    const complete = await requestMotionJson(model, request);
+    assert.deepEqual(complete.value, { value: "ok" });
+    assert.equal(complete.streamed, false);
+    assert.equal(complete.usage?.total_tokens, 20);
+    await assert.rejects(requestMotionJson(model, request), { artifact: { reason: "empty_response", totalTokens: 30 } });
+    await assert.rejects(requestMotionJson(model, request), (error: unknown) => {
+        assert.ok(error instanceof MotionProviderError);
+        assert.deepEqual(error.artifact, { reason: "provider_error", totalTokens: 40 });
+        assert.doesNotMatch(error.message, /private provider payload/);
+        return true;
+    });
+});
+
 test("optional chat requires zero prices for the exact model and endpoint before sending a prompt", async (t) => {
     const model = "sample/model:free", providerSlug = "sample-provider";
     const [provider, gemini] = optionalMotionProviders({
