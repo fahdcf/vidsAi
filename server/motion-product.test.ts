@@ -44,6 +44,35 @@ test("optional motion work leaves budget for scene authoring, direct review and 
     assert.equal(usage.reduce((total, row) => total + row.attemptsWithReportedUsage, 0), 1);
 });
 
+test("motion provider cooldown survives a new reservation and admits work after reset", (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-01T00:00:00Z") });
+    const account = owner("motion-provider-cooldown");
+    const id = createMotionProject(account, { requestId: randomUUID(), name: "Provider cooldown", prompt: "Animate the title" });
+    const run = createMotionRun(id, account, { requestId: randomUUID(), brief: "Animate the title" });
+    changeMotionRunStatus(run, "working");
+    addMotionStep(run.id, { name: "director", lane: "provider" });
+    const step = startMotionStep(run, motionSteps(run.id)[0], 30_000)!;
+    const limits = motionLimits({});
+    const first = stepMotionBudget(run, step, limits);
+    const request = first.reserveModel(500, 1000, "limited-route");
+    request.backoff!(2000);
+    request.release();
+    addMotionStep(run.id, { name: "copy", lane: "provider" });
+    const nextStep = motionSteps(run.id).find(({ name }) => name === "copy")!;
+    const next = stepMotionBudget(run, startMotionStep(run, nextStep, 30_000)!, limits);
+    t.mock.timers.tick(1999);
+    assert.throws(() => next.reserveModel(500, 1000, "limited-route"), /waiting for its rate limit/);
+    next.reserveModel(500, 1000, "other-route").release(200);
+    t.mock.timers.tick(1);
+    next.reserveModel(500, 1000, "limited-route").release(300);
+    assert.deepEqual(motionRunUsage(run.id).map(({ stage, provider, accountedTokens }) =>
+        ({ stage, provider, accountedTokens })), [
+        { stage: "director", provider: "limited-route", accountedTokens: 1500 },
+        { stage: "copy", provider: "other-route", accountedTokens: 200 },
+        { stage: "copy", provider: "limited-route", accountedTokens: 300 },
+    ]);
+});
+
 test("motion creation is atomic, account-scoped, and idempotent during uploads", () => {
     const account = owner("setup-owner"), second = owner("setup-other");
     const input = { requestId: randomUUID(), name: "Reel", prompt: "Animate the title",

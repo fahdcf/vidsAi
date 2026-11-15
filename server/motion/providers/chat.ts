@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { MotionProvider } from "./inventory";
-import { freeProviderRouting } from "./free-policy";
+import { FreeProviderRateLimit, freeProviderRouting, providerRetryDelay } from "./free-policy";
 import { motionOutputJsonSchema } from "../output-schema";
 
 const models: Record<string, { images: boolean; thinking: boolean }> = {
@@ -57,13 +57,6 @@ export class MotionProviderError extends Error {
     ) {
         super(message);
     }
-}
-
-function retryDelay(value: string | null) {
-    if (!value) return 30_000;
-    const seconds = Number(value);
-    const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
-    return Number.isFinite(delay) ? Math.max(1000, delay) : 30_000;
 }
 
 const messageSchema = z.object({
@@ -138,8 +131,11 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
     if (adapter !== "nvidia" && (provider.endpoint !== fixedEndpoint ||
         !supported.includes("text") || (request.constrainedOutput && !supported.includes("structured")) ||
         (request.stream && !supported.includes("stream")))) throw new MotionProviderError("unsupported", "Optional provider capability is unavailable.");
-    const routing = await freeProviderRouting(provider, request.signal).catch(() => {
+    const routing = await freeProviderRouting(provider, request.signal).catch((error: unknown) => {
         request.signal.throwIfAborted();
+        if (error instanceof FreeProviderRateLimit) {
+            throw new MotionProviderError("http", error.message, 429, error.retryAfterMs);
+        }
         throw new MotionProviderError("unsupported", "An optional route needs verified zero-price model and endpoint access.");
     });
     const images = request.images ?? [];
@@ -198,7 +194,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
         if (!response.ok) {
             await response.body?.cancel();
             throw new MotionProviderError("http", `Motion provider returned HTTP ${response.status}.`, response.status,
-                response.status === 429 || response.headers.has("Retry-After") ? retryDelay(response.headers.get("Retry-After")) : undefined);
+                response.status === 429 || response.headers.has("Retry-After") ? providerRetryDelay(response.headers.get("Retry-After")) : undefined);
         }
         const packets = stream && response.body
             ? streamPackets(response.body, signal)

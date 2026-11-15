@@ -191,6 +191,7 @@ async function checkOptional(alias: string) {
             halted = failure?.status === 429;
             attempts.push({ capability, mode, maxTokens, latencyMs: Math.round(performance.now() - started),
                 outcome: failure?.code ?? "budget_or_timeout", status: failure?.status,
+                retryAfterMs: failure?.retryAfterMs,
                 artifactFailure: failure?.artifact?.reason, reportedTokens: tokens ?? null,
                 accountedTokens: reservation ? tokens ?? estimatedPromptTokens + maxTokens : 0 });
         } finally {

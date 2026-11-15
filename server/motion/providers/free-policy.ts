@@ -13,6 +13,17 @@ const zero = (value: number | string) => typeof value === "number" ? value === 0
 const freePrices = (pricing: z.infer<typeof prices>) => pricing.prompt !== undefined && pricing.completion !== undefined &&
     Object.values(pricing).every(zero);
 
+export function providerRetryDelay(value: string | null) {
+    if (!value) return 30_000;
+    const seconds = Number(value);
+    const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+    return Number.isFinite(delay) ? Math.max(1000, delay) : 30_000;
+}
+
+export class FreeProviderRateLimit extends Error {
+    constructor(readonly retryAfterMs: number) { super("Optional provider access is rate limited."); }
+}
+
 export async function freeProviderRouting(provider: MotionProvider, signal: AbortSignal) {
     if (!provider.adapter || provider.adapter === "nvidia") return {};
     const denied = () => new Error("An optional route needs verified zero-price model and endpoint access.");
@@ -28,7 +39,11 @@ export async function freeProviderRouting(provider: MotionProvider, signal: Abor
         const response = await fetch(endpoint, { signal: checkSignal, redirect: "error", headers: {
             Authorization: `Bearer ${provider.credential}`, Accept: "application/json",
         } });
-        if (!response.ok) throw denied();
+        if (!response.ok) {
+            await response.body?.cancel();
+            if (response.status === 429) throw new FreeProviderRateLimit(providerRetryDelay(response.headers.get("Retry-After")));
+            throw denied();
+        }
         const body = await response.text();
         if (body.length > 5_000_000) throw denied();
         return JSON.parse(body) as unknown;
@@ -43,8 +58,9 @@ export async function freeProviderRouting(provider: MotionProvider, signal: Abor
         const choices = endpointCatalog.parse(endpoints).data;
         const endpoint = choices.id === provider.model ? choices.endpoints.find(({ tag }) => tag === provider.providerSlug) : undefined;
         if (!listed || !endpoint || !freePrices(listed.pricing) || !freePrices(endpoint.pricing)) throw denied();
-    } catch {
+    } catch (error) {
         signal.throwIfAborted();
+        if (error instanceof FreeProviderRateLimit) throw error;
         throw denied();
     }
     return { provider: { only: [provider.providerSlug], allow_fallbacks: false,

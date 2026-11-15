@@ -208,8 +208,12 @@ test("optional chat requires zero prices for the exact model and endpoint before
         else process.env.MOTION_OPENROUTER_FREE_ALLOWLIST = current;
     });
     let completionPrice = "0.01";
+    let keyRateLimited = false;
     let sent = 0;
     t.mock.method(globalThis, "fetch", async (url: string | URL, init: RequestInit) => {
+        if (String(url).endsWith("/key") && keyRateLimited) {
+            return new Response(null, { status: 429, headers: { "Retry-After": "2" } });
+        }
         if (String(url).endsWith("/key")) return Response.json({ data: { is_free_tier: true } });
         if (String(url).endsWith("/endpoints")) return Response.json({ data: { id: model,
             endpoints: [{ tag: providerSlug, pricing: { prompt: "0", completion: completionPrice } }] } });
@@ -228,6 +232,10 @@ test("optional chat requires zero prices for the exact model and endpoint before
     await assert.rejects(requestMotionJson(gemini, request), /verified zero-price/);
     assert.equal(sent, 0);
     completionPrice = "0.000";
+    keyRateLimited = true;
+    await assert.rejects(requestMotionJson(provider, request), { code: "http", status: 429, retryAfterMs: 2000 });
+    assert.equal(sent, 0);
+    keyRateLimited = false;
     assert.equal((await requestMotionJson(provider, request)).value.value, "ok");
     assert.equal(sent, 1);
 });
