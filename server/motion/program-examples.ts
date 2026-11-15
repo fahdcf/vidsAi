@@ -47,7 +47,7 @@ export function motionProgramAuthoringGuide(intent?: string) {
         : motionProgramExamples;
     return {
         version: motionProgramVersion, module: motionSdkModule,
-        prompt: "Write one pure frame function. Use editable graph layers for ordinary layouts and keyframes. Use a TypeScript module for procedural commands. All coordinates are normalized, drawing order follows the returned array, and every command needs a stable unique ID. Read properties from input.properties and use only declared asset handles.",
+        prompt: "Write one pure frame function. Use editable graph layers for ordinary layouts and keyframes. Use a TypeScript module for procedural commands. All coordinates are normalized, drawing order follows the returned array, and every command needs a stable unique ID. Use input.frame for the scene-local frame and input.fps for frame rate. Values in input.properties have type string | number | boolean. Use String(value) for text and color arguments, and narrow numeric properties before arithmetic. Use only declared asset handles.",
         helpers: Object.values(motionSdkHelpers).map(({ signature }) => signature),
         resources: { version: motionCapabilityManifest.version, schemaVersion: motionCapabilityManifest.schemaVersion,
             capabilities: capabilities.map(({ id, skill }) => ({ id, skill })) },
