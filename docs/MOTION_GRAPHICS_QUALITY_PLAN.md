@@ -236,6 +236,8 @@ Run `npm run motion:benchmark-scenes` to validate all three scene fixtures local
 
 The reference and design cases produced no scored result in this batch. Keep existing model order until repeatable, comparable benchmarks support a change. The structured typography result supports testing text-first construction when the scene specification already covers layout, color, required copy and motion. The full-scene routes still need qualification before release.
 
+A focused follow-up ran Super VL on the structured product authoring fixture. The prompt supplied the measured layout and motion target. With low reasoning effort and a 4,096-token output limit, the first attempt scored 28/28 in 35.1 seconds and used 4,027 reported tokens. The three authored PNGs matched the expected frame hashes and the copy remained editable. Local evidence is in `../runtime/motion-verification/scene-model-evaluation-1Hx0Wf/`. The full reference-led development trial still missed the required product shape and motion.
+
 ### Free API candidates checked on 10 November 2026
 
 These are candidates for qualification, and their availability on this user's accounts has not been tested in this planning turn.
