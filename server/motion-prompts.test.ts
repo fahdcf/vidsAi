@@ -5,6 +5,7 @@ import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, mot
 import { buildMotionPrompt } from "./motion/prompts";
 import { MotionProviderError, requestMotionJson } from "./motion/providers/chat";
 import { optionalMotionProviders } from "./motion/providers/inventory";
+import { motionOutputJsonSchema, motionPromptJsonSchema } from "./motion/output-schema";
 import { validateMotionResources } from "./motion/resource-check";
 import { motionProgramAuthoringGuide } from "./motion/program-examples";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
@@ -72,6 +73,17 @@ test("the packaged prompts, skills, schemas and tools are available", () => {
     assert.equal(guide.examples[0].id, "ui-button");
     assert.equal(guide.adapters, undefined);
     assert.ok(motionProgramAuthoringGuide("3D camera").adapters?.three);
+});
+
+test("motion graph prompt schemas reuse definitions while preserving the existing provider contract", () => {
+    const native = JSON.stringify(motionOutputJsonSchema(graphEngineerSchema));
+    const prompt = JSON.stringify(motionPromptJsonSchema(graphEngineerSchema));
+    assert.ok(prompt.length < native.length * 0.55);
+    const definitions = JSON.parse(prompt).$defs;
+    for (const reference of prompt.matchAll(/"\$ref":"#\/\$defs\/([^"]+)"/g)) {
+        assert.ok(Object.hasOwn(definitions, reference[1]), reference[0]);
+    }
+    assert.equal(motionPromptJsonSchema(graphEngineerSchema), motionPromptJsonSchema(graphEngineerSchema));
 });
 
 test("untrusted attachment text stays in the context and cannot enable a tool", () => {

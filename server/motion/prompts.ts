@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { z } from "zod";
 import { motionRendererVersion } from "../../shared/motion/registry";
 import { motionToolManifest, type ToolRole } from "./tools";
-import { motionOutputJsonSchema } from "./output-schema";
+import { motionPromptJsonSchema } from "./output-schema";
 
 const skillManifest = z.object({
     version: z.literal(2),
@@ -76,7 +76,7 @@ export function buildMotionPrompt(role: MotionPromptRole, context: z.input<typeo
         ...(toolsEnabled ? ["When additional evidence is necessary, return the toolRequest form in the output schema instead of the final artifact. Use only the listed request forms. Results from previous calls are in toolResults. Continue to a final artifact when you have enough evidence."] : []),
         ...(checked.projectMemory ? ["Use projectMemory to preserve decisions already recorded for this revision. Check the current stage evidence for any change."] : []),
     ].join("\n\n");
-    const prompt = JSON.stringify({ context: checked, tools, output: motionOutputJsonSchema(output) });
+    const prompt = JSON.stringify({ context: checked, tools, output: motionPromptJsonSchema(output) });
     if (prompt.length > 125_000 || instruction.length > 36_000) throw new Error("The motion prompt exceeds its context budget.");
     return {
         instruction, prompt,
