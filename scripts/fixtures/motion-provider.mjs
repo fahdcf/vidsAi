@@ -149,11 +149,12 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     const sceneId = artifact.target.id;
                     if (!toolResults.length) {
                         value = { toolRequest: { name: "write_module", args: { sceneId, expectedRevision: revision, program: {
-                            version: 1, assets: [], properties: [{ id: "copy", label: "Title", kind: "text", default: artifact.approvedCopy }],
+                            version: 1, assets: [], properties: [{ id: "copy", label: "Title", kind: "text", default: artifact.approvedCopy },
+                                { id: "accent", label: "Pulse accent", kind: "color", default: "#19db83" }],
                             source: 'import type { MotionFrameInput, MotionSceneSdk } from "@vidsai/motion-sdk";\n' +
                                 'export function frame(input: MotionFrameInput, sdk: MotionSceneSdk) {\n' +
                                 'return [sdk.text("caption", String(input.properties.copy), 0.5, 0.7, 0.06, 0.8, "#ffffff"), ' +
-                                'sdk.rect("pulse", 0.5, 0.3, "invalid", 0.08, "#19db83")];\n}',
+                                'sdk.rect("pulse", 0.5, 0.3, "invalid", 0.08, String(input.properties.accent))];\n}',
                         } } } };
                     } else if (toolResults.length === 1) {
                         assert.ok(toolResults[0].result.diagnostics.some(({ code }) => code === "TS2345"));

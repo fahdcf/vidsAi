@@ -6,9 +6,9 @@ import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
 
-const [output, abstract, promo] = process.argv.slice(2);
-if (!output || !abstract || !promo || process.argv.length !== 5) {
-    throw new Error("Supply a new output directory, the original abstract reel and the dark UI promo.");
+const [output, abstract, promo, option] = process.argv.slice(2);
+if (!output || !abstract || !promo || (option && option !== "--bounded-three") || process.argv.length > 6) {
+    throw new Error("Supply a new output directory, the original abstract reel and the dark UI promo. Add --bounded-three for the 3D case.");
 }
 const toolchain = JSON.parse(await readFile(new URL("../motion-toolchain.json", import.meta.url)));
 const ffmpeg = process.env.MOTION_FFMPEG || path.resolve(import.meta.dirname, "../../runtime", toolchain.ffmpeg.runtimePath);
@@ -18,6 +18,7 @@ const fixtures = [
     { id: "mixed-type", group: "development", width: 360, height: 640 },
     { id: "data-chart", group: "held-out", width: 640, height: 360 },
     { id: "organic-orbit", group: "held-out", width: 640, height: 360, audio: true },
+    ...(option === "--bounded-three" ? [{ id: "depth-cube", group: "held-out", width: 640, height: 360, audio: false }] : []),
 ];
 const fps = 30;
 const seconds = 5;
@@ -93,6 +94,30 @@ try {
                                 text(`W${index + 1}`, x + 17, 311, "16px Arial", "#eff7ed");
                             });
                             text("162 L", 496, 133, "bold 26px Arial", "#c3ff90", progress(2.2, 0.5));
+                        } else if (id === "depth-cube") {
+                            fill("#161928", 0, 0, w, h);
+                            const turn = -0.35 + t * 1.16;
+                            const vertices = [[-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+                                [-1, -1, 1], [1, -1, 1], [1, 1, 1], [-1, 1, 1]].map(([x, y, z]) => {
+                                const rx = x * Math.cos(turn) + z * Math.sin(turn);
+                                const rz = -x * Math.sin(turn) + z * Math.cos(turn);
+                                const py = y * Math.cos(0.37) - rz * Math.sin(0.37);
+                                const pz = y * Math.sin(0.37) + rz * Math.cos(0.37);
+                                const scale = 315 / (4.5 + pz);
+                                return [320 + rx * scale, 146 + py * scale, pz];
+                            });
+                            const faces = [
+                                { ids: [0, 1, 2, 3], paint: "#f79967" }, { ids: [4, 5, 6, 7], paint: "#703eaa" },
+                                { ids: [0, 4, 7, 3], paint: "#8354b5" }, { ids: [1, 5, 6, 2], paint: "#cb654f" },
+                                { ids: [0, 1, 5, 4], paint: "#ffd394" }, { ids: [3, 2, 6, 7], paint: "#ae73e1" },
+                            ].map((face) => ({ ...face, depth: face.ids.reduce((sum, index) => sum + vertices[index][2], 0) }))
+                                .sort((a, b) => b.depth - a.depth);
+                            for (const { ids, paint } of faces) {
+                                ctx.fillStyle = paint; ctx.beginPath();
+                                for (const index of ids) ctx.lineTo(...vertices[index].slice(0, 2));
+                                ctx.closePath(); ctx.fill();
+                            }
+                            text("TURN IN DEPTH", 34, 316, "bold 25px Arial", "#f7e6ff", progress(1.1, 0.6));
                         } else {
                             fill("#281c3c", 0, 0, w, h);
                             const beat = Math.exp(-7 * (t % 1.25));

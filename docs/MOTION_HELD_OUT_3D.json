@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "id": "depth-cube",
+  "sha256": "7d169eaf4488a046bf11990f393056bc9f12cbb54dca1e4626bf0054978db3c5",
+  "format": "16:9",
+  "seconds": 5,
+  "audio": "silent",
+  "brief": "Recreate the five-second landscape reference using an editable bounded 3D scene and a separate editable title. Reproduce the purple and warm orange cube's continuous rotation, slight tilt, perspective, centered placement, dark backdrop, and the exact title TURN IN DEPTH as it fades in. Keep the film silent.",
+  "mustRead": ["TURN IN DEPTH"],
+  "landmarks": [
+    {"seconds": 0.3, "description": "The lit face moves toward the front"},
+    {"seconds": 1.7, "description": "Title fully readable while the cube continues turning"},
+    {"seconds": 4.5, "description": "The center and scale remain stable at a different turning angle"}
+  ]
+}

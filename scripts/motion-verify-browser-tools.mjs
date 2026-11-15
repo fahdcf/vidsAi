@@ -7,8 +7,8 @@ import { chromium } from "playwright";
 import { createServer } from "vite";
 import { mockMotionProviders } from "./fixtures/motion-provider.mjs";
 
-function decodedVideoPixel(page, url, x, y) {
-    return page.evaluate(async ({ url, x, y }) => {
+function decodedVideoPixel(page, url, x, y, seconds = 0) {
+    return page.evaluate(async ({ url, x, y, seconds }) => {
         const video = document.createElement("video");
         video.muted = true;
         video.playsInline = true;
@@ -17,6 +17,11 @@ function decodedVideoPixel(page, url, x, y) {
             const loaded = new Promise((resolve, reject) => { video.onloadeddata = resolve; video.onerror = reject; });
             video.src = url;
             await loaded;
+            if (seconds) {
+                const sought = new Promise((resolve, reject) => { video.onseeked = resolve; video.onerror = reject; });
+                video.currentTime = seconds;
+                await sought;
+            }
             const decoded = new Promise((resolve) => video.requestVideoFrameCallback(resolve));
             await video.play();
             await decoded;
@@ -26,7 +31,7 @@ function decodedVideoPixel(page, url, x, y) {
             ctx.drawImage(video, 0, 0);
             return [...ctx.getImageData(Math.floor(canvas.width * x), Math.floor(canvas.height * y), 1, 1).data];
         } finally { video.remove(); }
-    }, { url, x, y });
+    }, { url, x, y, seconds });
 }
 
 const source = process.argv[2];
@@ -947,6 +952,31 @@ try {
         assert.equal(exported.state, "succeeded");
         assert.ok(exported.size > 1_000);
         console.log("Editor layer changes, sibling reorder and undo passed. The exported MP4 used its immutable layer snapshot.");
+    }
+    if (workspaceModule && process.argv.includes("--workspace-export")) {
+        const programBefore = scenes[1].params.program;
+        await graphPage.goto(`${target}/projects/${graphProject}/editor`);
+        await graphPage.getByRole("button", { name: "Select motion scene 2", exact: true }).click();
+        const tools = graphPage.getByRole("button", { name: "Tools", exact: true });
+        if (await tools.getAttribute("aria-pressed") === "false") await tools.click();
+        const procedural = graphPage.getByRole("group", { name: "Procedural controls" });
+        await procedural.getByLabel("Pulse accent", { exact: true }).fill("#1155ff");
+        const [saved] = await Promise.all([
+            graphPage.waitForResponse((response) => response.request().method() === "POST" && response.url().endsWith("/commands")),
+            procedural.getByRole("button", { name: "Save procedural controls", exact: true }).click(),
+        ]);
+        assert.ok(saved.ok(), await saved.text());
+        await graphPage.reload();
+        const snapshot = document(project(graphProject));
+        const current = snapshot.tracks.motion_graphics[1];
+        assert.equal(current.params.program.buildHash, programBefore.buildHash);
+        assert.equal(current.params.programValues.accent, "#1155ff");
+        await graphPage.getByRole("button", { name: "Export video", exact: true }).click();
+        await graphPage.getByText("Export: done", { exact: true }).waitFor({ timeout: 100_000 });
+        const mp4 = await graphPage.getByRole("link", { name: "Download MP4", exact: true }).getAttribute("href");
+        const pixel = await decodedVideoPixel(graphPage, mp4, 0.5, 0.3, (current.start_frame + 15) / snapshot.fps);
+        assert.ok(pixel[0] < 60 && pixel[2] > 205, JSON.stringify(pixel));
+        console.log("The specialist-authored module preserved its build and editable property through client export and reopen.");
     }
     if (process.argv.includes("--scene-program")) {
         assert.ok(componentCompatibility, "Use --component-compatibility with --scene-program.");
