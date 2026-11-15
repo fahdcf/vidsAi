@@ -106,7 +106,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 }
                 if (artifact.task?.startsWith("Compare each static layout")) {
                     assert.ok(artifact.layout.length && artifact.contactSheetFrames.length);
-                    assert.equal(artifact.contactSheetFrames.length, graphic.length);
+                    assert.equal(artifact.contactSheetFrames.length, Math.min(4, graphic.length));
                     if (agentTools && !toolResults.length) {
                         const frame = artifact.referenceFrames[0];
                         value = { toolRequest: { name: "sample_reference", args: { sceneId: frame.sceneId, time: frame.time } } };
@@ -237,7 +237,9 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 assert.ok(artifact.referenceImages.every(({ evidence, imageNumber, sceneId, pairedGenerated }) =>
                     evidence === `reference:${imageNumber}` && pairedGenerated.every((id) =>
                         artifact.scenes.find((scene) => scene.id === sceneId).samples.some((sample) => sample.evidence === id))));
-                if (!artifact.focused) assert.ok(artifact.referenceImages.length);
+                if (!artifact.focused && artifact.generatedSheets.length + artifact.previousSheets.length < 8) {
+                    assert.ok(artifact.referenceImages.length);
+                }
                 assert.ok(artifact.scenes.some(({ samples }) => samples.length));
                 if ((!agentTools && rejectCritic) || (rejectCriticAfterRepair && stages.includes("repair"))) { value = null; break; }
                 {
