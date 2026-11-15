@@ -1,5 +1,34 @@
 # Motion graphics completion report
 
+## 15 November 2026 evaluation checkpoint
+
+The original benchmark below remains the record of the recovered abstract reel. The new [held-out protocol](./MOTION_HELD_OUT_EVALUATION.json) fixes the references, briefs, copy, landmarks, budgets and visual acceptance thresholds before running the normal Create workflow. No finished scene document was imported.
+
+| Browser check | Result |
+| --- | --- |
+| Windows Chrome motion workflow | Passed at 720p/30 and 1080p/30 with H.264/AAC, immutable revision exports, cancellation, reload recovery and retry |
+| Windows Edge motion workflow | Passed at 1080p/60 with the same export and recovery checks |
+| Existing footage workflow | Chrome and Edge passed creation, review, caption changes, editing and local export at desktop and compact widths |
+| Specialist-authored module | Chrome compiled the scene through the product tools after a diagnostic and source patch. The edited color survived reopen and matched decoded MP4 pixels |
+| Bounded 3D | Chrome with software WebGL2 passed primitive and mesh rendering, owned texture validation, 2D preview fallback and decoded MP4 checks |
+
+Browser tests used mocked model responses for the technical workflows. Each export completed with zero requests to a server render endpoint. Other device and browser profiles remain unqualified for this checkpoint.
+
+### Frozen live baseline
+
+The baseline ran from `bbbad79` with the standard 160,000-token allowance. Each attempt started from a new project, the frozen brief and one reference clip. The model router could retry providers within the attempt. No user-assisted refinement ran.
+
+| Case | Attempt | Time | Provider attempts | Accounted tokens | Result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| Data chart | 1 | 287.7 s | 11 | 140,115 | Budget exhausted before assembly |
+| Data chart | 2 | 312.3 s | 11 | 144,575 | Budget exhausted before assembly |
+| Organic orbit | 1 | 269.5 s | 11 | 148,861 | Budget exhausted before assembly |
+| Organic orbit | 2 | 286.4 s | 11 | 142,859 | Budget exhausted before assembly |
+
+The ledger blocks the next request when its reservation would exceed the cap, so the accounted totals can stop below 160,000. Zero first drafts reached assembly, and there were no exports or human visual scores for this baseline. A later change makes scene authoring use marked, editable approximations when the model cannot finish and planning has succeeded. Another change reduces large graph prompt schemas. Those changes passed the relevant browser fixtures and are outside the frozen baseline measurement. The production budget and visual acceptance gates remain open. Human comparison also needs outputs from the requested frontier agents on the same briefs and references.
+
+## Original abstract reference benchmark
+
 Verified on Windows on 9 November 2026 against the acceptance brief and quality rubric in this directory. The release checkpoint builds on `68aa79c` on `codex/browser-rendering`. The Git revision containing this report identifies the verified implementation.
 
 ## Live generation and review

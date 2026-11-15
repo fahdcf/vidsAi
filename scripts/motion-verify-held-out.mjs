@@ -58,6 +58,9 @@ const jobs = startMotionJobs();
 const browser = await chromium.launch({ channel: process.env.MOTION_TEST_BROWSER || "chrome", headless: true });
 const results = [];
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const gitRevision = spawnSync("git", ["rev-parse", "HEAD"], { encoding: "utf8", windowsHide: true }).stdout?.trim() || null;
+const writeReport = () => writeFile(path.join(evidence, "results.json"),
+    JSON.stringify({ gitRevision, protocolSha256, limits, attempts: results }, null, 2));
 console.log(`Evidence directory ${evidence}`);
 try {
     const page = await browser.newPage({ viewport: { width: 1440, height: 980 }, acceptDownloads: true });
@@ -87,6 +90,8 @@ try {
             await page.waitForURL(/\/projects\/\d+\/motion\?run=/);
             runId = new URL(page.url()).searchParams.get("run");
             record.runId = runId;
+            record.status = "running";
+            await writeReport();
             console.log(`${label} started ${runId}`);
             const deadline = Date.now() + limits.activeMs + 60_000;
             let current = motionRun(runId);
@@ -99,10 +104,14 @@ try {
             record.error = current.error;
             record.generationMs = Date.now() - started;
             const stages = motionSteps(runId);
+            const diagnostics = db.prepare("SELECT data FROM motion_events WHERE run_id=? AND type='provider_progress' ORDER BY id")
+                .all(runId).map(({ data }) => JSON.parse(data));
             const draft = motionRunDraft(current);
             record.quality = motionRunQuality(current, stages);
             record.usage = motionRunUsage(runId);
             record.retriedStages = stages.filter(({ attempts }) => attempts > 1).map(({ name, attempts }) => ({ name, attempts }));
+            record.rejectedProviderAttempts = diagnostics.filter(({ state }) => state === "rejected")
+                .map(({ role, step, model, outcome, artifactFailure, elapsedMs }) => ({ role, step, model, outcome, artifactFailure, elapsedMs }));
             record.automaticFirstDraft = stages.find(({ name, status }) => name === "assemble" && status === "done")?.result_id ?? null;
             record.firstDraftReview = stages.find(({ name, status }) => name === "critique:1" && status === "done")?.result_id ?? null;
             for (const [artifactId, suffix] of [[record.automaticFirstDraft, "first-draft"], [record.firstDraftReview, "first-review"]]) {
@@ -157,7 +166,7 @@ try {
             }
         } finally {
             console.log(JSON.stringify(record));
-            await writeFile(path.join(evidence, "results.json"), JSON.stringify({ protocolSha256, limits, attempts: results }, null, 2));
+            await writeReport();
         }
     }
 } finally {
