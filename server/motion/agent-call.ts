@@ -8,6 +8,8 @@ import { MotionProviderError, motionReasoningEffort, motionRoleMode, requestMoti
 import type { MotionRoute } from "./providers/inventory";
 import { qualifiedAuthoringProviders, qualifiedMotionProviders } from "./providers/qualified";
 
+const toolOutputs = new WeakMap<z.ZodType, Map<MotionPromptRole, z.ZodType>>();
+
 export type MotionAgentContext = {
     brief: string;
     document: Document;
@@ -52,7 +54,16 @@ export async function runMotionAgent<T>(
     const history = context.tools?.history(role, options.sceneId) ?? [];
     const requests = context.tools?.available && history.length < agentToolStageLimit ? agentToolSchemas(role) : [];
     const requestSchema = requests.length ? z.object({ toolRequest: z.union(requests) }).strict() : null;
-    const output = requestSchema ? z.union([schema, requestSchema]) : schema;
+    let output: z.ZodType = schema;
+    if (requestSchema) {
+        let roles = toolOutputs.get(schema);
+        if (!roles) {
+            roles = new Map();
+            toolOutputs.set(schema, roles);
+        }
+        output = roles.get(role) ?? z.union([schema, requestSchema]);
+        roles.set(role, output);
+    }
     const originalImages = options.images ?? [];
     const toolImages = history.flatMap(({ images }) => images ?? []).slice(0, Math.max(0, Math.min(2, 8 - originalImages.length)));
     const images = [...originalImages, ...toolImages];

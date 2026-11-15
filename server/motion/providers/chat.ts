@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { MotionProvider } from "./inventory";
 import { freeProviderRouting } from "./free-policy";
+import { motionOutputJsonSchema } from "../output-schema";
 
 const models: Record<string, { images: boolean; thinking: boolean }> = {
     "nvidia/nemotron-3.5-super-vl-120b-a12b": { images: true, thinking: true },
@@ -190,7 +191,7 @@ export async function requestMotionJson<T>(provider: MotionProvider, request: Mo
                 ...((provider.model === superVl || adapter !== "nvidia") && stream ? { stream_options: { include_usage: true } } : {}),
                 ...((provider.model === superVl || supported.includes("structured")) && request.constrainedOutput ? { response_format: { type: "json_schema",
                     json_schema: { name: "motion_artifact", strict: true,
-                        schema: z.toJSONSchema(request.schema, { io: "input", unrepresentable: "any" }) } } } : {}),
+                        schema: motionOutputJsonSchema(request.schema) } } } : {}),
             }),
         });
         if (!response.ok) {
