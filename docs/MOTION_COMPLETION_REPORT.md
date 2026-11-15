@@ -38,6 +38,14 @@ At `0c989ff`, two new projects used the separately frozen rotating cube referenc
 
 Local results and full-size landmark frames are in `../runtime/motion-verification/held-out-tFPW0H/`. The original four-attempt baseline is in `../runtime/motion-verification/held-out-6kodnS/`.
 
+### Default-budget development trial
+
+At `7d35972`, Chrome ran the frozen five-second product reference from the Create page with the 160,000-token default. One earlier execution stopped during reference analysis when its process ended. A fresh project assembled five editable approximation scenes in 296.9 seconds. After explicitly opening the saved draft, Chrome exported 150 silent H.264 frames and sent zero server render requests.
+
+The run made 11 provider requests. Of the 158,000 accounted tokens, 28,209 came from usage reports on four calls and 129,791 were retained reservations for seven calls without usage. Four requests timed out and three scene-authoring responses failed JSON validation. A direct visual critic request was admitted and timed out. The ledger then had 2,000 tokens left for further work.
+
+Inspection at 1.2, 2 and 3.25 seconds found the required copy split across successive title cards. The editable document contained all four strings. All three sampled outputs omitted the sliding bottle and the persistent composition, so the draft failed visual acceptance. This development result was excluded from the held-out pass rates. The export, paired frames and usage breakdown are in `../runtime/motion-verification/development-motion-9BCLBB/`.
+
 ## Original abstract reference benchmark
 
 Verified on Windows on 9 November 2026 against the acceptance brief and quality rubric in this directory. The release checkpoint builds on `68aa79c` on `codex/browser-rendering`. The Git revision containing this report identifies the verified implementation.
