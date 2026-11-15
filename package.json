@@ -19,6 +19,7 @@
     "motion:inventory": "node --import tsx scripts/motion-inventory.ts",
     "motion:check-models": "node --import tsx scripts/motion-check-models.ts",
     "motion:benchmark-models": "node --import tsx scripts/motion-benchmark-models.ts",
+    "motion:benchmark-scenes": "node --import tsx scripts/motion-benchmark-scenes.ts",
     "motion:verify-render": "node scripts/motion-verify-render.mjs",
     "motion:test": "node scripts/motion-test.mjs",
     "motion:check-resources": "node --import tsx scripts/motion-check-resources.ts",
