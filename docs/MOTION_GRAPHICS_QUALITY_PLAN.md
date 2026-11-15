@@ -228,6 +228,14 @@ The first live synthetic evaluation used only locally drawn frames and NVIDIA Su
 
 Run `npm run motion:benchmark-scenes` to validate all three scene fixtures locally. Add `-- --live --route=super_vl` to measure the model on the four roles. Optional `--role`, `--family` and `--mode` filters let you run the same fixed cases on text-only or vision routes. The benchmark writes individual attempts, model settings, source frame hashes and any rendered output frames to the local runtime directory. Automated checks use the renderer's recorded bounds and copy and do not supply a human design score.
 
+| Scene benchmark route | Scope | Results |
+| --- | --- | --- |
+| Super VL | All four roles and three scene families | 2 scored results, 17 failed provider attempts and 3 reservations skipped by the benchmark budget. Typography authoring scored 28/28 at 28.3 seconds, and typography critique scored 2/2 at 6.6 seconds on its second attempt. The ledger accounted for 155,021 tokens. |
+| Ultra | Structured authoring for all three families | 6 provider attempts timed out, with 33,616 accounted tokens and no scored output. |
+| Mistral Large 4 | Reference reading with thinking off for all three families | 6 provider attempts failed in transport or timed out, with 56,954 accounted tokens and no scored output. |
+
+The reference and design cases produced no scored result in this batch. Keep existing model order until repeatable, comparable benchmarks support a change. The structured typography result supports testing text-first construction when the scene specification already covers layout, color, required copy and motion. The full-scene routes still need qualification before release.
+
 ### Free API candidates checked on 10 November 2026
 
 These are candidates for qualification, and their availability on this user's accounts has not been tested in this planning turn.
