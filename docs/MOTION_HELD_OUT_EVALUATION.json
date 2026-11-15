@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "protocol": {
+    "runsPerCase": 2,
+    "borderlineRuns": 3,
+    "maximumLandmarkErrorSeconds": 0.2,
+    "maximumLayoutErrorRatio": 0.05,
+    "minimumHumanScore": 4,
+    "scoreScale": 5,
+    "criteria": ["typography", "composition", "motion", "continuity", "sound", "briefFidelity", "editability"],
+    "frontierComparison": {
+      "maximumMeanScoreDeficit": 0.5,
+      "minimumScorePerCategory": 4,
+      "blindOrder": true,
+      "sameBriefAndReference": true
+    }
+  },
+  "cases": [
+    {
+      "id": "data-chart",
+      "sha256": "14c1aa62778073b6d299ab7faa865a3a7a4d55128e35e038efd59c5fb6e3efe0",
+      "format": "16:9",
+      "seconds": 5,
+      "audio": "silent",
+      "brief": "Match the five-second landscape reference. Recreate the title Water saved, the subtitle Litres per week, Week labels W1, W2, W3 and W4, the four rising chart bars, and the 162 L callout. Match the source color hierarchy, bar timing and final hold. Make the labels and chart editable. Keep the film silent.",
+      "mustRead": ["Water saved", "Litres per week", "W1", "W2", "W3", "W4", "162 L"],
+      "landmarks": [
+        {"seconds": 0.65, "description": "First bar starts rising"},
+        {"seconds": 1.55, "description": "Fourth bar starts rising"},
+        {"seconds": 2.7, "description": "162 L callout fully readable"}
+      ]
+    },
+    {
+      "id": "organic-orbit",
+      "sha256": "48f6b16802135621b98d6c9d7ffe35d089878ecc43259f48f917db78040a5dfe",
+      "format": "16:9",
+      "seconds": 5,
+      "audio": "reference",
+      "brief": "Recreate the five-second landscape reference as editable procedural motion. Preserve the plum canvas, rotating warm and purple elliptical orbits with three orbiting points, and the expanding cream center. The center pulses with the source audio. Keep the audio from the reference and reveal the serif text Orbit in bloom at the same time as the source. Hold the final text legibly.",
+      "mustRead": ["Orbit in bloom"],
+      "landmarks": [
+        {"seconds": 1.25, "description": "Cream center reaches peak at the second beat"},
+        {"seconds": 2.5, "description": "Cream center peaks as the title starts to fade in"},
+        {"seconds": 3.75, "description": "Cream center peaks with the title readable"}
+      ]
+    }
+  ]
+}
