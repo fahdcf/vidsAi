@@ -8,10 +8,38 @@ import {
     applySavedMotionDraft, changeMotionRunStatus, finishMotionStep, startMotionStep,
 } from "./motion/orchestrator";
 import { createMotionProject } from "./motion/projects";
+import { motionLimits } from "./motion/budget";
+import { motionRunUsage, stepMotionBudget } from "./motion/ledger";
 import { pendingMotionSetup, setupMotionProject } from "./motion/setup";
 import { addMotionStep, createMotionRun, motionSteps } from "./motion/store";
 
 const owner = (name: string) => Number(insert("users", { name, email: name + "@fixture.test", password: "hash" }));
+
+test("optional motion work leaves budget for scene authoring, direct review and repair", () => {
+    const account = owner("motion-budget-owner");
+    const id = createMotionProject(account, { requestId: randomUUID(), name: "Budget check", prompt: "Animate two scenes" });
+    const run = createMotionRun(id, account, { requestId: randomUUID(), brief: "Animate two scenes" });
+    const limits = motionLimits({});
+    changeMotionRunStatus(run, "working");
+    for (const name of ["director", "layout_review", "engineer:opening", "engineer:closing", "critique:1", "repair:1:opening"]) {
+        addMotionStep(run.id, { name, lane: "provider" });
+    }
+    const stage = (name: string) => {
+        const step = motionSteps(run.id).find((item) => item.name === name)!;
+        return stepMotionBudget(run, startMotionStep(run, step, 30_000)!, limits);
+    };
+    stage("director").reserveModel(60_000, 10_000, "provider").release();
+    assert.throws(() => stage("layout_review").reserveModel(40_000, 5_000, "provider"), /preserving budget for scene authoring/);
+    stage("engineer:opening").reserveModel(20_000, 5_000, "provider").release();
+    stage("engineer:closing").reserveModel(20_000, 5_000, "provider").release();
+    const review = stage("critique:1");
+    assert.throws(() => review.reserveModel(13_000, 7_000, "provider", "supporting"), /preserving budget for direct visual review/);
+    review.reserveModel(16_000, 6_000, "provider").release();
+    stage("repair:1:opening").reserveModel(8_000, 4_000, "provider").release();
+    const usage = motionRunUsage(run.id);
+    assert.deepEqual(usage.map(({ stage }) => stage), ["director", "engineer:opening", "engineer:closing", "critique:1", "repair:1:opening"]);
+    assert.equal(usage.reduce((total, row) => total + row.accountedTokens, 0), 154_000);
+});
 
 test("motion creation is atomic, account-scoped, and idempotent during uploads", () => {
     const account = owner("setup-owner"), second = owner("setup-other");

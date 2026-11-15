@@ -37,7 +37,7 @@ export function motionRunUsage(runId: string) {
 export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: MotionLimits): MotionModelBudget {
     let slot = 0;
     return {
-        reserveModel(prompt, completion, provider) {
+        reserveModel(prompt, completion, provider, priority) {
             if (!provider || !step.lease_token || ![prompt, completion].every((value) => Number.isSafeInteger(value) && value > 0)) {
                 throw new MotionBudgetError("Invalid motion model reservation.");
             }
@@ -58,12 +58,23 @@ export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: Motio
                 if (runUsage.attempts >= limits.modelAttempts || runUsage.tokens + tokens > limits.totalTokens) {
                     throw new MotionBudgetError("Motion run model budget exhausted.");
                 }
-                if (step.name.startsWith("engineer:") && json<string[]>(step.dependencies, []).some((name) => name.startsWith("agent_tool:"))) {
-                    const reserveAttempts = Math.min(4, Math.floor(limits.modelAttempts / 5));
-                    const reserveTokens = Math.min(24_000, Math.floor(limits.totalTokens / 5));
-                    if (runUsage.attempts + reserveAttempts >= limits.modelAttempts ||
-                        runUsage.tokens + tokens + reserveTokens > limits.totalTokens) {
-                        throw new MotionBudgetError("The motion run reserved its remaining model budget for visual review and repair.", "provider");
+                const optionalLayout = step.name === "layout_review" || step.name.startsWith("styleframe_select:");
+                const authoring = step.name.startsWith("engineer:");
+                const supportingCritique = priority === "supporting" && step.name.startsWith("critique:");
+                if (optionalLayout || authoring || supportingCritique) {
+                    const plannedScenes = optionalLayout ? db.prepare(`
+                        SELECT COUNT(*) AS count FROM motion_steps
+                        WHERE run_id=? AND name GLOB 'engineer:*' AND status IN ('pending','running')
+                    `).get(run.id) as { count: number } : { count: 0 };
+                    const protectedAttempts = Math.min(limits.modelAttempts - 1,
+                        Math.min(4, Math.floor(limits.modelAttempts / 5)) + plannedScenes.count);
+                    const protectedTokens = Math.min(Math.floor(limits.totalTokens * 0.65),
+                        Math.min(24_000, Math.floor(limits.totalTokens / 5)) + 14_000 * plannedScenes.count);
+                    if (runUsage.attempts + protectedAttempts >= limits.modelAttempts ||
+                        runUsage.tokens + tokens + protectedTokens > limits.totalTokens) {
+                        throw new MotionBudgetError(optionalLayout
+                            ? "The run is preserving budget for scene authoring and visual review."
+                            : "The run is preserving budget for direct visual review and repair.", authoring ? "provider" : "run");
                     }
                 }
                 if (db.prepare("SELECT 1 FROM motion_provider_cooldowns WHERE provider=? AND available_at>?").get(provider, now)) {

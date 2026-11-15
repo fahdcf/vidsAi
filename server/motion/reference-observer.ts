@@ -27,7 +27,7 @@ export async function observeReferenceSheet(
     for (const provider of providers) {
         signal.throwIfAborted();
         let attempt: ModelReservation;
-        try { attempt = budget.reserveModel(1024 + sheets.length * 2300, maxTokens, provider.alias); } catch (error) {
+        try { attempt = budget.reserveModel(1024 + sheets.length * 2300, maxTokens, provider.alias, preview ? "supporting" : undefined); } catch (error) {
             if (!(error instanceof MotionBudgetError) || error.scope !== "provider") throw error;
             providerBudget = error;
             continue;

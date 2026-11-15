@@ -331,7 +331,9 @@ export async function reviewMotionLayout(context: MotionAgentContext, storyboard
     } catch (error) {
         context.signal.throwIfAborted();
         if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
-        return { value: { suggestions: [] }, summary: "Layout review could not finish. Motion authoring uses the measured layout evidence." };
+        return { value: { suggestions: [] }, summary: error instanceof MotionBudgetError
+            ? "Motion authoring will use the saved layout measurements so the run can preserve its remaining model budget."
+            : "Layout review could not finish. Motion authoring uses the measured layout evidence." };
     }
 }
 

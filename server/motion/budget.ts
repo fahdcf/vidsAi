@@ -68,7 +68,8 @@ export class MotionRunBudget {
         if (this.remainingMs() === 0) throw new MotionBudgetError("Motion active-work deadline reached.");
     }
 
-    reserveModel(estimatedPromptTokens: number, maxCompletionTokens: number, _provider?: string): ModelReservation {
+    reserveModel(estimatedPromptTokens: number, maxCompletionTokens: number, _provider?: string,
+        _priority?: "supporting"): ModelReservation {
         this.requireActive();
         for (const count of [estimatedPromptTokens, maxCompletionTokens]) {
             if (!Number.isSafeInteger(count) || count <= 0) throw new MotionBudgetError("Invalid motion token reservation.");
