@@ -21,7 +21,7 @@ test("optional motion work leaves budget for scene authoring, direct review and 
     const run = createMotionRun(id, account, { requestId: randomUUID(), brief: "Animate two scenes" });
     const limits = motionLimits({});
     changeMotionRunStatus(run, "working");
-    for (const name of ["director", "layout_review", "engineer:opening", "engineer:closing", "critique:1", "repair:1:opening"]) {
+    for (const name of ["director", "design", "layout_review", "engineer:opening", "engineer:closing", "critique:1", "repair:1:opening"]) {
         addMotionStep(run.id, { name, lane: "provider" });
     }
     const stage = (name: string) => {
@@ -29,6 +29,7 @@ test("optional motion work leaves budget for scene authoring, direct review and 
         return stepMotionBudget(run, startMotionStep(run, step, 30_000)!, limits);
     };
     stage("director").reserveModel(60_000, 10_000, "provider").release(70_000);
+    assert.throws(() => stage("design").reserveModel(30_000, 5_000, "provider"), /preserving budget for scene authoring/);
     assert.throws(() => stage("layout_review").reserveModel(40_000, 5_000, "provider"), /preserving budget for scene authoring/);
     stage("engineer:opening").reserveModel(20_000, 5_000, "provider").release();
     stage("engineer:closing").reserveModel(20_000, 5_000, "provider").release();

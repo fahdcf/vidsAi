@@ -3,7 +3,7 @@ import type { Document } from "../../shared/contracts";
 import { compileMotionPlan, motionPlanSchema, motionSceneExceedsBudget } from "../../shared/motion/compile";
 import { motionComponentTypes, describeMotionComponent } from "../../shared/motion/registry";
 import { graphAssetRefs, graphAuthoring, graphCopy } from "../../shared/motion/graph";
-import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, type MotionScene } from "../../shared/motion/schema";
+import { motionColor, motionLayout, motionPalette, motionSceneId, motionSceneSchema, motionStyleRecipes, type MotionScene } from "../../shared/motion/schema";
 import { referenceAnalysisSchema, type ReferenceAnalysis } from "../../shared/motion/reference";
 import type { ReferenceSceneSpec } from "../../shared/motion/reference-spec";
 import { motionEvidenceFramesPerSheet, type MotionPreview, type ReferenceCropBounds } from "../../shared/motion/browser-tools";
@@ -289,7 +289,7 @@ export async function runMotionCopywriter(context: MotionAgentContext, storyboar
         return { ...result, value: { ...result.value, scenes: normalize(result.value.scenes) } };
     } catch (error) {
         context.signal.throwIfAborted();
-        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError && error.scope === "provider")) throw error;
+        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
         const scenes = checkCopy(storyboard.scenes.map(({ id, type, copy }, index) => ({ id, copy,
             parts: literalParts[index] ?? storyboardCopyParts(type, copy, storyboard.title) })));
         return { source: "storyboard_fallback" as const, value: { scenes, decision: "The copywriter did not finish. Continuing with copy from the saved storyboard and brief." } };
@@ -334,12 +334,30 @@ export async function runMotionDesigner(context: MotionAgentContext, storyboard:
         const { description, editable } = describeMotionComponent(type);
         return { type, description, editable };
     });
-    const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX",
-        { storyboard, components, referenceScenes, referenceFrames: describeReferenceFrames(details), referenceSpecs }, schema,
-        { images: details.map(({ image }) => image), requestTimeoutMs: details.length ? 45_000 : undefined }));
-    const scenes = result.value.scenes.map(({ unsupported: _unsupported, ...scene }, index) => ({ ...scene, id: storyboard.scenes[index].id }));
-    const componentChecks = result.value.scenes.map(({ unsupported }, index) => ({ sceneId: scenes[index].id, unsupported }));
-    return { ...result, value: { decision: result.value.decision, scenes, componentChecks } };
+    try {
+        const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "visualDesigner", "AGENT_COMPLEX",
+            { storyboard, components, referenceScenes, referenceFrames: describeReferenceFrames(details), referenceSpecs }, schema,
+            { images: details.map(({ image }) => image), requestTimeoutMs: details.length ? 45_000 : undefined }));
+        const scenes = result.value.scenes.map(({ unsupported: _unsupported, ...scene }, index) => ({ ...scene, id: storyboard.scenes[index].id }));
+        const componentChecks = result.value.scenes.map(({ unsupported }, index) => ({ sceneId: scenes[index].id, unsupported }));
+        return { ...result, value: { decision: result.value.decision, scenes, componentChecks } };
+    } catch (error) {
+        context.signal.throwIfAborted();
+        if (!(error instanceof MotionAgentUnavailable) && !(error instanceof MotionBudgetError)) throw error;
+        const scenes = storyboard.scenes.map(({ id }, index) => {
+            const colors = referenceScenes?.[index].evidence?.palette ?? [];
+            const recipe = motionStyleRecipes[storyboard.look];
+            const background = colors[0] ?? recipe.background;
+            const rgb = Number.parseInt(background.slice(1), 16);
+            const brightness = (0.2126 * (rgb >>> 16) + 0.7152 * (rgb >>> 8 & 255) + 0.0722 * (rgb & 255)) / 255;
+            return designScene.parse({ id, font: "system", layout: {}, palette: {
+                ...recipe, background, foreground: brightness < 0.5 ? "#ffffff" : "#151417",
+                primary: colors[1] ?? recipe.primary, accent: colors[2] ?? recipe.accent,
+            } });
+        });
+        const decision = "Visual design could not finish. Using the saved scene plan and available reference colors.";
+        return { source: "palette_fallback" as const, value: { decision, scenes } };
+    }
 }
 
 export function resolveMotionStoryboard(storyboard: MotionStoryboard, design: MotionDesign): MotionStoryboard {

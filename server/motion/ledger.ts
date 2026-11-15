@@ -61,6 +61,11 @@ export function stepMotionBudget(run: MotionRun, step: MotionStep, limits: Motio
                 if (runUsage.attempts >= limits.modelAttempts || runUsage.tokens + tokens > limits.totalTokens) {
                     throw new MotionBudgetError("Motion run model budget exhausted.");
                 }
+                if (step.name === "design" &&
+                    (runUsage.tokens + tokens > Math.floor(limits.totalTokens * 0.65) ||
+                        runUsage.attempts >= Math.floor(limits.modelAttempts * 0.65))) {
+                    throw new MotionBudgetError("The run is preserving budget for scene authoring and visual review.", "provider");
+                }
                 const optionalLayout = step.name === "layout_review" || step.name.startsWith("styleframe_select:");
                 const authoring = step.name.startsWith("engineer:");
                 const supportingCritique = priority === "supporting" && step.name.startsWith("critique:");

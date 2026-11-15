@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { z } from "zod";
-import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, motionStoryboardSchema, runMotionDirector } from "./motion/agents";
+import { measuredReferenceAnalysis, motionBuildSchema, motionCritiqueSchema, motionCopySchema, motionDesignSchema,
+    motionStoryboardSchema, runMotionCopywriter, runMotionDesigner, runMotionDirector } from "./motion/agents";
 import { MotionBudgetError } from "./motion/budget";
 import { motionBenchmark } from "../scripts/fixtures/motion-benchmark";
 import { buildMotionPrompt } from "./motion/prompts";
@@ -65,6 +66,22 @@ test("reference specifications require distinct source times for motion", () => 
         assert.equal(referenceSceneSpecSchema.safeParse({ ...spec, events: [{ ...spec.events[0], evidenceIds }] }).success, false);
     }
     assert.equal(referenceSceneSpecSchema.safeParse({ ...spec, sourceInterval: null }).success, false);
+});
+
+test("motion planning falls back to saved copy and colors when model budget is exhausted", async () => {
+    const reference = measuredReferenceAnalysis({ kind: "image", interval: null,
+        measured: { timestamps: [0], palette: [{ color: "#292025", weight: 0.8 }], candidateCuts: [] },
+        observations: [{ time: 0, copy: "Read every word.", layout: "Centered title", confidence: 0.9 }] });
+    const context = { brief: "Recreate the reference", document: motionBenchmark(true),
+        signal: new AbortController().signal,
+        budget: { reserveModel() { throw new MotionBudgetError("Motion run model budget exhausted."); } } };
+    const storyboard = (await runMotionDirector(context, reference, true)).value;
+    const design = await runMotionDesigner(context, storyboard, reference);
+    assert.ok("source" in design && design.source === "palette_fallback");
+    assert.equal(motionDesignSchema.parse(design.value).scenes[0].palette.background, "#292025");
+    const copy = await runMotionCopywriter(context, storyboard);
+    assert.ok("source" in copy && copy.source === "storyboard_fallback");
+    assert.equal(motionCopySchema.parse(copy.value).scenes[0].copy, "Read every word.");
 });
 
 test("reference clocks preserve matching-duration offsets and scale changed durations", () => {
