@@ -6,7 +6,7 @@ import { z } from "zod";
 import { runtime } from "../server/env";
 import { MotionRunBudget, motionLimits } from "../server/motion/budget";
 import { MotionProviderError, motionReasoningEffort, requestMotionJson } from "../server/motion/providers/chat";
-import { configuredMotionProviders, motionRouteProviders, motionRoutes } from "../server/motion/providers/inventory";
+import { configuredMotionProviders, motionRouteProviders, motionRoutes, optionalMotionProviders } from "../server/motion/providers/inventory";
 
 const families = [
     { id: "product", label: "Start free", color: "#ff8755", shape: "button", placement: "bottom" },
@@ -19,16 +19,18 @@ const schema = z.object({ label: z.string().min(1).max(100), color: z.string().r
     shape: z.enum(["button", "headline", "chart"]), placement: placements,
     issue: z.enum(["none", "placement", "copy", "color"]) }).strict();
 const args = new Set(process.argv.slice(2));
-if ([...args].some((arg) => !["--live", "--extended"].includes(arg) && !/^--route=[\w-]+$/.test(arg))) {
-    throw new Error("Use --live, --extended and an optional --route=alias.");
+if ([...args].some((arg) => !["--live", "--extended", "--author-only"].includes(arg) && !/^--route=[\w-]+$/.test(arg))) {
+    throw new Error("Use --live, --extended, --author-only and an optional --route=alias.");
 }
 const filter = [...args].find((arg) => arg.startsWith("--route="))?.slice("--route=".length);
 const configured = configuredMotionProviders().filter(({ credential, family, endpoint }) =>
     credential && family === "chat" && endpoint === "https://integrate.api.nvidia.com/v1/chat/completions");
 const routed = new Set(motionRoutes.flatMap((route) => motionRouteProviders(route).map(({ alias }) => alias)));
-const providers = configured.filter(({ alias }) => filter ? alias === filter : routed.has(alias));
-if (!providers.length) throw new Error("No configured NVIDIA chat route matches.");
-const tasks = providers.flatMap((provider) => families.flatMap((family) => stages.map((stage) => ({ provider, family, stage }))));
+const providers = [...configured, ...optionalMotionProviders().filter(({ credential }) => credential)]
+    .filter(({ alias }) => filter ? alias === filter : routed.has(alias));
+if (!providers.length) throw new Error("No configured chat route with credentials matches.");
+const selectedStages = args.has("--author-only") ? ["author" as const] : stages;
+const tasks = providers.flatMap((provider) => families.flatMap((family) => selectedStages.map((stage) => ({ provider, family, stage }))));
 console.log(JSON.stringify({ live: args.has("--live"), tasks: tasks.map(({ provider, stage, family }) =>
     ({ alias: provider.alias, model: provider.model, stage, family: family.id })) }, null, 2));
 if (!args.has("--live")) process.exit(0);
@@ -52,7 +54,7 @@ try {
         return { mime: "image/png" as const, bytes: await page.screenshot({ clip: { x: 0, y: 0, width: 384, height: 216 } }) };
     }
     for (const { provider, family, stage } of tasks) {
-        const base = { provider: "nvidia", alias: provider.alias, model: provider.model, family: family.id, stage,
+        const base = { provider: provider.adapter ?? "nvidia", alias: provider.alias, model: provider.model, family: family.id, stage,
             maxTokens: effort === "extended" ? 6400 : 4096,
             requestedEffort: effort, effectiveEffort: motionReasoningEffort(provider.model, "deep", effort === "standard") };
         if (cooldown.has(provider.alias)) { attempts.push({ ...base, outcome: "cooldown" }); continue; }
