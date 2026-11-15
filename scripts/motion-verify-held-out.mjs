@@ -48,6 +48,8 @@ const { motionArtifact, motionRun, motionSteps } = await import("../server/motio
 const { motionRunDraft, motionRunQuality } = await import("../server/motion/orchestrator.ts");
 const { motionRunUsage } = await import("../server/motion/ledger.ts");
 const { startMotionJobs } = await import("../server/motion/service.ts");
+const { graphCopy } = await import("../shared/motion/graph.ts");
+const { resolveSceneProgramValues } = await import("../shared/motion/scene-program.ts");
 const { ffmpeg: tool } = JSON.parse(await readFile(new URL("../motion-toolchain.json", import.meta.url)));
 const ffmpeg = process.env.MOTION_FFMPEG || path.join(root, tool.runtimePath);
 const api = app.listen(0, "127.0.0.1");
@@ -119,6 +121,26 @@ try {
                 if (artifact) await writeFile(path.join(evidence, `${label}-${suffix}.json`), artifact.body);
             }
             if (!draft) continue;
+            const scenes = draft.document.tracks.motion_graphics;
+            const editable = scenes.flatMap(({ type, params }) => {
+                if (type === "impact") return [params.headline];
+                if (type === "kinetic_words") return params.words;
+                if (type === "easing") return [params.heading, ...params.labels];
+                if (type === "identity") return [params.title, params.detail, params.tag];
+                if (type !== "graph") return [];
+                const program = params.program;
+                const values = program ? resolveSceneProgramValues(program, params.programValues) : {};
+                return [...graphCopy(params.layers), ...(program?.properties.filter(({ kind }) => kind === "text").map(({ id }) => values[id]) ?? [])];
+            });
+            const normalize = (value) => String(value).normalize("NFC").replace(/\s+/g, " ").trim();
+            const copy = editable.map(normalize).join("\n");
+            record.editableEvidence = {
+                missingCopy: entry.mustRead.filter((line) => !copy.includes(normalize(line))),
+                sceneTypes: scenes.map(({ type }) => type),
+                proceduralModules: scenes.filter(({ type, params }) => type === "graph" && params.program).length,
+                boundedThreeScenes: scenes.filter(({ type, params }) => type === "graph" && params.three).length,
+                audioSource: draft.document.metadata.motion_audio_source,
+            };
             await writeFile(path.join(evidence, `${label}-draft.json`), JSON.stringify(draft.document, null, 2));
             await page.screenshot({ path: path.join(evidence, `${label}-chat.png`) });
             if (!document(project(current.project_id)).tracks.motion_graphics.length) {

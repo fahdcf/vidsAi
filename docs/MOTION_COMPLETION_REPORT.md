@@ -27,6 +27,17 @@ The baseline ran from `bbbad79` with the standard 160,000-token allowance. Each 
 
 The ledger blocks the next request when its reservation would exceed the cap, so the accounted totals can stop below 160,000. Zero first drafts reached assembly, and there were no exports or human visual scores for this baseline. A later change makes scene authoring use marked, editable approximations when the model cannot finish and planning has succeeded. Another change reduces large graph prompt schemas. Those changes passed the relevant browser fixtures and are outside the frozen baseline measurement. The production budget and visual acceptance gates remain open. Human comparison also needs outputs from the requested frontier agents on the same briefs and references.
 
+### Supplemental bounded 3D case
+
+At `0c989ff`, two new projects used the separately frozen rotating cube reference. Both assembled an editable approximation and exported 150 H.264 frames after a manual approval to export. The approved title remained editable. Both generated scenes omitted the rotating cube and used a generic 2D layout. Automated visual review was unavailable, and the 3D design gate failed. No human scores were assigned. The later recovery-layout fix removes unrelated interface elements when a brief calls for other motion.
+
+| Attempt | Time | Provider attempts | Rejected provider attempts | Accounted tokens |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 300.9 s | 14 | 9 | 150,004 |
+| 2 | 339.5 s | 14 | 10 | 150,985 |
+
+Local results and full-size landmark frames are in `../runtime/motion-verification/held-out-tFPW0H/`. The original four-attempt baseline is in `../runtime/motion-verification/held-out-6kodnS/`.
+
 ## Original abstract reference benchmark
 
 Verified on Windows on 9 November 2026 against the acceptance brief and quality rubric in this directory. The release checkpoint builds on `68aa79c` on `codex/browser-rendering`. The Git revision containing this report identifies the verified implementation.
