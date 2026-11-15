@@ -1,4 +1,5 @@
 import type { ReferenceAnalysis } from "../../shared/motion/reference";
+import type { ReferenceSceneSpec } from "../../shared/motion/reference-spec";
 import { referenceClock, referenceFrameAt, referenceTimeAt } from "../../shared/motion/time-map";
 import type { MotionStoryboard } from "./agents";
 
@@ -9,6 +10,16 @@ const normalizedCopy = (copy: string | null) => (copy ?? "").normalize("NFKC").t
 function sameCopy(first: string, second: string) {
     return first === second || Boolean(first && second &&
         (first.startsWith(second + " ") || second.startsWith(first + " ")));
+}
+
+export function hasCompleteSceneSpecification(spec: ReferenceSceneSpec | undefined, approvedCopy: readonly string[]) {
+    if (spec?.source !== "vision" || spec.uncertainties.length) return false;
+    const foreground = spec.objects.filter(({ colorRole }) => colorRole !== "background");
+    if (!foreground.length || !foreground.every(({ bounds, layer, color, colorRole, confidence }) =>
+        bounds && layer !== null && (color || colorRole) && confidence >= 0.8)) return false;
+    if (spec.sourceInterval && !spec.events.some(({ kind, confidence }) => kind !== "hold" && confidence >= 0.8)) return false;
+    const observedCopy = foreground.flatMap(({ text }) => text ? [text.value] : []).join(" ").normalize("NFC").replace(/\s+/g, " ");
+    return [...approvedCopy, spec.requiredCopy].every((copy) => observedCopy.includes(copy.normalize("NFC").trim().replace(/\s+/g, " ")));
 }
 
 export function observedSceneBoundaries(observations: readonly Observation[]) {

@@ -17,7 +17,7 @@ import { authoredModuleProposal, compileEngineerGraph, fallbackEngineerGraph, gr
 import { motionGraphAssets, validateMotionAssetOwnership } from "./assets";
 import { motionThreeCost } from "../../shared/motion/three-scene";
 import { observeReferenceSheet } from "./reference-observer";
-import { mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
+import { hasCompleteSceneSpecification, mapStoryboardToReference, observedSceneBoundaries, sceneReferenceEvidence } from "./reference-segments";
 import { motionProgramAuthoringGuide } from "./program-examples";
 
 const frame = z.number().int().nonnegative().max(7200);
@@ -270,13 +270,14 @@ function applyCopyParts(scene: MotionScene, parts: string[]) {
 
 type ReferenceFrame = { sceneId: string; time: number; image: MotionVisionImage; crop?: ReferenceCropBounds; followup?: string };
 
-async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request: (frames: readonly ReferenceFrame[]) => Promise<T>) {
+async function withReferenceFrames<T>(frames: readonly ReferenceFrame[], request: (frames: readonly ReferenceFrame[]) => Promise<T>,
+    structuredFirst = false) {
     try {
-        return await request(frames);
+        return await request(structuredFirst ? [] : frames);
     } catch (error) {
         if (!frames.length || (!(error instanceof MotionAgentUnavailable) &&
             !(error instanceof MotionBudgetError && error.scope === "provider"))) throw error;
-        return request([]);
+        return request(structuredFirst ? frames : []);
     }
 }
 
@@ -397,6 +398,12 @@ export async function runMotionEngineer(
     const styling = design.scenes.find(({ id }) => id === target.id);
     if (!approved || !styling) throw new Error("The scene is missing its copy or design artifact.");
     const { copy: wording, parts } = approved;
+    const requiredCapabilities = design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported;
+    const needsVisualAssets = assets.length > 0 || /\b(?:3d|mesh|textur(?:e|ed|es)|procedural|contours?)\b/i.test(
+        [target.purpose, ...(requiredCapabilities ?? [])].join(" "));
+    const structuredFirst = Boolean(!needsVisualAssets && layoutReview?.measurements.elements.length &&
+        !layoutReview.measurements.findings?.length &&
+        hasCompleteSceneSpecification(referenceSpec, parts?.length ? parts : [wording]));
     const audioCues = context.document.metadata.motion_cues?.filter(({ frame }) => frame >= target.start_frame && frame < target.end_frame - 1) ?? [];
     if (target.type === "graph") {
         const timing = { start: target.start_frame, end: target.end_frame, cueFrames: new Set(audioCues.map(({ frame }) => frame)) };
@@ -432,7 +439,7 @@ export async function runMotionEngineer(
         try {
             const result = await withReferenceFrames(frames, (details) => runMotionAgent(context, "motionEngineer", "AGENT_COMPLEX", {
                 target, approvedCopy: wording, notes, palette: styling.palette, reference, artDirection,
-                requiredCapabilities: design.componentChecks?.find(({ sceneId }) => sceneId === target.id)?.unsupported,
+                requiredCapabilities,
                 availableAssets,
                 layoutReview,
                 moduleAuthoring: context.tools?.available ? motionProgramAuthoringGuide(`${target.purpose} ${context.brief}`) : undefined,
@@ -446,7 +453,7 @@ export async function runMotionEngineer(
                 sceneId: target.id,
                 images: details.map(({ image }) => image),
                 validate: (proposal) => { compile(proposal); },
-            }));
+            }), structuredFirst);
             const { decision, approximation } = result.value;
             return { ...result, value: { decision, approximation, scene: compile(result.value) } };
         } catch (error) {
@@ -483,7 +490,7 @@ export async function runMotionEngineer(
             sceneId: target.id,
             images: details.map(({ image }) => image),
             requestTimeoutMs: details.length ? 45_000 : undefined,
-        }));
+        }), structuredFirst);
         return { ...result, value: { ...result.value, scene: buildScene(result.value.scene) } };
     } catch (error) {
         context.signal.throwIfAborted();

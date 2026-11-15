@@ -699,6 +699,15 @@ try {
         }
         assert.ok(checkedBeforeRetry);
         const steps = motionSteps(graphRun.id);
+        if (process.argv.includes("--structured-authoring")) {
+            const progress = db.prepare("SELECT data FROM motion_events WHERE run_id=? AND type='provider_progress' ORDER BY id")
+                .all(graphRun.id).map(({ data }) => JSON.parse(data)).filter(({ state }) => state === "requesting");
+            const first = progress.filter(({ step }) => step === `engineer:${graphic[0].id}`).map(({ evidenceMode }) => evidenceMode);
+            const second = progress.filter(({ step }) => step === `engineer:${graphic[1].id}`).map(({ evidenceMode }) => evidenceMode);
+            assert.equal(first[0], "structured");
+            assert.equal(first.includes("image"), process.argv.includes("--reject-structured-authoring"));
+            assert.equal(second[0], "image");
+        }
         if (process.argv.includes("--styleframe-study")) {
             const study = steps.find(({ name }) => name === `styleframe_select:${graphic[0].id}`);
             const selection = JSON.parse(motionArtifact(graphRun.id, study.result_id).body.toString());

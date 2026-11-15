@@ -36,6 +36,7 @@ export type MotionAgentProgress = (data: {
     elapsedMs?: number;
     tokens?: number;
     reasoningObserved?: boolean;
+    evidenceMode?: "image" | "structured";
     outcome?: string;
     artifactFailure?: NonNullable<MotionProviderError["artifact"]>["reason"];
 }) => void;
@@ -110,6 +111,7 @@ export async function runMotionAgent<T>(
         let actual: number | undefined;
         const diagnostic = { role, model: provider.alias, mode, promptVersion: prompt.version.promptVersion,
             promptHash: prompt.version.promptHash, maxTokens: outputTokens, requestedReasoning,
+            evidenceMode: images.length ? "image" : "structured",
             reasoningEffort: motionReasoningEffort(provider.model, mode, requestedReasoning === "standard") } as const;
         const started = performance.now();
         try {

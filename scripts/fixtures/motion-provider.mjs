@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 
 export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, rejectReferenceOutline = false, rejectCopywriter = false, rejectGraphEngineer = false, rejectCritic = false, rejectCriticAfterRepair = false, rejectDetailVision = false, rejectSpec = false, referenceMapping = false, referenceFollowup = false, componentCompatibility = false, graphAssets, agentTools = false, replaceScene = false, ineffectiveRepair = false, regressedRepair = false, rejectRepair = false, workspaceModule = false } = {}) {
     const styleframe = process.argv.includes("--styleframe-study");
+    const structuredAuthoring = process.argv.includes("--structured-authoring");
+    const rejectStructured = process.argv.includes("--reject-structured-authoring");
     const stages = [];
     let replacementAttempts = 0;
     const required = ["Slide a URL field into view", "Reveal a separate call-to-action button"];
@@ -79,10 +81,14 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                 value = { scenes: artifact.scenes.map(({ sceneId, evidence, sourceInterval }) => {
                     const first = evidence[0];
                     const next = evidence.find(({ time }) => time !== first?.time);
+                    const structured = structuredAuthoring && sceneId === graphic[0].id;
                     return { sceneId, objects: first ? [{ id: "primary-shape", label: "Visible shape",
                         bounds: { left: 0.25, top: 0.25, width: 0.5, height: 0.5 }, alignment: "center", layer: 1,
-                        colorRole: "accent", color: "#ee6633", text: null, persistentKey: null, confidence: 0.8, evidenceIds: [first.id] }] : [],
-                        events: sourceInterval && first && next ? [{ kind: "hold", objectId: "primary-shape", description: "Shape holds",
+                        colorRole: structured ? "foreground" : "accent", color: structured ? "#ffffff" : "#ee6633",
+                        text: structured ? { value: labels[0], style: "Centered readable title" } : null,
+                        persistentKey: null, confidence: 0.8, evidenceIds: [first.id] }] : [],
+                        events: sourceInterval && first && next ? [{ kind: structured ? "entrance" : "hold", objectId: "primary-shape",
+                            description: structured ? "Slide into view and hold" : "Shape holds",
                             confidence: 0.8, evidenceIds: [first.id, next.id] }] : [], uncertainties: [] };
                 }) };
                 if (referenceFollowup) {
@@ -196,7 +202,14 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     }
                 }
                 assert.ok(rejectSpec ? artifact.referenceSpec.uncertainties.length : artifact.referenceSpec.objects.length);
+                const structured = structuredAuthoring && artifact.target.id === graphic[0].id;
+                if (structured && !artifact.referenceFrames.length) {
+                    assert.equal(typeof message, "string");
+                    assert.equal(artifact.referenceSpec.objects[0].text.value, labels[0]);
+                    if (rejectStructured) { value = null; break; }
+                }
                 if (artifact.referenceFrames.length) {
+                    if (structured) assert.ok(rejectStructured);
                     assert.ok(artifact.referenceFrames.every(({ sceneId }) => sceneId === artifact.target.id));
                     assert.equal(message.length, artifact.referenceFrames.length + 1 + toolResults.flatMap(({ attachedImages }) => attachedImages).length);
                     assert.ok(!artifact.referenceFrames[0].crop);
@@ -206,7 +219,7 @@ export function mockMotionProviders(graphic, { analystRecognizesLiquid = true, r
                     const initialCrop = artifact.referenceFrames.find(({ crop, followup }) => crop && !followup);
                     if (initialCrop) assert.equal(initialCrop.crop.width, 0.5);
                     if (rejectDetailVision) { value = null; break; }
-                } else assert.ok(rejectDetailVision || (rejectGraphEngineer && artifact.target.type === "graph"));
+                } else assert.ok(structured || rejectDetailVision || (rejectGraphEngineer && artifact.target.type === "graph"));
                 if (artifact.target.type === "graph") {
                     const index = graphic.findIndex(({ id }) => id === artifact.target.id);
                     assert.equal(artifact.approvedCopy, componentCompatibility ? labels[index] : "Get transcript");
