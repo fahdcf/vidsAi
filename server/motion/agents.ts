@@ -456,7 +456,7 @@ export async function runMotionEngineer(
             return { source: "graph_fallback" as const, value: {
                 scene: makeScene(fallbackEngineerGraph(title, target.purpose, notes)),
                 decision: "The custom scene model did not finish. Continuing with a simplified editable layout for this scene.",
-                approximation: "Simplified the requested custom interface or motion using editable layers.",
+                approximation: "The saved scene uses simplified editable layers. The requested composition or motion still needs review.",
             } };
         }
     }

@@ -59,6 +59,12 @@ export function fallbackEngineerGraph(title: string, purpose: string, sceneNotes
     const labels = [...sceneNotes.matchAll(/“([^”]+)”|"([^"\n]+)"/g)].map((match) => (match[1] ?? match[2]).trim())
         .filter((label) => label.length <= 50 && words(label) !== words(title)).slice(0, 3);
     const headline: Layer = { kind: "text", x: 0.5, y: 0.25, text: title, size: 0.085, maxWidth: 0.82, color: "foreground", reveal: 0 };
+    if (!/\b(?:interface|ui|url|transcripts?|cards?|waveform)\b/i.test(description)) {
+        return compileEngineerGraph([
+            { ...headline, y: labels.length ? 0.38 : 0.5 },
+            ...labels.map((text, index) => ({ ...headline, text, y: 0.53 + 0.09 * index, size: 0.04, reveal: 0.15 + 0.1 * index })),
+        ]);
+    }
     const rule: Layer = { kind: "rect", x: 0.5, y: 0.37, width: 0.32, height: 0.008, color: "primary", reveal: 0.1 };
     const panel: Layer = { kind: "rect", x: 0.5, y: 0.6, width: 0.86, height: 0.35, color: "muted", radius: 0.04, reveal: 0.13 };
     const interior: Layer = { ...panel, width: 0.838, height: 0.328, color: "background" };

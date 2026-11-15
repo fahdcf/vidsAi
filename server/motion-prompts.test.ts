@@ -10,7 +10,7 @@ import { validateMotionResources } from "./motion/resource-check";
 import { motionProgramAuthoringGuide } from "./motion/program-examples";
 import { explicitCopyParts, storyboardCopyParts, validCopyParts } from "./motion/copy";
 import { referenceClock, referenceTimeAt } from "../shared/motion/time-map";
-import { compileEngineerGraph, graphEngineerSchema } from "./motion/graph-engineer";
+import { compileEngineerGraph, fallbackEngineerGraph, graphEngineerSchema } from "./motion/graph-engineer";
 import { referenceSceneSpecSchema } from "../shared/motion/reference-spec";
 import { mapStoryboardToReference } from "./motion/reference-segments";
 
@@ -84,6 +84,14 @@ test("motion graph prompt schemas reuse definitions while preserving the existin
         assert.ok(Object.hasOwn(definitions, reference[1]), reference[0]);
     }
     assert.equal(motionPromptJsonSchema(graphEngineerSchema), motionPromptJsonSchema(graphEngineerSchema));
+});
+
+test("unfamiliar scene fallbacks keep the approved title without inventing a product interface", () => {
+    const organic = fallbackEngineerGraph("Paper and light", "Animate an illustrated leaf", "");
+    assert.deepEqual(organic.layers.map((layer) => layer.kind === "text" ? layer.text : layer.kind), ["Paper and light"]);
+    const interfaceDraft = fallbackEngineerGraph("Open the transcript", "Animate a URL field and transcript", "");
+    assert.ok(interfaceDraft.layers.some(({ kind }) => kind === "rect"));
+    assert.ok(interfaceDraft.layers.some((layer) => layer.kind === "text" && layer.text === "Open the transcript"));
 });
 
 test("untrusted attachment text stays in the context and cannot enable a tool", () => {
