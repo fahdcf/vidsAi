@@ -242,7 +242,7 @@ Exercise the complete Create → Motion graphics → reference/prompt → chat �
 
 ## G. Prove performance on unfamiliar references
 
-- [ ] G1. Assemble at least six distinct reference families from permitted media. Include the original abstract reel, this dark UI promo, a light minimalist product promo, kinetic typography with mixed styles, a data/chart explainer, and an illustration or organic-motion sequence. Add a portrait composition and long/Arabic text cases. Reserve at least two references entirely outside prompt examples and tuning.
+- [x] G1. Assembled the original abstract reel, dark UI promo, light product animation, portrait mixed typography with long English and Arabic copy, chart explainer and organic pulse animation. The last two are held out from model examples and tuning. `scripts/motion-evaluation-corpus.mjs` verifies the supplied asset hashes, generates the original fixtures and records their hashes in a local manifest.
 - [ ] G2. Freeze the brief, rubric, input media hashes and quality thresholds before each evaluation. Run the normal workflow without importing a finished scene document or hand-authoring scene parameters. Record automatic first-draft quality separately from user-assisted refinement.
 - [ ] G3. Generate at least two independent fresh runs per held-out reference. Use three on a borderline case. Report the number attempted, failures, approximations, retries, generation time and model usage alongside visual scores. A successful selected run must not hide a failed one.
 - [ ] G4. Review source and output playback, scene landmarks and full-size frames. Use a human reviewer for final design acceptance. Model scores and image similarity are supporting evidence. Correct rendering and faithful composition are separate checks.
